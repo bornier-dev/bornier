@@ -1,0 +1,18 @@
+version = 1
+
+# Register headers generated from the STMicroelectronics SVD file.
+[[annotations]]
+path = "firmware/devices/STM32H563/*.hpp"
+SPDX-FileCopyrightText = "2025 STMicroelectronics"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ["CMakePresets.json", ".gitignore", ".gitmodules"]
+SPDX-FileCopyrightText = "2026 Thomas Legrand"
+SPDX-License-Identifier = "MPL-2.0"
+
+# Documentation.
+[[annotations]]
+path = ["**/README.md", "CONTRIBUTING.md"]
+SPDX-FileCopyrightText = "2026 Thomas Legrand"
+SPDX-License-Identifier = "CC-BY-4.0"

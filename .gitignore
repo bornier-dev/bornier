@@ -1,0 +1,15 @@
+# Build output
+build/
+*.elf
+*.map
+*.bin
+*.hex
+
+# IDE and vendor tool metadata: the project builds with plain CMake only
+.project
+.cproject
+.settings/
+*.launch
+.metadata/
+.vscode/
+.idea/

@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Thomas Legrand
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  firmware:
+    name: Firmware (${{ matrix.preset }})
+    runs-on: ubuntu-latest
+    # Same toolchain as the LinuxCNC PC: Debian packages only.
+    container: debian:trixie
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both builds, always: a bug that only shows up when optimised is undefined behaviour.
+        preset: [debug, release]
+    steps:
+      - name: Install toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates cmake ninja-build \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.preset }}
+          path: |
+            build/${{ matrix.preset }}/firmware/examples/hello/hello.elf
+            build/${{ matrix.preset }}/firmware/examples/hello/hello.bin
+            build/${{ matrix.preset }}/firmware/examples/hello/hello.map
