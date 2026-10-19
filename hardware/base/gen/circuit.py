@@ -342,9 +342,16 @@ class Refs:
         return f"{prefix}{self.n[prefix] - 1}"
 
 
-ref = Refs(R=54, C=53, D=12, U=10, J=6, Q=1, JP=1)
-# 1x3 SMD header (C41417360): encoder supply selector and termination jumpers (third position parks the shunt)
-HDR3 = "Bornier:PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254"
+ref = Refs(R=54, C=53, D=12, U=10, J=6, Q=1, JP=1, SW=2)
+# 1x3 through-hole header (PZ254V-11-03P, C2937625; 3.6 x 8.7 mm against 7.5 x 8.3 for the SMD one):
+# encoder supply selector, exclusive by construction, and Modbus termination (third position parks the shunt)
+HDR3 = "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
+HDR3_LCSC = "C2937625"
+# 4-position half-pitch DIP switch for the encoder terminations: CTS 218-4LPSTR (C358628), rated 100 mA /
+# 50 VDC non-switching (25 mA / 24 VDC switching: set it with the encoder off); a terminated RS-422 pair
+# carries 20 to 42 mA. KiCad footprint: rows 7.62 mm and pitch 1.27 mm as the CTS land pattern, pads
+# 0.76 mm wide instead of 0.51 (0.51 mm left between pads).
+DIP4 = "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
 
 
 def limited_supply(vs, out, rcl, note):
@@ -417,13 +424,13 @@ for k in range(2):
 c.block("Encoders: RS-422, TTL or HTL, differential or single-ended, 5 V or VIN supply")
 # Each line: series 3.3 k (HTL current into the clamp), Schottky clamp to +5V and GND, symmetric
 # bias 4.7 k / 4.7 k to +5V at the receiver input. + lines pulled up to the encoder supply
-# (open-collector encoders). 120 ohm termination per pair through a jumper (RS-422 only).
+# (open-collector encoders). 120 ohm termination per pair through a DIP switch (RS-422 only).
 for n in range(4):
     c.group(f"enc{n}")          # one repeated sheet per encoder port
     venc, vsel = f"VENC{n}", f"VSEL{n}"
     jp = ref("JP")
     c.part(jp, "Connector_Generic:Conn_01x03", "ENC 5V|VIN", HDR3,
-           "C41417360", {1: "+5V", 2: vsel, 3: "+VIN"}, "Shunt on 1-2: 5 V encoder, on 2-3: VIN (12 or 24 V); none: no supply")
+           HDR3_LCSC, {1: "+5V", 2: vsel, 3: "+VIN"}, "Shunt on 1-2: 5 V encoder, on 2-3: VIN (12 or 24 V); none: no supply")
     c.part(ref("D"), "Device:D_Schottky", "SS56B", SMB, "C14651", {1: f"VSD{n}", 2: vsel},
            "Blocks an external voltage on the encoder supply from flowing back through the TPS1H000, "
            "whichever the jumper position")
@@ -446,10 +453,11 @@ for n in range(4):
             c.R(ref("R"), "4.7k", node, "GND")
             c.part(ref("D"), "Diode:BAT54S", "BAT54S", "Package_TO_SOT_SMD:SOT-23", "C12765",
                    {1: "GND", 2: "+5V", 3: node}, "Clamp to 0..5 V and ESD")
-        c.part(ref("JP"), "Jumper:Jumper_3_Open", "TERM", HDR3, "C41417360",
-               {1: f"ENC{n}_{ch}P", 2: f"ENC{n}_{ch}T"},
-               "Shunt on 1-2: 120 ohm termination (RS-422); on 2-3: parked, no termination")
         c.R(ref("R"), "120", f"ENC{n}_{ch}T", f"ENC{n}_{ch}N", fp=R0603)
+    # switch k joins pins k and 9 - k; position 4 unused
+    c.part(ref("SW"), "Bornier:SW_DIP_x04_Split", "TERM A B Z", DIP4, "C358628",
+           {k + 1: f"ENC{n}_{ch}P" for k, ch in enumerate("ABZ")} | {8 - k: f"ENC{n}_{ch}T" for k, ch in enumerate("ABZ")},
+           "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off")
     # the encoder port is port B of the axis dual RJ45, created with the drive port above
 
 c.block("Probe: NPN or dry contact, fast optocoupler to the timer capture")
@@ -578,7 +586,7 @@ c.R(ref("R"), "120", "VISO", "MB_BA", fp=R0603, note="Line bias, 2 x 120 per sid
 c.R(ref("R"), "120", "MB_BA", "MB_A", fp=R0603)
 c.R(ref("R"), "120", "MB_B", "MB_BB", fp=R0603)
 c.R(ref("R"), "120", "MB_BB", "GNDISO", fp=R0603)
-c.part(ref("JP"), "Jumper:Jumper_3_Open", "TERM", HDR3, "C41417360", {1: "MB_T", 2: "MB_B"},
+c.part(ref("JP"), "Jumper:Jumper_3_Open", "TERM", HDR3, HDR3_LCSC, {1: "MB_T", 2: "MB_B"},
        "Shunt on 1-2 when Bornier is at an end of the line; on 2-3: parked")
 c.R(ref("R"), "120", "MB_A", "MB_T", fp=R0603)
 c.part(ref("D"), "Diode:SM712_SOT23", "PSM712-LF-T7", "Package_TO_SOT_SMD:SOT-23", "C32677",

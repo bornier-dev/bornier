@@ -30,6 +30,17 @@ def symbol_dir():
     raise SystemExit("KiCad 10 symbol libraries not found: set KICAD10_SYMBOL_DIR")
 
 
+def footprint_dir():
+    env = os.environ.get("KICAD10_FOOTPRINT_DIR")
+    if env:
+        return env
+    for root in _ROOTS:
+        d = os.path.join(root, "share", "kicad", "footprints")
+        if os.path.isdir(d):
+            return d
+    raise SystemExit("KiCad 10 footprint libraries not found: set KICAD10_FOOTPRINT_DIR")
+
+
 def cli():
     exe = shutil.which("kicad-cli")
     if exe:

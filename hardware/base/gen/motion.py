@@ -11,6 +11,7 @@ instance is a group of parts created in the same order.
 import re
 
 from circuit import c
+from kicadgen.schematic import g
 
 GLOBAL = {"+VIN_OUT", "CHASSIS", "PROBE_IN"}   # nets shared across sheets or instances: global labels
 
@@ -325,7 +326,7 @@ def encoder(prj):
     s.text("Placed four times (encoders 0 to 3).\n"
            "Per line: 3.3 k series, Schottky clamp to 0..5 V, bias 4.7 k / 4.7 k at the receiver: an open\n"
            "line sits at 2.5 V, so a single-ended encoder (TTL, HTL, open collector) works with its - line\n"
-           "unconnected. + lines pulled up to the encoder supply. TERM jumpers: shunt on 1-2 for RS-422 only, parked on 2-3 otherwise.", 20.32, 25.4)
+           "unconnected. + lines pulled up to the encoder supply. TERM switches: on for RS-422 only, set with the encoder off.", 20.32, 25.4)
     venc, vsel = f"VENC{n}", f"VSEL{n}"
     # supply: jumper 5 V / VIN, current-limited switch
     jp = on(vsel, "JP")[0]
@@ -394,12 +395,15 @@ def encoder(prj):
                 vr(s, rpu, x0 + 7.62, y - 7.62, rot=180)
                 s.w(venc, s.P(rpu, 2), (x0 + 7.62, y - 10.16))
                 s.label(venc, x0 + 7.62, y - 10.16, 90)
-                jp = next(r for r in on(line, "JP") if c.by_ref()[r]["value"] == "TERM")
+                sw = on(line, "SW")[0]
                 rt = on(f"ENC{n}_{ch}T", "R")[0]
-                # pin 1 on the line, pin 2 (middle) to the termination, pin 3 parks the shunt
-                s.place(jp, x0 + 17.78, y + 5.08, rot=270, ref_at=(x0 + 19.05, y + 3.81), val_at=(x0 + 19.05, y + 6.35))
+                # one switch of the DIP per pair, vertical: upper pin on the line, lower pin to the termination
+                k = "ABZ".index(ch) + 1
+                s.place(sw, x0 + 17.78, y + 5.08, rot=270, unit=k, ref_at=(x0 + 19.05, y + 3.81),
+                        val_at=(x0 + 19.05, y + 6.35), show_value=k == 1)
+                assert s.P(sw, k) == (g(x0 + 17.78), g(y)), "DIP switch: pin k expected on the line"
                 vr(s, rt, x0 + 13.97, y + 10.16, dx=-5.08)
-                s.w(f"ENC{n}_{ch}T", s.P(jp, 2), s.P(rt, 1))
+                s.w(f"ENC{n}_{ch}T", s.P(sw, 9 - k), s.P(rt, 1))
                 s.w(f"ENC{n}_{ch}N", s.P(rt, 2), (x0 + 13.97, y + 25.4))
                 s.quiet.add(f"ENC{n}_{ch}T")
             hr(s, rs, x0 + 34.29, y, rot=90 if c.by_ref()[rs]["pins"]["1"] == line else 270,
@@ -416,6 +420,11 @@ def encoder(prj):
             s.power("+5V", *s.P(d, 2), 270)
             s.power("GND", *s.P(d, 1), 270)
             lines.append((node, y))
+    # fourth switch of the DIP: spare, below the Z pair
+    sw = on(f"ENC{n}_AP", "SW")[0]
+    s.place(sw, x0 + 17.78, 104.14 + 50.8 * 3, rot=270, unit=4, ref_at=(x0 + 19.05, 104.14 + 50.8 * 3 - 1.27),
+            show_value=False)
+    s.text("Spare", x0 + 21.59, 104.14 + 50.8 * 3 + 1.27)
     # fan the six lines into the receiver without crossing: among the lines going down, the
     # lowest turns first; among those going up, the highest turns first.
     targets = {f"ENC{n}_{ch}{pol}_R": s.P(rx, k) for ch, ks in zip("ABZ", (("2", "1"), ("6", "7"), ("10", "9")))

@@ -88,6 +88,30 @@ def symbol_units(name, units, box, ref="J", footprint="", datasheet="", descript
             _prop("Description", description, 0, 0, hide=True)] + nodes + [[Sym("embedded_fonts"), Sym("no")]]
 
 
+def switch_units(name, n, ref="SW", footprint="", datasheet="", description=""):
+    """DIP switch drawn one unit per switch, so that each switch sits on the line it serves. Unit k is an
+    SPST between pins k and 2n + 1 - k (the numbering of DIP switch footprints)."""
+    spst = [[Sym("circle"), [Sym("center"), -2.032, 0], [Sym("radius"), 0.508],
+             [Sym("stroke"), [Sym("width"), 0], [Sym("type"), Sym("default")]], [Sym("fill"), [Sym("type"), Sym("none")]]],
+            [Sym("circle"), [Sym("center"), 2.032, 0], [Sym("radius"), 0.508],
+             [Sym("stroke"), [Sym("width"), 0], [Sym("type"), Sym("default")]], [Sym("fill"), [Sym("type"), Sym("none")]]],
+            [Sym("polyline"), [Sym("pts"), [Sym("xy"), -1.524, 0.254], [Sym("xy"), 1.524, 1.778]],
+             [Sym("stroke"), [Sym("width"), 0], [Sym("type"), Sym("default")]], [Sym("fill"), [Sym("type"), Sym("none")]]]]
+    nodes = [[Sym("symbol"), f"{name}_0_1"] + spst]
+    for u in range(1, n + 1):
+        nodes.append([Sym("symbol"), f"{name}_{u}_1"] + [
+            [Sym("pin"), Sym("passive"), Sym("line"), [Sym("at"), x, 0, ang], [Sym("length"), PIN_LEN],
+             [Sym("name"), "~", _font()], [Sym("number"), str(num), _font()]]
+            for num, x, ang in ((u, -5.08, 0), (2 * n + 1 - u, 5.08, 180))])
+    return [Sym("symbol"), name, [Sym("pin_names"), [Sym("offset"), 0], [Sym("hide"), Sym("yes")]],
+            [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("yes")], [Sym("on_board"), Sym("yes")],
+            _prop("Reference", ref, 0, 3.175),
+            _prop("Value", name, 0, -2.54),
+            _prop("Footprint", footprint, 0, 0, hide=True),
+            _prop("Datasheet", datasheet, 0, 0, hide=True),
+            _prop("Description", description, 0, 0, hide=True)] + nodes + [[Sym("embedded_fonts"), Sym("no")]]
+
+
 def write_library(path, symbols):
     lib = [Sym("kicad_symbol_lib"), [Sym("version"), Sym("20241209")], [Sym("generator"), "kicadgen"],
            [Sym("generator_version"), "10.0"]] + symbols

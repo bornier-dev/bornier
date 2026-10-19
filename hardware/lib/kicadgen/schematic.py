@@ -26,6 +26,11 @@ def g(v):
     return round(round(v / 1.27) * 1.27, 4)
 
 
+def unit_of(node):
+    """Unit of a placed symbol node (1 for power symbols)."""
+    return next((e[1] for e in node if isinstance(e, list) and e and e[0] == "unit"), 1)
+
+
 def font(size=1.27, *extra):
     return [Sym("effects"), [Sym("font"), [Sym("size"), size, size]] + list(extra)]
 
@@ -180,7 +185,7 @@ class Sheet:
         self.wnet = []
         self.pins = {}          # (ref, number) -> (x, y)
         self.placed = []
-        self.units = {}         # ref -> unit drawn on this sheet
+        self.units = {}         # ref -> units drawn on this sheet
         self.pwr = 0
         self.pwr_pts = []
         self.quiet = set()      # nets left without a label (short links whose name adds nothing)
@@ -208,15 +213,17 @@ class Sheet:
         unknown = set(part["pins"]) - {n for u in range(1, 10) for n, *_ in pin_geometry(sd, u)}
         if unknown:
             raise SystemExit(f"{ref} ({part['sym']}): unknown pins {sorted(unknown)}")
-        self.placed.append(ref)
-        self.units[ref] = unit
+        if ref not in self.placed:
+            self.placed.append(ref)
+        self.units.setdefault(ref, []).append(unit)
         fp = part["fp"] or prop_value(sd, "Footprint")
         node = [Sym("symbol"), [Sym("lib_id"), part["sym"]], [Sym("at"), x, y, rot]]
         if mirror:
             node.append([Sym("mirror"), Sym(mirror)])
-        node += [[Sym("unit"), unit], [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("yes")],
+        in_bom = "no" if part["sym"].startswith("Connector:TestPoint") else "yes"   # a pad, nothing to buy
+        node += [[Sym("unit"), unit], [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym(in_bom)],
                  [Sym("on_board"), Sym("yes")], [Sym("dnp"), Sym("yes" if part["dnp"] else "no")],
-                 [Sym("uuid"), self.prj.U(f"sym/{ref}")]]
+                 [Sym("uuid"), self.prj.U(f"sym/{ref}" if unit == 1 else f"sym/{ref}/{unit}")]]
         rx0, ry0 = ref_at or (x + 2.54, y - 1.27)
         vx0, vy0 = val_at or (rx0, ry0 + 2.54)
         props = [("Reference", ref, rx0, ry0, not show_ref), ("Value", part["value"], vx0, vy0, not show_value),
@@ -381,7 +388,7 @@ class Sheet:
                 for k, ((_, refmap, _), su) in enumerate(zip(self.instances, sheet_uuids)):
                     ref = refmap.get(key, key) if kind == "symbol" else (key if k == 0 else f"{key}{k}")
                     paths.append([Sym("path"), f"/{root_uuid}/{su}", [Sym("reference"), ref],
-                                  [Sym("unit"), self.units.get(key, 1) if kind == "symbol" else 1]])
+                                  [Sym("unit"), unit_of(node)]])
                 node.append([Sym("instances"), [Sym("project"), self.prj.name, *paths]])
             body.append(node)
         for a, b in self.wires:

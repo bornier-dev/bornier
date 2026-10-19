@@ -10,3 +10,30 @@
 (rule "profile walls: no through-hole lead at the edges, the board rests there"
 	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 3mm && A.intersectsArea('profile wall')")
 	(constraint disallow pad))
+# JLCPCB multilayer boards: 0.2 mm holes and 0.1 mm spacing at no extra cost. The thermal vias of the ESC
+# exposed pad (LAN9253 data sheet land pattern) are 0.2 mm; packages at a 0.65 mm pitch (TPS1H000 HVSSOP,
+# TPS62A02 SOT-563) leave 0.15 mm between their own pads.
+(rule "thermal vias in exposed pads"
+	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 0.3mm")
+	(constraint hole_size (min 0.2mm)))
+(rule "pads of one package: U10"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U10') && B.memberOfFootprint('U10')")
+	(constraint clearance (min 0.15mm)))
+(rule "pads of one package: U21"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U21') && B.memberOfFootprint('U21')")
+	(constraint clearance (min 0.15mm)))
+(rule "pads of one package: U23"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U23') && B.memberOfFootprint('U23')")
+	(constraint clearance (min 0.15mm)))
+(rule "pads of one package: U25"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U25') && B.memberOfFootprint('U25')")
+	(constraint clearance (min 0.15mm)))
+(rule "pads of one package: U27"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U27') && B.memberOfFootprint('U27')")
+	(constraint clearance (min 0.15mm)))
+(rule "pads of one package: U3"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U3') && B.memberOfFootprint('U3')")
+	(constraint clearance (min 0.15mm)))
+(rule "pads of one package: U4"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U4') && B.memberOfFootprint('U4')")
+	(constraint clearance (min 0.12mm)))

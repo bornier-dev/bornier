@@ -14890,127 +14890,60 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Jumper:Jumper_3_Open"
+		(symbol "Bornier:SW_DIP_x04_Split"
 			(pin_names
 				(offset 0)
 				(hide yes)
 			)
 			(exclude_from_sim no)
-			(in_bom no)
+			(in_bom yes)
 			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "JP"
-				(at -2.54 -2.54 0)
-				(show_name no)
-				(do_not_autoplace no)
+			(property "Reference" "SW"
+				(at 0 3.175 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 				)
 			)
-			(property "Value" "Jumper_3_Open"
-				(at 0 2.794 0)
-				(show_name no)
-				(do_not_autoplace no)
+			(property "Value" "SW_DIP_x04_Split"
+				(at 0 -2.54 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
 				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
-			(property "Datasheet" ""
-				(at 0 -10.16 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "Jumper, 3-pole, both open"
-				(at 0 -12.7 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property private "KLC_S5.1" "This is a generic symbol, it has fp-filter, but no default footprint"
-				(at 0 -17.78 0)
-				(show_name yes)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property private "KLC_S3.3" "Graphical-Symbol: thickness is 6mm, fill is background"
-				(at -1.27 -20.32 0)
-				(show_name yes)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "Jumper SPDT"
+			(property "Datasheet" "https://datasheet.lcsc.com/datasheet/pdf/b12889a146649629a94eee2aab5f121b.pdf"
 				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
-			(property "ki_fp_filters" "Jumper* TestPoint*3Pads* TestPoint*Bridge*"
+			(property "Description" "4-position DIP switch, one unit per switch: unit k joins pins k and 9 - k"
 				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
-			(symbol "Jumper_3_Open_0_0"
+			(symbol "SW_DIP_x04_Split_0_1"
 				(circle
 					(center -2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 0 0)
 					(radius 0.508)
 					(stroke
 						(width 0)
@@ -15031,37 +14964,11 @@
 						(type none)
 					)
 				)
-			)
-			(symbol "Jumper_3_Open_0_1"
-				(arc
-					(start -2.032 1.016)
-					(mid -1.143 1.3235)
-					(end -0.254 1.016)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
 				(polyline
 					(pts
-						(xy 0 -0.508)
-						(xy 0 -1.27)
+						(xy -1.524 0.254)
+						(xy 1.524 1.778)
 					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0.254 1.016)
-					(mid 1.143 1.3235)
-					(end 2.032 1.016)
 					(stroke
 						(width 0)
 						(type default)
@@ -15071,11 +14978,11 @@
 					)
 				)
 			)
-			(symbol "Jumper_3_Open_1_1"
+			(symbol "SW_DIP_x04_Split_1_1"
 				(pin passive line
 					(at -5.08 0 0)
 					(length 2.54)
-					(name "A"
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -15091,9 +14998,29 @@
 					)
 				)
 				(pin passive line
-					(at 0 -3.81 90)
+					(at 5.08 0 180)
 					(length 2.54)
-					(name "C"
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "SW_DIP_x04_Split_2_1"
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -15111,7 +15038,27 @@
 				(pin passive line
 					(at 5.08 0 180)
 					(length 2.54)
-					(name "B"
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "SW_DIP_x04_Split_3_1"
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -15119,6 +15066,62 @@
 						)
 					)
 					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "SW_DIP_x04_Split_4_1"
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -17872,6 +17875,245 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Jumper:Jumper_3_Open"
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "JP"
+				(at -2.54 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Jumper_3_Open"
+				(at 0 2.794 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 -10.16 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Jumper, 3-pole, both open"
+				(at 0 -12.7 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property private "KLC_S5.1" "This is a generic symbol, it has fp-filter, but no default footprint"
+				(at 0 -17.78 0)
+				(show_name yes)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property private "KLC_S3.3" "Graphical-Symbol: thickness is 6mm, fill is background"
+				(at -1.27 -20.32 0)
+				(show_name yes)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "Jumper SPDT"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "Jumper* TestPoint*3Pads* TestPoint*Bridge*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Jumper_3_Open_0_0"
+				(circle
+					(center -2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 0 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "Jumper_3_Open_0_1"
+				(arc
+					(start -2.032 1.016)
+					(mid -1.143 1.3235)
+					(end -0.254 1.016)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 -0.508)
+						(xy 0 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(arc
+					(start 0.254 1.016)
+					(mid 1.143 1.3235)
+					(end 2.032 1.016)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "Jumper_3_Open_1_1"
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 2.54)
+					(name "C"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "B"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Diode:SM712_SOT23"
 			(pin_names
 				(offset 1.016)
@@ -18543,7 +18785,7 @@
 		)
 		(uuid "0421e975-1775-50e0-91ae-bbb48a6570cc")
 	)
-	(text "Placed four times (encoders 0 to 3).\nPer line: 3.3 k series, Schottky clamp to 0..5 V, bias 4.7 k / 4.7 k at the receiver: an open\nline sits at 2.5 V, so a single-ended encoder (TTL, HTL, open collector) works with its - line\nunconnected. + lines pulled up to the encoder supply. TERM jumpers: shunt on 1-2 for RS-422 only, parked on 2-3 otherwise."
+	(text "Placed four times (encoders 0 to 3).\nPer line: 3.3 k series, Schottky clamp to 0..5 V, bias 4.7 k / 4.7 k at the receiver: an open\nline sits at 2.5 V, so a single-ended encoder (TTL, HTL, open collector) works with its - line\nunconnected. + lines pulled up to the encoder supply. TERM switches: on for RS-422 only, set with the encoder off."
 		(exclude_from_sim no)
 		(at 20.32 25.4 0)
 		(effects
@@ -18583,7 +18825,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Bornier:PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254"
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 			(at 33.02 63.5 0)
 			(effects
 				(font
@@ -18613,7 +18855,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C41417360"
+		(property "LCSC" "C2937625"
 			(at 33.02 63.5 0)
 			(effects
 				(font
@@ -18639,15 +18881,15 @@
 					(unit 1)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "JP5")
+					(reference "JP2")
 					(unit 1)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "JP9")
+					(reference "JP3")
 					(unit 1)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "JP13")
+					(reference "JP4")
 					(unit 1)
 				)
 			)
@@ -20013,7 +20255,7 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "827601d1-44ca-5ebe-b71e-7e741e8a1548")
+		(uuid "7a103fe2-76b2-59d4-a445-bc53c8eb0373")
 		(property "Reference" "J6"
 			(at 27.94 149.86 0)
 			(effects
@@ -20982,15 +21224,15 @@
 		(uuid "4e1eba00-0a3d-538d-a346-b75e18244d0e")
 	)
 	(symbol
-		(lib_id "Jumper:Jumper_3_Open")
+		(lib_id "Bornier:SW_DIP_x04_Split")
 		(at 83.82 109.22 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "d87424eb-f6ef-55ba-8396-bce1e6e44178")
-		(property "Reference" "JP2"
+		(uuid "4e7263bd-de8f-589a-b6f0-9c4b15547e4d")
+		(property "Reference" "SW2"
 			(at 85.09 107.95 90)
 			(effects
 				(font
@@ -20999,7 +21241,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TERM"
+		(property "Value" "TERM A B Z"
 			(at 85.09 110.49 90)
 			(effects
 				(font
@@ -21008,7 +21250,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Bornier:PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254"
+		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
 			(at 83.82 109.22 90)
 			(effects
 				(font
@@ -21028,7 +21270,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Shunt on 1-2: 120 ohm termination (RS-422); on 2-3: parked, no termination"
+		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
 			(at 83.82 109.22 90)
 			(effects
 				(font
@@ -21038,7 +21280,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C41417360"
+		(property "LCSC" "C358628"
 			(at 83.82 109.22 90)
 			(effects
 				(font
@@ -21049,30 +21291,27 @@
 			)
 		)
 		(pin "1"
-			(uuid "00f41e5d-42bf-550c-bf90-e90f80f968f2")
+			(uuid "c455efc3-a066-5733-b496-0a634432ef23")
 		)
-		(pin "2"
-			(uuid "3ff55b98-ffc5-53bb-928b-49a433e9ecab")
-		)
-		(pin "3"
-			(uuid "751d07d7-9430-5054-a1e7-a4a9643b55c8")
+		(pin "8"
+			(uuid "a99e7d62-dc39-5939-a4f2-05692c63edb8")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "JP2")
+					(reference "SW2")
 					(unit 1)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "JP6")
+					(reference "SW3")
 					(unit 1)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "JP10")
+					(reference "SW4")
 					(unit 1)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "JP14")
+					(reference "SW5")
 					(unit 1)
 				)
 			)
@@ -22529,15 +22768,15 @@
 		(uuid "392bb87f-6c4e-52ff-8f18-fde51a40076f")
 	)
 	(symbol
-		(lib_id "Jumper:Jumper_3_Open")
+		(lib_id "Bornier:SW_DIP_x04_Split")
 		(at 83.82 160.02 270)
-		(unit 1)
+		(unit 2)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "3b56ff3f-2b57-55f2-a354-b25273ab5656")
-		(property "Reference" "JP3"
+		(uuid "8abd33a4-4157-5c50-813f-972f1ef747cf")
+		(property "Reference" "SW2"
 			(at 85.09 158.75 90)
 			(effects
 				(font
@@ -22546,16 +22785,17 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TERM"
+		(property "Value" "TERM A B Z"
 			(at 85.09 161.29 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
 			)
 		)
-		(property "Footprint" "Bornier:PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254"
+		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
 			(at 83.82 160.02 90)
 			(effects
 				(font
@@ -22575,7 +22815,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Shunt on 1-2: 120 ohm termination (RS-422); on 2-3: parked, no termination"
+		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
 			(at 83.82 160.02 90)
 			(effects
 				(font
@@ -22585,7 +22825,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C41417360"
+		(property "LCSC" "C358628"
 			(at 83.82 160.02 90)
 			(effects
 				(font
@@ -22594,33 +22834,30 @@
 				(justify left)
 				(hide yes)
 			)
-		)
-		(pin "1"
-			(uuid "0dd037d0-3106-5d41-9db2-5c1941567c95")
 		)
 		(pin "2"
-			(uuid "499351fe-3f30-5e10-bb19-de549642a7ee")
+			(uuid "864448bf-aa10-5089-8d87-548f9f3a9efc")
 		)
-		(pin "3"
-			(uuid "a670d436-0613-5526-a8f9-ebf5106dc8ed")
+		(pin "7"
+			(uuid "76de775a-3e68-53e8-b08f-43403e32f617")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "JP3")
-					(unit 1)
+					(reference "SW2")
+					(unit 2)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "JP7")
-					(unit 1)
+					(reference "SW3")
+					(unit 2)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "JP11")
-					(unit 1)
+					(reference "SW4")
+					(unit 2)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "JP15")
-					(unit 1)
+					(reference "SW5")
+					(unit 2)
 				)
 			)
 		)
@@ -24076,15 +24313,15 @@
 		(uuid "642e34b8-df7f-5fed-aa82-87097e45482c")
 	)
 	(symbol
-		(lib_id "Jumper:Jumper_3_Open")
+		(lib_id "Bornier:SW_DIP_x04_Split")
 		(at 83.82 210.82 270)
-		(unit 1)
+		(unit 3)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "6d3028fe-466c-524e-a00a-5f1d8b3f28c3")
-		(property "Reference" "JP4"
+		(uuid "46f9cf15-6529-527b-ae5a-3282bd993892")
+		(property "Reference" "SW2"
 			(at 85.09 209.55 90)
 			(effects
 				(font
@@ -24093,16 +24330,17 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TERM"
+		(property "Value" "TERM A B Z"
 			(at 85.09 212.09 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
 			)
 		)
-		(property "Footprint" "Bornier:PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254"
+		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
 			(at 83.82 210.82 90)
 			(effects
 				(font
@@ -24122,7 +24360,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Shunt on 1-2: 120 ohm termination (RS-422); on 2-3: parked, no termination"
+		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
 			(at 83.82 210.82 90)
 			(effects
 				(font
@@ -24132,7 +24370,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C41417360"
+		(property "LCSC" "C358628"
 			(at 83.82 210.82 90)
 			(effects
 				(font
@@ -24141,33 +24379,30 @@
 				(justify left)
 				(hide yes)
 			)
-		)
-		(pin "1"
-			(uuid "e5a7be5d-c2da-54d7-9885-2123b29888b1")
-		)
-		(pin "2"
-			(uuid "cdd23f1c-d5f9-5509-b40a-54bbb45c356e")
 		)
 		(pin "3"
-			(uuid "5afee9af-2435-5a0e-97a3-8db337dca957")
+			(uuid "f70bbfd3-42ef-542c-9936-148b01ef1541")
+		)
+		(pin "6"
+			(uuid "c08deddf-10bb-5288-868f-e2912d4879c3")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "JP4")
-					(unit 1)
+					(reference "SW2")
+					(unit 3)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "JP8")
-					(unit 1)
+					(reference "SW3")
+					(unit 3)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "JP12")
-					(unit 1)
+					(reference "SW4")
+					(unit 3)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "JP16")
-					(unit 1)
+					(reference "SW5")
+					(unit 3)
 				)
 			)
 		)
@@ -25508,6 +25743,113 @@
 			)
 		)
 	)
+	(symbol
+		(lib_id "Bornier:SW_DIP_x04_Split")
+		(at 83.82 256.54 270)
+		(unit 4)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "fd744701-1066-54d0-a3ec-f1e9b9afcb93")
+		(property "Reference" "SW2"
+			(at 85.09 255.27 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TERM A B Z"
+			(at 85.09 257.81 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
+			(at 83.82 256.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 83.82 256.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
+			(at 83.82 256.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C358628"
+			(at 83.82 256.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(pin "4"
+			(uuid "078ee1e4-f3b9-5dd7-bf6c-85f2b959d2e1")
+		)
+		(pin "5"
+			(uuid "b27f798b-9a84-5396-bf7a-285322b58879")
+		)
+		(instances
+			(project "base"
+				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
+					(reference "SW2")
+					(unit 4)
+				)
+				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
+					(reference "SW3")
+					(unit 4)
+				)
+				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
+					(reference "SW4")
+					(unit 4)
+				)
+				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
+					(reference "SW5")
+					(unit 4)
+				)
+			)
+		)
+	)
+	(text "Spare"
+		(exclude_from_sim no)
+		(at 87.63 257.81 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+				(bold no)
+			)
+			(justify left top)
+		)
+		(uuid "3aefa443-5039-5e2b-ab7f-943b564dfe1b")
+	)
 	(no_connect
 		(at 116.84 71.12)
 		(uuid "ec1f0dc9-5a01-567b-89d9-d7c6ca039787")
@@ -25525,16 +25867,12 @@
 		(uuid "dea98d51-f8e5-5b87-afc8-c92f9898472d")
 	)
 	(no_connect
-		(at 83.82 114.3)
-		(uuid "fab60aca-856d-50b5-80e3-ae6ca9d37002")
+		(at 83.82 251.46)
+		(uuid "2662fa18-380f-5990-9493-dbf317d01c42")
 	)
 	(no_connect
-		(at 83.82 165.1)
-		(uuid "ddc764e3-cb12-5da0-8053-264b0c018003")
-	)
-	(no_connect
-		(at 83.82 215.9)
-		(uuid "65b82d38-2c2b-52fd-ad22-5b0ea12f07ad")
+		(at 83.82 261.62)
+		(uuid "884d3327-9c5c-59d1-9e4c-1331f8156d25")
 	)
 	(label "VSD"
 		(at 74.93 63.5 0)
@@ -26020,14 +26358,14 @@
 	)
 	(wire
 		(pts
-			(xy 80.01 109.22)
+			(xy 83.82 114.3)
 			(xy 80.01 114.3)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "43ebc411-1480-54a5-bd27-6f1b43cc488b")
+		(uuid "eed461c3-8d77-5350-b360-44d9aaa34cce")
 	)
 	(wire
 		(pts
@@ -26196,14 +26534,14 @@
 	)
 	(wire
 		(pts
-			(xy 80.01 160.02)
+			(xy 83.82 165.1)
 			(xy 80.01 165.1)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "236b3005-d715-5bdc-bce1-152733a53b4c")
+		(uuid "c00fafc4-c676-5a61-a461-54bbfda23383")
 	)
 	(wire
 		(pts
@@ -26372,14 +26710,14 @@
 	)
 	(wire
 		(pts
-			(xy 80.01 210.82)
+			(xy 83.82 215.9)
 			(xy 80.01 215.9)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "45330be5-0cd8-5915-a9a5-68a9566774e1")
+		(uuid "bb440f33-0e39-5b2a-91cb-623504e9a0cc")
 	)
 	(wire
 		(pts

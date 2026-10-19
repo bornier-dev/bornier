@@ -15,6 +15,7 @@ or leads all around on the bottom side, where the board rests on the walls. A C-
 the board down through a keyhole cutout. Coordinates in mm, origin at the top left corner, x along the
 board, y across it; edge A (y = 0) and edge B (y = H) are the long edges.
 """
+import json
 import math
 import os
 import subprocess
@@ -24,11 +25,11 @@ import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
-from kicadgen.kicad import cli  # noqa: E402
+from kicadgen.kicad import cli, footprint_dir  # noqa: E402
 from kicadgen.sexpr import parse  # noqa: E402
 
 KICAD = os.path.join(HERE, "..", "kicad")
-STD_FP = r"C:/Program Files/KiCad/10.0/share/kicad/footprints"
+STD_FP = footprint_dir()
 LOCAL_FP = {"Bornier": os.path.join(HERE, "..", "..", "lib", "footprints", "Bornier.pretty")}
 MM = pcbnew.FromMM
 
@@ -85,7 +86,9 @@ def load_netlist():
         fields = {str(first(f, "name")[1]): (str(f[2]) if len(f) > 2 and not isinstance(f[2], list) else "")
                   for f in find(first(c, "fields") or [], "field")}
         sp = first(c, "sheetpath")
+        props = {str(first(p, "name")[1]) for p in find(c, "property")}
         comps[ref] = dict(fp=str(first(c, "footprint")[1]), value=str(first(c, "value")[1]),
+                          dnp="dnp" in props, no_bom="exclude_from_bom" in props,
                           lcsc=fields.get("LCSC", ""), description=fields.get("Description", ""),
                           path=str(first(sp, "tstamps")[1]) + str(first(c, "tstamps")[1]),
                           sheetname=str(first(sp, "names")[1]))
@@ -137,6 +140,14 @@ def courtyard(fp):
 def place(fp, x, y, rot):
     fp.SetOrientationDegrees(rot)
     fp.SetPosition(vec(x, y))
+
+
+def place_centred(fp, x, y, rot):
+    """Courtyard centre at (x, y): the origin of a connector footprint is its pin 1."""
+    place(fp, 0, 0, rot)
+    cy = fp.GetCourtyard(pcbnew.F_CrtYd)
+    c = (cy.BBox() if cy.OutlineCount() else fp.GetBoundingBox(False)).GetCenter()
+    place(fp, x - pcbnew.ToMM(c.x), y - pcbnew.ToMM(c.y), rot)
 
 
 def segment(board, a, b, layer=pcbnew.Edge_Cuts):
@@ -211,7 +222,32 @@ DRC_RULES = """(version 1)
 (rule "profile walls: no through-hole lead at the edges, the board rests there"
 	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 3mm && A.intersectsArea('profile wall')")
 	(constraint disallow pad))
+# JLCPCB multilayer boards: 0.2 mm holes and 0.1 mm spacing at no extra cost. The thermal vias of the ESC
+# exposed pad (LAN9253 data sheet land pattern) are 0.2 mm; packages at a 0.65 mm pitch (TPS1H000 HVSSOP,
+# TPS62A02 SOT-563) leave 0.15 mm between their own pads.
+(rule "thermal vias in exposed pads"
+	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 0.3mm")
+	(constraint hole_size (min 0.2mm)))
 """
+# An invalid expression silently disables every rule of the file: the package rule below is written per
+# reference with memberOfFootprint(), the only form KiCad accepts, for the packages found by fine_pitch().
+PACKAGE_RULE = """(rule "pads of one package: {ref}"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('{ref}') && B.memberOfFootprint('{ref}')")
+	(constraint clearance (min {gap:.2f}mm)))
+"""
+
+
+def fine_pitch(fps, limit=0.2):
+    """{reference: smallest gap between two of its own pads} for the packages under the board clearance."""
+    found = {}
+    for ref, fp in fps.items():
+        rects = [mm_rect(p.GetBoundingBox()) for p in fp.Pads() if p.GetAttribute() == pcbnew.PAD_ATTRIB_SMD]
+        gaps = [max(x1 - c, a - z, y1 - d, b - w)
+                for i, (a, b, c, d) in enumerate(rects) for (x1, y1, z, w) in rects[i + 1:]]
+        g = min((g for g in gaps if g > 0), default=limit)
+        if g < limit - 1e-6:
+            found[ref] = math.floor(g * 100 + 1e-6) / 100
+    return found
 
 
 def keepouts(board):
@@ -263,6 +299,215 @@ def connectors(fps, comps):
     return edge_a + edge_b
 
 
+# --- Floor plan -------------------------------------------------------------------------------------
+# Edge A carries one column per axis (encoder receiver, half of a step/dir driver), the MCU sits in the
+# middle, the ESC above the EtherCAT jacks, the local bus header stands at the left end, centred across the
+# board so that the ribbon faces the modules (72 mm boards centred on the same rail). Each block of the edge
+# B sits above its connector. Zones are rectangles (x0, y0, x1, y1); the parts of a sheet stay inside the
+# zones of that sheet.
+HE10_Y = H / 2
+AXIS_X = [21.5, 55.0, 88.5, 118.0, 146.5]           # column boundaries, axes 0 to 3: the first two are shallower
+AXIS = [[(AXIS_X[k], 15.0, AXIS_X[k + 1], 58.0 if k > 1 else 47.0)] for k in range(4)]
+AXIS[0].append((END_KEEP, 15.0, AXIS_X[0], HE10_Y - 26.0))   # above the header
+AXIS[1].append((80.5, 47.0, AXIS_X[2], 59.5))                # right of the C-LOCK
+ZONES = {
+    "/Encoder 0/": AXIS[0], "/Encoder 1/": AXIS[1], "/Encoder 2/": AXIS[2], "/Encoder 3/": AXIS[3],
+    "/Drives 0-1/": AXIS[0] + AXIS[1], "/Drives 2-3/": AXIS[2] + AXIS[3],
+    "/Local bus/": [(END_KEEP, HE10_Y - 26.0, 21.0, HE10_Y + 26.0), (21.0, 47.5, 27.0, HE10_Y + 26.0)],
+    "/ESC/": [(21.0, 47.5, 44.0, 87.5)],
+    "/Clock/": [(21.0, 47.5, 69.0, 87.5)],
+    "/MCU/": [(44.0, 47.5, 69.5, 76.0), (69.5, 59.5, 81.0, 76.0)],
+    "/Modbus/": [(36.0, 76.0, 67.0, 96.5)],
+    "/Spindle/": [(67.0, 76.0, 98.0, 96.5)],
+    "/Safety/": [(98.0, 76.0, 123.5, 96.5)],
+    "/Drive supply and probe/": [(98.0, 76.0, 123.5, 96.5), (81.0, 59.5, 104.0, 76.0)],
+    "/Power/": [(104.0, 58.5, W - END_KEEP, 76.0), (123.5, 76.0, W - END_KEEP, 96.5), (69.5, 59.5, 104.0, 76.0)],
+}
+
+# Parts placed by hand: (x, y, rotation). The others go next to the pin they serve.
+JACK_X = [25.5 + PITCH_A * k for k in range(4)]     # centres of the dual RJ45, from connectors()
+KEY = {
+    "U9": (56.5, 61.5, 0),                          # MCU: ESC and step/dir side toward the ESC
+    "U4": (33.0, 74.0, 180),                        # ESC: PHY pins toward the EtherCAT jacks, port A left
+    "J10": (END_KEEP + 5.0, HE10_Y, 0),               # local bus header, centred across the board
+    "J2": (78.5, 67.0, 0),                          # micro-B, next to the USB pins of the MCU
+    "J5": (69.5, 73.0, 0),                          # Tag-Connect, at the SWD corner
+    "SW1": (41.5, 51.5, 90),                        # BOOT
+    "U38": (55.5, 86.0, 270),                       # Modbus: bus side toward J13
+    "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
+    "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 74.0, 0),   # 5 V buck
+    "U11": (AXIS_X[1] - 5.5, 36.0, 90), "U16": (AXIS_X[3] - 5.5, 36.0, 90),   # step/dir drivers, two axes each
+}
+for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
+    KEY[ref] = (max(JACK_X[k] - 4.0, AXIS_X[k] + 6.0), 38.0, 90)
+# Nets that do not locate a part: a capacitor on them goes to a power pin of an IC of its sheet.
+POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "/Modbus/GNDISO"}
+# Protection parts go against the connector, not against the circuit they protect.
+PROTECT = {"TPD4E05U06DQAR", "SMBJ33CA", "SMF15A", "PSM712-LF-T7"}
+RANK = {"U": 0, "Q": 1, "D": 2, "L": 2, "F": 2, "R": 3, "C": 3, "J": 4, "S": 5}
+GAP = 0.5                                           # between courtyards: one track between two passives
+AIR, AIR_SLACK = 1.0, 2.0                           # preferred gap, taken if at most 2 mm farther from the pin
+
+
+def spiral(step, radius):
+    """Offsets within the radius, nearest first."""
+    n = int(radius / step)
+    return sorted(((i * step, j * step) for i in range(-n, n + 1) for j in range(-n, n + 1)
+                   if (i * i + j * j) * step * step <= radius * radius), key=lambda o: o[0] * o[0] + o[1] * o[1])
+
+
+RADIUS = 25.0
+OFFSETS = spiral(0.25, RADIUS)
+OFFSETS_FAR = spiral(0.5, 40.0)
+
+
+def rank(ref):
+    return RANK.get(ref.rstrip("0123456789")[:1] if not ref.startswith("JP") else "R", 6)
+
+
+def mm_rect(bb, grow=0.0):
+    T = pcbnew.ToMM
+    return (T(bb.GetLeft()) - grow, T(bb.GetTop()) - grow, T(bb.GetRight()) + grow, T(bb.GetBottom()) + grow)
+
+
+def occupied(fp):
+    """Courtyard and pads of a placed part (some pads stick out of the courtyard)."""
+    cy = fp.GetCourtyard(pcbnew.F_CrtYd)
+    rects = [mm_rect(cy.BBox() if cy.OutlineCount() else fp.GetBoundingBox(False), GAP / 2)]
+    rects += [mm_rect(p.GetBoundingBox(), GAP / 2) for p in fp.Pads()]
+    return rects
+
+
+def shape_at_origin(fp, rot):
+    """Extent and pad positions relative to the origin, for one orientation."""
+    place(fp, 0, 0, rot)
+    pads = {}
+    for p in fp.Pads():
+        pads.setdefault(p.GetNetname(), (pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)))
+    return occupied(fp), pads
+
+
+def nets_of(fp):
+    return {p.GetNetname() for p in fp.Pads()} - {""}
+
+
+def anchor_of(ref, fp, placed, used):
+    """(rank, net, x, y) of the pin the part serves, or None while that pin is not placed."""
+    sheet = fp.GetSheetname()
+    mine = nets_of(fp)
+    signal = mine - POWER_NETS
+    protect = fp.GetValue() in PROTECT
+    supply = mine - {"GND", "/Modbus/GNDISO", "CHASSIS"}
+    best = None
+    # 1. a signal pin of the sheet (or of a connector); 2. without signal net, the least used supply pin
+    # of the sheet, ICs first (decoupling); 3. a signal pin of another sheet, once the sheet has had its
+    # turn; 4. any pin of the sheet.
+    for step in (1, 2, 3, 4):
+        for r, other in placed.items():
+            same = other.GetSheetname() == sheet or (r.startswith("J") and step == 1)
+            if step != 3 and not same:
+                continue
+            for p in other.Pads():
+                n = p.GetNetname()
+                if step in (1, 3) and n in signal:
+                    # protections and ICs that serve a connector: first, before the passives take the room
+                    rk = 0 if (protect or ref[0] == "U") and r.startswith("J") else rank(r) if step == 1 else 6
+                    key = (rk, 0, r, p.GetNumber())
+                elif step == 2 and not signal and n in supply:
+                    key = (rank(r), used.get((r, p.GetNumber()), 0), r, p.GetNumber())
+                elif step == 4 and n in mine:
+                    key = (6, 0, r, p.GetNumber())
+                else:
+                    continue
+                if best is None or key < best[0]:
+                    best = (key, n, pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y), r, p.GetNumber())
+        if best:
+            break
+    return best
+
+
+def inside(rects, zones):
+    return all(any(z[0] <= x0 and z[1] <= y0 and x1 <= z[2] and y1 <= z[3] for z in zones)
+               for x0, y0, x1, y1 in rects[:1])
+
+
+def free(rects, occ):
+    for x0, y0, x1, y1 in rects:
+        if x0 < END_KEEP or x1 > W - END_KEEP or y0 < 0.3 or y1 > H - 0.3:
+            return False
+        cx, cy = min(max(CLOCK[0], x0), x1), min(max(CLOCK[1], y0), y1)
+        if (cx - CLOCK[0]) ** 2 + (cy - CLOCK[1]) ** 2 < CLOCK_KEEP ** 2:
+            return False
+        for a, b, c, d in occ:
+            if x0 < c and a < x1 and y0 < d and b < y1:
+                return False
+    return True
+
+
+def auto_place(fps, placed):
+    """Place each remaining part as close as possible to the pin it serves, inside its zone, without overlap."""
+    occ = [r for fp in placed.values() for r in occupied(fp)]
+    def area(r):
+        x0, y0, x1, y1 = courtyard(fps[r])
+        return (x1 - x0) * (y1 - y0)
+
+    # bulky parts first: small passives fit in the gaps they leave
+    todo = sorted((r for r in fps if r not in placed), key=lambda r: (-area(r), r))
+    used, failed = {}, []
+    for rk in range(7):
+        progress = True
+        while progress:
+            progress = False
+            for ref in list(todo):
+                fp = fps[ref]
+                a = anchor_of(ref, fp, placed, used)
+                if a is None or a[0][0] > rk:
+                    continue
+                _, net, ax, ay, ar, apin = a
+                shapes = [(rot, *shape_at_origin(fp, rot)) for rot in (0, 90, 180, 270)]
+
+                def find(offsets, zones, tx, ty, air=0.0, limit=math.inf):
+                    """First free spot along the offsets, the part grown by `air` on every side."""
+                    for ox, oy in offsets:
+                        if math.hypot(ox, oy) > limit:
+                            return None
+                        for rot, rects, pads in shapes:
+                            px, py = pads.get(net, (0.0, 0.0))
+                            dx, dy = tx - px + ox, ty - py + oy
+                            moved = [(x0 + dx, y0 + dy, x1 + dx, y1 + dy) for x0, y0, x1, y1 in rects]
+                            if inside(moved, zones) and free([(x0 - air, y0 - air, x1 + air, y1 + air)
+                                                              for x0, y0, x1, y1 in moved], occ):
+                                return dx, dy, rot, moved, math.hypot(ox, oy)
+                    return None
+
+                spot = None
+                # the zone of the sheet, then the zone grown into its neighbours when it is full
+                for grow, offsets in ((0.0, OFFSETS), (4.0, OFFSETS_FAR), (8.0, OFFSETS_FAR), (12.0, OFFSETS_FAR)):
+                    zones = [(x0 - grow, y0 - grow, x1 + grow, y1 + grow)
+                             for x0, y0, x1, y1 in ZONES.get(fp.GetSheetname(), [(0, 0, W, H)])]
+                    # a pin of another block: aim at the nearest point of the zone
+                    z = min(zones, key=lambda z: math.dist((ax, ay), (min(max(ax, z[0]), z[2]), min(max(ay, z[1]), z[3]))))
+                    tx, ty = min(max(ax, z[0]), z[2]), min(max(ay, z[1]), z[3])
+                    spot = find(offsets, zones, tx, ty)
+                    if spot:
+                        # spread the parts: a spot with routing room around the part, if it is barely farther
+                        spot = find(offsets, zones, tx, ty, AIR - GAP, spot[4] + AIR_SLACK) or spot
+                        break
+                if not spot:
+                    # parked to the right of the board, and reported
+                    failed.append(f"{ref} ({fp.GetSheetname()}, near {ar} pin {apin})")
+                    spot = (W + 10 + 8 * (len(failed) % 20), 8 * (len(failed) // 20 + 1), 0, [])
+                place(fp, *spot[:3])
+                occ += spot[3]
+                used[(ar, apin)] = used.get((ar, apin), 0) + 1
+                placed[ref] = fp
+                todo.remove(ref)
+                progress = True
+    if todo:
+        failed.append("no pin to serve: " + " ".join(todo))
+    return failed
+
+
 def main():
     comps, pinnets = load_netlist()
     board = pcbnew.CreateEmptyBoard()
@@ -283,6 +528,8 @@ def main():
         fp.SetReference(ref)
         fp.SetValue(c["value"])
         fp.SetField("LCSC", c["lcsc"])
+        fp.SetDNP(c["dnp"])
+        fp.SetExcludedFromBOM(c["no_bom"])
         if c["description"]:
             fp.SetField("Description", c["description"])
         for f in fp.GetFields():
@@ -301,16 +548,31 @@ def main():
     for ref, (x, y) in HOLES.items():
         place(fps[ref], x, y, 0)
         fps[ref].Reference().SetVisible(False)          # no silkscreen: it would fall off the board edge
-    # Not placed yet: parked in a grid to the right of the board
-    for k, ref in enumerate(r for r in sorted(fps) if r not in fixed):
-        place(fps[ref], W + 20 + 8 * (k % 40), 5 + 8 * (k // 40), 0)
+    for ref, (x, y, rot) in KEY.items():
+        place_centred(fps[ref], x, y, rot)
+    failed = auto_place(fps, {ref: fps[ref] for ref in fixed | set(KEY)})
 
     out = os.path.join(KICAD, "base.kicad_pcb")
     board.SetFileName(out)
+    # Outside KiCad, SaveBoard rewrites the project file without the schematic settings (ERC pin map,
+    # severities, sheets): they are put back from the file as it was.
+    pro = os.path.join(KICAD, "base.kicad_pro")
+    before = json.load(open(pro, encoding="utf-8")) if os.path.exists(pro) else {}
     pcbnew.SaveBoard(out, board)
+    after = json.load(open(pro, encoding="utf-8"))
+    for key in ("erc", "schematic", "sheets"):
+        if key in before:
+            after[key] = before[key]
+    with open(pro, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(after, f, indent=2, sort_keys=True, ensure_ascii=False)   # as KiCad writes it
+        f.write("\n")
     with open(os.path.join(KICAD, "base.kicad_dru"), "w", encoding="utf-8", newline="\n") as f:
         f.write(DRC_RULES)
+        for ref, gap in sorted(fine_pitch(fps).items()):
+            f.write(PACKAGE_RULE.format(ref=ref, gap=gap))
     print(f"{len(fps)} footprints, {len(nets)} nets -> {out}")
+    if failed:
+        raise SystemExit(f"{len(failed)} parts not placed:\n  " + "\n  ".join(failed))
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
-from kicadgen.symgen import symbol, symbol_units, write_library  # noqa: E402
+from kicadgen.symgen import switch_units, symbol, symbol_units, write_library  # noqa: E402
 
 PI, PO, IN, OUT, BI, PAS, OC = "power_in", "power_out", "input", "output", "bidirectional", "passive", "open_collector"
 
@@ -135,6 +135,10 @@ def main():
                              datasheet="https://datasheet.lcsc.com/datasheet/pdf/dc2904e2d83d7d6c79679fa0f146db90.pdf",
                              description="Dual RJ45 jack, shielded, without magnetics or LEDs; unit A: port A and "
                                          "shield, unit B: port B"))
+    syms.append(switch_units("SW_DIP_x04_Split", 4,
+                             footprint="Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm",
+                             datasheet="https://datasheet.lcsc.com/datasheet/pdf/b12889a146649629a94eee2aab5f121b.pdf",
+                             description="4-position DIP switch, one unit per switch: unit k joins pins k and 9 - k"))
     write_library(os.path.join(HERE, "bornier.kicad_sym"), syms)
 
 
