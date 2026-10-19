@@ -954,7 +954,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "power:+24V"
+		(symbol "power:VCC"
 			(power global)
 			(pin_numbers
 				(hide yes)
@@ -979,7 +979,7 @@
 					)
 				)
 			)
-			(property "Value" "+24V"
+			(property "Value" "VCC"
 				(at 0 3.556 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -1011,7 +1011,7 @@
 					)
 				)
 			)
-			(property "Description" "Power symbol creates a global label with name \"+24V\""
+			(property "Description" "Power symbol creates a global label with name \"VCC\""
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -1033,7 +1033,7 @@
 					)
 				)
 			)
-			(symbol "+24V_0_1"
+			(symbol "VCC_0_1"
 				(polyline
 					(pts
 						(xy -0.762 1.27)
@@ -1074,7 +1074,7 @@
 					)
 				)
 			)
-			(symbol "+24V_1_1"
+			(symbol "VCC_1_1"
 				(pin power_in line
 					(at 0 0 90)
 					(length 0)
@@ -16982,12 +16982,9 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Device:D_Zener"
-			(pin_numbers
-				(hide yes)
-			)
+		(symbol "Transistor_BJT:SS8550"
 			(pin_names
-				(offset 1.016)
+				(offset 0)
 				(hide yes)
 			)
 			(exclude_from_sim no)
@@ -16995,27 +16992,65 @@
 			(on_board yes)
 			(in_pos_files yes)
 			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "D"
-				(at 0 2.54 0)
+			(property "Reference" "Q"
+				(at 5.08 1.905 0)
 				(show_name no)
 				(do_not_autoplace no)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify left)
 				)
 			)
-			(property "Value" "D_Zener"
-				(at 0 -2.54 0)
+			(property "Value" "SS8550"
+				(at 5.08 0 0)
 				(show_name no)
 				(do_not_autoplace no)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify left)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Package_TO_SOT_SMD:SOT-23"
+				(at 5.08 -7.366 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+						(italic yes)
+					)
+					(justify left)
+				)
+			)
+			(property "Datasheet" "http://www.secosgmbh.com/datasheet/products/SSMPTransistor/SOT-23/SS8550.pdf"
+				(at 5.08 -4.826 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Description" "General Purpose PNP Transistor, 1.5A Ic, 25V Vce, SOT-23"
+				(at 34.036 -2.286 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Sim.Device" "PNP"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -17026,7 +17061,7 @@
 					)
 				)
 			)
-			(property "Datasheet" ""
+			(property "Sim.Pins" "1=B 2=E 3=C"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -17037,7 +17072,7 @@
 					)
 				)
 			)
-			(property "Description" "Zener diode"
+			(property "ki_keywords" "SS8550 PNP Transistor"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -17048,47 +17083,11 @@
 					)
 				)
 			)
-			(property "ki_keywords" "diode"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_fp_filters" "TO-???* *_Diode_* *SingleDiode* D_*"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "D_Zener_0_1"
+			(symbol "SS8550_0_1"
 				(polyline
 					(pts
-						(xy -1.27 -1.27)
-						(xy -1.27 1.27)
-						(xy -0.762 1.27)
-					)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 0)
-						(xy -1.27 0)
+						(xy -2.54 0)
+						(xy 0.635 0)
 					)
 					(stroke
 						(width 0)
@@ -17100,11 +17099,46 @@
 				)
 				(polyline
 					(pts
-						(xy 1.27 -1.27)
-						(xy 1.27 1.27)
-						(xy -1.27 0)
-						(xy 1.27 -1.27)
+						(xy 0.635 1.905)
+						(xy 0.635 -1.905)
 					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.635 0.635)
+						(xy 2.54 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.635 -0.635)
+						(xy 2.54 -2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 1.27 0)
+					(radius 2.8194)
 					(stroke
 						(width 0.254)
 						(type default)
@@ -17113,12 +17147,27 @@
 						(type none)
 					)
 				)
+				(polyline
+					(pts
+						(xy 2.286 -1.778)
+						(xy 1.778 -2.286)
+						(xy 1.27 -1.27)
+						(xy 2.286 -1.778)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
 			)
-			(symbol "D_Zener_1_1"
-				(pin passive line
-					(at -3.81 0 0)
+			(symbol "SS8550_1_1"
+				(pin input line
+					(at -5.08 0 0)
 					(length 2.54)
-					(name "K"
+					(name "B"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -17134,9 +17183,9 @@
 					)
 				)
 				(pin passive line
-					(at 3.81 0 180)
+					(at 2.54 -5.08 90)
 					(length 2.54)
-					(name "A"
+					(name "E"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -17151,8 +17200,37 @@
 						)
 					)
 				)
+				(pin passive line
+					(at 2.54 5.08 270)
+					(length 2.54)
+					(name "C"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
 			)
 			(embedded_fonts no)
+			(property "ki_fp_filters" "SOT?23*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
 		)
 		(symbol "74xGxx:74AHCT1G125"
 			(exclude_from_sim no)
@@ -18435,7 +18513,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2.2k"
+		(property "Value" "1k"
 			(at 139.7 88.9 0)
 			(effects
 				(font
@@ -18464,7 +18542,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Shunts 0.55 mA: off below 5 V (0.38 mA), 1.1 mA in the opto at 11 V (IEC 61131-2 type 3)"
+		(property "Description" "Shunts 1.0-1.4 mA: off below 5 V, 1.1 mA in the opto from 9.5 V (12 V supply); at 24 V, IEC 61131-2 type 3 (3.1 mA at 11 V)"
 			(at 137.16 87.63 0)
 			(effects
 				(font
@@ -18474,7 +18552,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25879"
+		(property "LCSC" "C11702"
 			(at 137.16 87.63 0)
 			(effects
 				(font
@@ -18554,8 +18632,8 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "1c8e31ea-2934-55f9-9446-b819bf9d94cc")
-		(property "Reference" "D70"
+		(uuid "ec00f769-f428-57cf-87d7-4553f3521550")
+		(property "Reference" "D69"
 			(at 127 78.74 0)
 			(effects
 				(font
@@ -18614,15 +18692,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "868520ab-e9cf-514b-bbd0-116a4338f86b")
+			(uuid "20ba5d7e-ac68-53bf-a8d6-f09fa8367f37")
 		)
 		(pin "2"
-			(uuid "f6ff6cc2-7ace-51a7-a453-919b8c04c01d")
+			(uuid "a6f34906-7965-5428-aca4-76b60e8a82d9")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/81b88da5-ff71-55f8-baa9-0128adc1edb3"
-					(reference "D70")
+					(reference "D69")
 					(unit 1)
 				)
 			)
@@ -18636,8 +18714,8 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "0256876e-1c1f-52b2-b4da-d0308c50a6ea")
-		(property "Reference" "D71"
+		(uuid "1c8e31ea-2934-55f9-9446-b819bf9d94cc")
+		(property "Reference" "D70"
 			(at 113.03 87.63 90)
 			(effects
 				(font
@@ -18697,15 +18775,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "74c03071-2ad4-5302-aa9b-dcfaffb99ed6")
+			(uuid "868520ab-e9cf-514b-bbd0-116a4338f86b")
 		)
 		(pin "2"
-			(uuid "91c53502-4277-59e8-a2b6-25ec682d2d3c")
+			(uuid "f6ff6cc2-7ace-51a7-a453-919b8c04c01d")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/81b88da5-ff71-55f8-baa9-0128adc1edb3"
-					(reference "D71")
+					(reference "D70")
 					(unit 1)
 				)
 			)
@@ -18766,8 +18844,8 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "97680b20-b3cf-5ee6-aa8d-31ac0b494c21")
-		(property "Reference" "R250"
+		(uuid "b0614232-ccd4-5816-8516-0a4f9cdb9139")
+		(property "Reference" "R249"
 			(at 102.87 81.28 90)
 			(effects
 				(font
@@ -18805,7 +18883,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "4.4 mA at 24 V, 0.15 W at 30 V"
+		(property "Description" "With the next one, 2.35 k: 8.7 mA at 24 V, 11.3 mA at 30 V"
 			(at 109.22 83.82 90)
 			(effects
 				(font
@@ -18817,6 +18895,88 @@
 		)
 		(property "LCSC" "C17936"
 			(at 109.22 83.82 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "80a78612-af57-5276-8c9f-bd9d152acf25")
+		)
+		(pin "2"
+			(uuid "b535564f-fb01-5816-9017-b877e65e5caa")
+		)
+		(instances
+			(project "base"
+				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/81b88da5-ff71-55f8-baa9-0128adc1edb3"
+					(reference "R249")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 109.22 91.44 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "97680b20-b3cf-5ee6-aa8d-31ac0b494c21")
+		(property "Reference" "R250"
+			(at 105.41 88.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "4.7k"
+			(at 106.68 95.25 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_1206_3216Metric"
+			(at 109.22 91.44 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 109.22 91.44 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Description" "0.15 W each at 30 V"
+			(at 109.22 91.44 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C17936"
+			(at 109.22 91.44 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18888,7 +19048,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "+24 V out (dry contact of the chain, probe supply), 0 V, chain state (24 V = run), probe input"
+		(property "Description" "VIN OUT (dry contact of the chain, probe supply), 0 V, chain state (VIN = run), probe input"
 			(at 66.04 81.28 0)
 			(effects
 				(font
@@ -18929,7 +19089,7 @@
 			)
 		)
 	)
-	(global_label "+24V_DRV"
+	(global_label "+VIN_OUT"
 		(shape passive)
 		(at 76.2 78.74 0)
 		(fields_autoplaced yes)
@@ -18939,7 +19099,7 @@
 			)
 			(justify left)
 		)
-		(uuid "32ad4714-668e-5016-b3c4-0b88a19ea459")
+		(uuid "6120ef1f-bda0-53d4-a0bd-30ef10fe0cb6")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 76.2 78.74 0)
 			(effects
@@ -19217,7 +19377,7 @@
 			)
 		)
 	)
-	(text "ESTOP: 24 V from the safety relay contact (or a dry contact to +24 V) = run.\nESTOP_IN low while the chain is closed: a broken wire reads as a stop.\n4.7 k series and 2.2 k shunt: off below 5 V, on above 11 V (IEC 61131-2 type 3), 0.15 W at 30 V."
+	(text "ESTOP: VIN from the safety relay contact (or a dry contact to VIN OUT) = run.\nESTOP_IN low while the chain is closed: a broken wire reads as a stop.\n2 x 4.7 k series and 1 k shunt: off below 5 V, on from 9.5 V (12 V supply);\non a 24 V supply, IEC 61131-2 type 3. 0.15 W per resistor at 30 V."
 		(exclude_from_sim no)
 		(at 58.42 104.14 0)
 		(effects
@@ -19227,7 +19387,7 @@
 			)
 			(justify left top)
 		)
-		(uuid "842c4c56-ae53-5a17-a331-0dc465b2ef46")
+		(uuid "da993b8d-e10d-50f7-8d28-7b6cf616143e")
 	)
 	(symbol
 		(lib_id "Power_Supervisor:TPS3823-xxDBV")
@@ -19443,8 +19603,8 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "47fced3f-114e-593b-abba-4135218d74b5")
-		(property "Reference" "C86"
+		(uuid "79183f46-c5e9-5643-a3fc-f97895619ff1")
+		(property "Reference" "C87"
 			(at 309.88 66.04 0)
 			(effects
 				(font
@@ -19503,15 +19663,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "4d1abbcf-954b-52a4-9da7-0fd903f26ee4")
+			(uuid "6ca0f8e3-6f39-5249-a8bf-8928118947f5")
 		)
 		(pin "2"
-			(uuid "050b67f7-fe47-58da-9c0b-359110ed416b")
+			(uuid "48325db9-28a9-58f7-bd54-822d02313571")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/81b88da5-ff71-55f8-baa9-0128adc1edb3"
-					(reference "C86")
+					(reference "C87")
 					(unit 1)
 				)
 			)
@@ -19722,8 +19882,8 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "57ea8109-5f79-5566-ba4b-8d40345d371a")
-		(property "Reference" "D72"
+		(uuid "0256876e-1c1f-52b2-b4da-d0308c50a6ea")
+		(property "Reference" "D71"
 			(at 334.01 77.47 90)
 			(effects
 				(font
@@ -19782,15 +19942,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "83d6f8af-863b-5a2f-9f12-dcde230dde7b")
+			(uuid "74c03071-2ad4-5302-aa9b-dcfaffb99ed6")
 		)
 		(pin "2"
-			(uuid "4974e2b6-3073-54b5-817b-6eda1ac5100f")
+			(uuid "91c53502-4277-59e8-a2b6-25ec682d2d3c")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/81b88da5-ff71-55f8-baa9-0128adc1edb3"
-					(reference "D72")
+					(reference "D71")
 					(unit 1)
 				)
 			)
@@ -19808,7 +19968,7 @@
 		)
 		(uuid "3f97fe35-a343-59e7-b018-e6ce37663714")
 	)
-	(text "CHASSIS: shields of the RJ45 and of the Modbus cable. Functional earth on pin 3 (FE) of the 24 V\nterminal block J1; 1 nF 2 kV to 0 V at each connector row (C37 at the EtherCAT ports)."
+	(text "CHASSIS: shields of the RJ45 and of the Modbus cable. Functional earth on pin 3 (FE) of the supply\nterminal block J1; 1 nF 2 kV to 0 V at each connector row (C37 at the EtherCAT ports)."
 		(exclude_from_sim no)
 		(at 30.48 165.1 0)
 		(effects
@@ -20171,6 +20331,28 @@
 	)
 	(wire
 		(pts
+			(xy 105.41 83.82)
+			(xy 105.41 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0737ced9-587a-57d9-961e-76bb2c195d4e")
+	)
+	(wire
+		(pts
+			(xy 113.03 83.82)
+			(xy 113.03 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "eb864d60-4854-5ed5-838b-7a792a669185")
+	)
+	(wire
+		(pts
 			(xy 113.03 83.82)
 			(xy 119.38 83.82)
 		)
@@ -20438,6 +20620,18 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "fc585d59-2c84-5c8b-a69c-8d16ba26435c")
+	)
+	(junction
+		(at 105.41 83.82)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "8d1410c2-bce6-56d6-b565-00a8ded10e55")
+	)
+	(junction
+		(at 113.03 83.82)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "f9fa50f0-4ab1-56d2-8201-d3966a59f1c5")
 	)
 	(junction
 		(at 119.38 83.82)

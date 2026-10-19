@@ -5,7 +5,7 @@
 Called by schematic.py; the parts and their connections come from circuit.py.
 """
 from circuit import c
-from motion import on, stub, vr, hr
+from motion import on, stub, vr, hr, parallel
 
 
 def safety(prj):
@@ -25,7 +25,7 @@ def safety(prj):
     led = on("ESTOP_LED", "D")[0]
     dio = on("ESTOP_R", "D")
     dio = next(d for d in dio if B[d]["sym"] == "Device:D")
-    rin = on("ESTOP_24", "R")[0]
+    rin, rin2 = on("ESTOP_V", "R")
     # cathode of the opto LED to ground
     s.w("GND", (kx, ky), (kx - 2.54, ky), (kx - 2.54, ky + 2.54))
     s.power("GND", kx - 2.54, ky + 2.54, show=False)
@@ -41,18 +41,19 @@ def safety(prj):
     xd = ax - 25.4
     s.place(dio, xd, ay + 3.81, rot=270, ref_at=(xd - 6.35, ay + 3.81), show_value=False)
     s.rail("GND", *s.P(dio, 2))
-    hr(s, rin, ax - 35.56, ay, rot=90 if B[rin]["pins"]["1"] == "ESTOP_24" else 270,
+    hr(s, rin, ax - 35.56, ay, rot=90 if B[rin]["pins"]["1"] == "ESTOP_V" else 270,
        ref_at=(ax - 41.91, ay - 2.54), val_at=(ax - 34.29, ay - 2.54))
+    parallel(s, rin, rin2)
     r_in, r_out = sorted((s.P(rin, 1), s.P(rin, 2)))
     s.w("ESTOP_R", r_out, (xd, ay), s.P(led, 2))
-    s.quiet.update({"ESTOP_R", "ESTOP_LED", "ESTOP_24"})
+    s.quiet.update({"ESTOP_R", "ESTOP_LED", "ESTOP_V"})
     # connector
-    j = on("ESTOP_24", "J")[0]
+    j = on("ESTOP_V", "J")[0]
     jx = ax - 78.74
     s.place(j, jx, ay - 2.54, mirror="y", ref_at=(jx - 5.08, ay - 8.89), val_at=(jx - 5.08, ay + 7.62))  # pole 3 in line
     j1, j2, j3, j4 = (s.P(j, k) for k in (1, 2, 3, 4))
-    s.w("ESTOP_24", j3, r_in)
-    stub(s, j1, "+24V_DRV", 5.08)
+    s.w("ESTOP_V", j3, r_in)
+    stub(s, j1, "+VIN_OUT", 5.08)
     s.w("GND", j2, (j2[0] + 1.27, j2[1]))
     s.power("GND", j2[0] + 1.27, j2[1], 90, show=False)
     s.w("PROBE_IN", j4, (j4[0] + 7.62, j4[1]))
@@ -68,9 +69,10 @@ def safety(prj):
     s.w("ESTOP_IN", s.P(ru, 1), (cx_ + 10.16, cy_))
     s.w("GND", (ex, ey), (ex + 2.54, ey), (ex + 2.54, ey + 2.54))
     s.power("GND", ex + 2.54, ey + 2.54, show=False)
-    s.text("ESTOP: 24 V from the safety relay contact (or a dry contact to +24 V) = run.\n"
+    s.text("ESTOP: VIN from the safety relay contact (or a dry contact to VIN OUT) = run.\n"
            "ESTOP_IN low while the chain is closed: a broken wire reads as a stop.\n"
-           "4.7 k series and 2.2 k shunt: off below 5 V, on above 11 V (IEC 61131-2 type 3), 0.15 W at 30 V.",
+           "2 x 4.7 k series and 1 k shunt: off below 5 V, on from 9.5 V (12 V supply);\n"
+           "on a 24 V supply, IEC 61131-2 type 3. 0.15 W per resistor at 30 V.",
            jx - 7.62, ay + 20.32)
 
     # --- external watchdog ----------------------------------------------------------------------
@@ -104,7 +106,7 @@ def safety(prj):
            wx - 50.8, wy + 20.32)
 
     # --- chassis and functional earth ------------------------------------------------------------
-    s.text("CHASSIS: shields of the RJ45 and of the Modbus cable. Functional earth on pin 3 (FE) of the 24 V\n"
+    s.text("CHASSIS: shields of the RJ45 and of the Modbus cable. Functional earth on pin 3 (FE) of the supply\n"
            "terminal block J1; 1 nF 2 kV to 0 V at each connector row (C37 at the EtherCAT ports).", 30.48, 165.1)
     xs, ys = 50.8, 190.5
     s.w("CHASSIS", (xs, ys), (xs + 38.1, ys))

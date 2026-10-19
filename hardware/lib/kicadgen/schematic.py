@@ -15,10 +15,10 @@ import uuid
 from .sexpr import Sym, dump
 from .kicad import Libraries, pin_geometry, prop_value
 
-POWER_KINDS = ("GND", "GNDISO", "+3V3", "+5V", "+24V", "PWR_FLAG")
+POWER_KINDS = ("GND", "GNDISO", "+3V3", "+5V", "+VIN", "PWR_FLAG")
 GROUNDS = ("GND", "GNDISO")
 # Power symbols drawn from another library symbol; the net takes the name in the Value field.
-POWER_LIB = {"GNDISO": "power:GNDS"}
+POWER_LIB = {"GNDISO": "power:GNDS", "+VIN": "power:VCC"}
 
 
 def g(v):
@@ -296,7 +296,7 @@ class Sheet:
                                            [Sym("uuid"), self.prj.U(f"hlabel/{self.name}/{text}")]]))
 
     def power(self, kind, x, y, rot=0, show=True):
-        """Power symbol (GND, +3V3, +5V, +24V) or PWR_FLAG, set on the end of a wire."""
+        """Power symbol (GND, +3V3, +5V, +VIN) or PWR_FLAG, set on the end of a wire."""
         if kind not in POWER_KINDS:
             raise ValueError(kind)
         self.pwr += 1

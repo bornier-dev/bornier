@@ -37,15 +37,15 @@ def hpart(s, ref, x, y, rot=90):
 
 
 def power(prj):
-    s = prj.sheet("Power", "power.kicad_sch", "24 V input, 5 V and 3.3 V bucks, USB")
+    s = prj.sheet("Power", "power.kicad_sch", "12 or 24 V input, 5 V and 3.3 V bucks, USB")
     s.text("POWER", 20.32, 17.78, 2.54, True)
-    y0 = 76.2                       # protected 24 V line
+    y0 = 76.2                       # protected supply line (+VIN)
     y5 = y0 + 5.08                  # 5 V line
 
-    # --- 24 V input and protection -------------------------------------------------------------
-    s.text("24 V logic supply (IEC 61131-2: 19.2 to 30 V).\n"
+    # --- supply input and protection -----------------------------------------------------------
+    s.text("Logic supply VIN: 12 V or 24 V, 10.8 to 30 V (24 V: IEC 61131-2, 19.2 to 30 V).\n"
            "Fuse, bidirectional TVS, reverse polarity diode.\n"
-           "Condition of use: dedicated 24 V supply in the same cabinet, short wiring\n"
+           "Condition of use: dedicated supply in the same cabinet, short wiring\n"
            "(no 0.5 kV / 2 ohm surge immunity, see ../sim/README.md).", 20.32, y0 - 25.4)
     s.place("J1", 30.48, y0 + 2.54, mirror="y", ref_at=(22.86, y0 - 5.08), val_at=(22.86, y0 - 2.54))
     jx, jy2 = s.P("J1", 2)
@@ -55,37 +55,38 @@ def power(prj):
     s.w("CHASSIS", (fx, fy), (fx + 2.54, fy), (fx + 2.54, fy + 12.7))
     s.glabel("CHASSIS", fx + 2.54, fy + 12.7, 0, "passive")
     hpart(s, "F1", 48.26, y0)
-    s.w("24V_IN", s.P("J1", 1), s.P("F1", 1))
-    s.label("24V_IN", 38.1, y0)
+    s.w("VIN_RAW", s.P("J1", 1), s.P("F1", 1))
+    s.label("VIN_RAW", 38.1, y0)
     s.place("D1", 60.96, y0 + 7.62, rot=270, ref_at=(63.5, y0 + 6.35), val_at=(63.5, y0 + 8.89))
     hpart(s, "D2", 73.66, y0, rot=180)
-    s.w("24V_F", s.P("F1", 2), (60.96, y0), s.P("D2", 2))
-    s.w("24V_F", (60.96, y0), s.P("D1", 1))
-    s.label("24V_F", 53.34, y0)
+    s.w("VIN_F", s.P("F1", 2), (60.96, y0), s.P("D2", 2))
+    s.w("VIN_F", (60.96, y0), s.P("D1", 1))
+    s.label("VIN_F", 53.34, y0)
     s.rail("GND", *s.P("D1", 2))
 
-    # --- +24V node: bulk and input capacitors, UVLO divider, RT ---------------------------------
-    s.rail("+24V", 83.82, y0, drop=5.08)
+    # --- +VIN node: bulk and input capacitors, UVLO divider, RT ---------------------------------
+    s.rail("+VIN", 83.82, y0, drop=5.08)
     s.power("PWR_FLAG", 81.28, y0 - 5.08)
-    s.w("+24V", (81.28, y0 - 5.08), (83.82, y0 - 5.08))
+    s.w("+VIN", (81.28, y0 - 5.08), (83.82, y0 - 5.08))
     for ref, x in (("C1", 81.28), ("C2", 95.25), ("C3", 109.22)):
         vpart(s, ref, x, y0 + 2.54)
-        s.w("+24V", (x, y0), s.P(ref, 1))
+        s.w("+VIN", (x, y0), s.P(ref, 1))
         s.rail("GND", *s.P(ref, 2))
     cx = 167.64                     # U1 pins: VIN y0, RT y0+5.08, EN y0+12.7 (x-10.16)
     s.place("U1", cx, y0 + 5.08, ref_at=(cx - 5.08, y0 - 6.35), val_at=(cx - 5.08, y0 - 3.81))
-    s.w("+24V", s.P("D2", 1), s.P("U1", 2))
-    # UVLO divider R1 + R300 over R2, EN taken at the lower junction
+    s.w("+VIN", s.P("D2", 1), s.P("U1", 2))
+    # UVLO divider R1 + R300 over R2 // R308, EN taken at the junction
     for k, ref in enumerate(("R1", "R300")):
         vpart(s, ref, 124.46, y0 + 7.62 * k)
-    for k, ref in enumerate(("R2", "R308")):
-        vpart(s, ref, 124.46, y0 + 17.78 + 7.62 * k)
+    vpart(s, "R2", 124.46, y0 + 17.78)
+    vpart(s, "R308", 116.84, y0 + 17.78, label_dx=-6.35)
     en = s.P("U1", 3)
     ye = y0 + 16.51
     s.w("EN", s.P("R300", 2), s.P("R2", 1))
-    s.quiet.add("EN4")
+    s.w("EN", (124.46, ye), (116.84, ye), s.P("R308", 1))
     s.w("EN", (124.46, ye), (139.7, ye), (139.7, en[1]), en)
     s.label("EN", 144.78, en[1])
+    s.rail("GND", *s.P("R2", 2))
     s.rail("GND", *s.P("R308", 2))
     s.quiet.add("EN1")
     # RT = R3 + R301, in line
@@ -138,7 +139,7 @@ def power(prj):
     s.rail("GND", *s.P("R303", 2))
     s.text("VOUT = 0.8 V x (1 + (R4 + R302)/(R5 + R303)) = 5.10 V, above VBUS; fsw = 658 kHz (R3 + R301 = 147 k).\n"
            "Compensation R6, C7 taken from the passive palette, simulated (sim/README.md).\n"
-           "UVLO (R1 + R300 = 200 k, R2 + R308 = 16.8 k): start 15.25 V (16.97 V worst case), stop 14.57 V.\n"
+           "UVLO (R1 + R300 = 200 k, R2 // R308 = 32.0 k): start 8.47 V (9.48 V worst case), stop 7.79 V.\n"
            "60 V parts throughout: the TVS clamps at 53.3 V.", 129.54, yr + 7.62)
 
     # --- 5 V rail, OR-ing towards the 3.3 V buck --------------------------------------------------
@@ -239,7 +240,7 @@ def power(prj):
     ym = yu + 58.42
     s.text("Supply monitoring and power LEDs", 20.32, ym - 12.7, 1.524, True)
     xm = 30.48
-    s.rail("+24V", xm, ym, drop=2.54)
+    s.rail("+VIN", xm, ym, drop=2.54)
     vpart(s, "R11", xm, ym)
     vpart(s, "R12", xm, ym + 10.16)
     s.w("VIN_SENSE", s.P("R11", 2), s.P("R12", 1))
@@ -252,29 +253,29 @@ def power(prj):
     s.rail("GND", *s.P("R12", 2))
     s.rail("GND", *s.P("C11", 2))
     s.text("R11/R12: 73.5 V full scale on the 3.3 V ADC.", xm - 7.62, ym + 27.94)
-    for rref, dref, net, kind, x in (("R13", "D6", "LED24", "+24V", 76.2), ("R14", "D7", "LED3V3", "+3V3", 93.98)):
+    for rref, dref, net, kind, x in (("R13", "D6", "LEDVIN", "+VIN", 76.2), ("R14", "D7", "LED3V3", "+3V3", 93.98)):
         s.rail(kind, x, ym, drop=2.54)
         vpart(s, rref, x, ym)
         s.place(dref, x, s.P(rref, 2)[1] + 7.62, rot=90,
                 ref_at=(x + 5.08, s.P(rref, 2)[1] + 6.35), val_at=(x + 7.62, s.P(rref, 2)[1] + 8.89))
         s.w(net, s.P(rref, 2), s.P(dref, 2))
         s.rail("GND", *s.P(dref, 1))
-    # 24 V outputs (+24V_DRV, current limited on the drive supply sheet)
+    # VIN OUT (+VIN_OUT, current limited on the drive supply sheet)
     x = 111.76
     vpart(s, "R306", x, ym)
-    s.w("+24V_DRV", (x, ym), (x, ym - 5.08))
-    s.glabel("+24V_DRV", x, ym - 5.08, 90, "passive")
+    s.w("+VIN_OUT", (x, ym), (x, ym - 5.08))
+    s.glabel("+VIN_OUT", x, ym - 5.08, 90, "passive")
     s.place("D300", x, s.P("R306", 2)[1] + 7.62, rot=90,
             ref_at=(x + 5.08, s.P("R306", 2)[1] + 6.35), val_at=(x + 7.62, s.P("R306", 2)[1] + 8.89))
-    s.w("LED24O", s.P("R306", 2), s.P("D300", 2))
+    s.w("LEDVOUT", s.P("R306", 2), s.P("D300", 2))
     s.rail("GND", *s.P("D300", 1))
     # test points of the rails
     s.text("Test points of the rails.", 76.2, ym + 30.48)
-    for k, (tp, net) in enumerate((("TP4", "+24V"), ("TP5", "+24V_DRV"), ("TP6", "+5V"), ("TP7", "+3V3"))):
+    for k, (tp, net) in enumerate((("TP4", "+VIN"), ("TP5", "+VIN_OUT"), ("TP6", "+5V"), ("TP7", "+3V3"))):
         tx, ty = 78.74 + 12.7 * k, ym + 50.8
         s.place(tp, tx, ty, rot=180, ref_at=(tx - 1.27, ty + 5.08), show_value=False)
         px_, py_ = s.P(tp, 1)
-        if net == "+24V_DRV":
+        if net == "+VIN_OUT":
             s.w(net, (px_, py_), (px_, py_ - 5.08))
             s.glabel(net, px_, py_ - 5.08, 90, "passive")
         else:

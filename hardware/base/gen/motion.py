@@ -4,7 +4,7 @@
 
 Two repeated sheets, drawn once and placed several times (KiCad hierarchical sheets): a pair of
 drive ports (one quad RS-422 driver serves two axes), placed twice, and an encoder port, placed
-four times. A flat sheet holds the 24 V supply of the drive ports and the probe input.
+four times. A flat sheet holds the supply of the drive ports (VIN OUT) and the probe input.
 Called by schematic.py; the parts and their connections come from circuit.py, where each
 instance is a group of parts created in the same order.
 """
@@ -12,7 +12,7 @@ import re
 
 from circuit import c
 
-GLOBAL = {"+24V_DRV", "CHASSIS", "PROBE_IN"}   # nets shared across sheets or instances: global labels
+GLOBAL = {"+VIN_OUT", "CHASSIS", "PROBE_IN"}   # nets shared across sheets or instances: global labels
 
 
 def on(net, prefix="", group=None):
@@ -55,6 +55,19 @@ def vr(s, ref, x, top, rot=0, dx=1.905):
 def hr(s, ref, x, y, rot=90, ref_at=None, val_at=None):
     """Horizontal two-pin part centred on (x, y); rot 90: pin 1 on the left, 270: on the right."""
     s.place(ref, x, y, rot=rot, ref_at=ref_at or (x - 3.81, y - 2.54), val_at=val_at or (x - 2.54, y + 3.81))
+
+
+def parallel(s, first, second, dy=7.62, ref_at=None, val_at=None):
+    """Place the horizontal resistor `second` dy below `first` (above if dy < 0), same orientation, and join
+    their ends."""
+    pins = c.by_ref()[first]["pins"]
+    left, right = sorted(("1", "2"), key=lambda n: s.P(first, n)[0])
+    (x1, y1), (x2, _) = s.P(first, left), s.P(first, right)
+    xc, y = (x1 + x2) / 2, y1 + dy
+    hr(s, second, xc, y, rot=90 if left == "1" else 270, ref_at=ref_at or (xc - 3.81, y - 2.54),
+       val_at=val_at or (xc - 2.54, y + 3.81))
+    s.w(pins[left], (x1, y1), s.P(second, left))
+    s.w(pins[right], (x2, y1), s.P(second, right))
 
 
 def instances(s, base, prefix, pinmaps):
@@ -134,12 +147,17 @@ def opto_input(s, u, a_pin, k_pin, r_net, led_net, in_net):
     oy = (ay + ky) / 2
     led = next(d for d in on(r_net, "D") if c.by_ref()[d]["sym"] == "Device:LED")
     dio = next(d for d in on(r_net, "D") if c.by_ref()[d]["sym"] == "Device:D")
-    res = on(r_net, "R")[0]
+    res, *more = on(r_net, "R")
     s.place(led, ax - 6.35, ay, rot=180, ref_at=(ax - 8.89, ay - 5.08), val_at=(ax - 8.89, ay - 2.54))
     s.w(led_net, s.P(led, 1), (ax, ay))
     xn = ax - 13.97
     s.place(dio, xn, oy, rot=270, ref_at=(xn - 6.35, oy + 1.27), show_value=False)
-    hr(s, res, ax - 21.59, ay, rot=90, ref_at=(ax - 25.4, ay - 2.54), val_at=(ax - 21.59, ay - 2.54))
+    if more:                                    # series resistor split in two, in parallel, above the first
+        hr(s, res, ax - 21.59, ay, rot=90, ref_at=(ax - 24.77, ay - 3.81), val_at=(ax - 24.77, ay - 6.35))
+        for r in more:
+            parallel(s, res, r, dy=-10.16, ref_at=(ax - 25.4, ay - 12.7), val_at=(ax - 20.32, ay - 12.7))
+    else:
+        hr(s, res, ax - 21.59, ay, rot=90, ref_at=(ax - 25.4, ay - 2.54), val_at=(ax - 21.59, ay - 2.54))
     s.w(r_net, s.P(res, 2), (xn, ay), s.P(led, 2))
     s.w(r_net, (xn, ay), s.P(dio, 1))
     s.w(in_net, (kx, ky), (xn, ky), s.P(dio, 2))
@@ -153,8 +171,8 @@ def drive_pair(prj):
     s.alias = lambda net: re.sub(r"(STEP|DIR|ENA|ALM)([01])", lambda m: f"{m.group(1)}_{'AB'[int(m.group(2))]}", net)
     s.text("PAIR OF DRIVE PORTS", 20.32, 17.78, 2.54, True)
     s.text("Placed twice: axes 0-1 and 2-3 (axis A = even, B = odd).\n"
-           "RS-422 STEP/DIR (5 V), ENA open drain to 0 V, ALM through an optocoupler fed by +24V_DRV.\n"
-           "Wiring of a drive: COM+ of its inputs on +24V_DRV (pin 7), servo-on on ENA (pin 4),\n"
+           "RS-422 STEP/DIR (5 V), ENA open drain to 0 V, ALM through an optocoupler fed by +VIN_OUT.\n"
+           "Wiring of a drive: COM+ of its inputs on +VIN_OUT (pin 7), servo-on on ENA (pin 4),\n"
            "its floating alarm output between ALM (pin 5) and 0 V (pin 8).", 20.32, 25.4)
     u = next(r for r in on("+5V", "U", "drv0"))
     cx, cy = 106.68, 104.14
@@ -231,7 +249,7 @@ def drive_pair(prj):
         ox, oy = 256.54, yc + 12.7
         s.place(uo, ox, oy, ref_at=(ox - 2.54, oy - 6.35), val_at=(ox - 2.54, oy + 7.62))
         rend, jin = opto_input(s, uo, 1, 2, f"ALM{n}_R", f"ALM{n}_LED", f"ALM{n}_IN")
-        stub(s, rend, "+24V_DRV", -5.08)
+        stub(s, rend, "+VIN_OUT", -5.08)
         s.w(f"ALM{n}_IN", jin, (jin[0], jin[1] + 5.08), (jin[0] - 7.62, jin[1] + 5.08))
         s.label(f"ALM{n}_IN", jin[0] - 7.62, jin[1] + 5.08, 180)
         cx_, cy_ = s.P(uo, 4)
@@ -252,15 +270,15 @@ def drive_pair(prj):
 
 
 def drive_supply_probe(prj):
-    s = prj.sheet("Drive supply and probe", "drive_supply.kicad_sch", "24 V of the drive ports; probe input")
+    s = prj.sheet("Drive supply and probe", "drive_supply.kicad_sch", "VIN OUT of the drive ports; probe input")
     s.text("DRIVE SUPPLY AND PROBE", 20.32, 17.78, 2.54, True)
-    u = on("+24V_DRV", "U")[0]
-    s.text("+24V_DRV: 24 V of the drive and probe connectors, 480 mA limit, auto-retry;\n"
-           "no open-load detection (DIAG_EN low).", 25.4, 38.1)
+    u = on("+VIN_OUT", "U")[0]
+    s.text("+VIN_OUT: the supply voltage (12 or 24 V) on the drive, probe, emergency stop and spindle\n"
+           "connectors, 480 mA limit, auto-retry; no open-load detection (DIAG_EN low).", 25.4, 38.1)
 
     def from_24(s_, pt):
-        s_.rail("+24V", *pt, drop=2.54)
-    limited_supply(s, u, 76.2, 66.04, from_24, "+24V_DRV")
+        s_.rail("+VIN", *pt, drop=2.54)
+    limited_supply(s, u, 76.2, 66.04, from_24, "+VIN_OUT")
 
     up = on("PROBE_LED", "U")[0]
     px, py = 254.0, 66.04
@@ -270,7 +288,7 @@ def drive_supply_probe(prj):
     rend, jin = opto_input(s, up, 1, 3, "PROBE_R", "PROBE_LED", "PROBE_IN")
     s.w("PROBE_IN", jin, (jin[0] - 15.24, jin[1]))
     s.glabel("PROBE_IN", jin[0] - 15.24, jin[1], 180, "input")
-    stub(s, rend, "+24V_DRV", -7.62)
+    stub(s, rend, "+VIN_OUT", -7.62)
     vx, vy = s.P(up, 6)
     s.w("+3V3", (vx, vy), (vx + 5.08, vy))
     s.power("+3V3", vx + 5.08, vy)
@@ -279,7 +297,7 @@ def drive_supply_probe(prj):
     s.w("+3V3", (vx + 5.08, vy), s.P(cp, 1))
     s.rail("GND", *s.P(cp, 2))
     stub(s, s.P(up, 5), "PROBE", 17.78, "glabel_out")
-    # shunt across the opto LED: a leakage below about 1.2 mA does not trip the probe
+    # shunt across the opto LED: a leakage below about 0.3 mA does not trip the probe
     rsh = next(r for r in on("PROBE_LED", "R") if "PROBE_IN" in c.by_ref()[r]["pins"].values())
     sx, sy = px - 12.7, py + 15.24
     vr(s, rsh, sx, sy)
@@ -297,7 +315,7 @@ def drive_supply_probe(prj):
 def encoder(prj):
     """One encoder port; drawn for encoder 0, placed for encoders 0 to 3."""
     n = 0
-    s = prj.sheet("Encoder 0", "encoder.kicad_sch", "Encoder port: RS-422, TTL or HTL, 5 V or 24 V (4 instances)")
+    s = prj.sheet("Encoder 0", "encoder.kicad_sch", "Encoder port: RS-422, TTL or HTL, 5 V or VIN (4 instances)")
     s.alias = lambda net: re.sub(r"^(ENC|VENC|VSEL|VSD)0_?", lambda m: "" if m.group(1) == "ENC" else m.group(1), net)
     s.text("ENCODER PORT", 20.32, 17.78, 2.54, True)
     s.text("Placed four times (encoders 0 to 3).\n"
@@ -305,7 +323,7 @@ def encoder(prj):
            "line sits at 2.5 V, so a single-ended encoder (TTL, HTL, open collector) works with its - line\n"
            "unconnected. + lines pulled up to the encoder supply. TERM jumpers: shunt on 1-2 for RS-422 only, parked on 2-3 otherwise.", 20.32, 25.4)
     venc, vsel = f"VENC{n}", f"VSEL{n}"
-    # supply: jumper 5 V / 24 V, current-limited switch
+    # supply: jumper 5 V / VIN, current-limited switch
     jp = on(vsel, "JP")[0]
     u = next(r for r in on(f"VSD{n}", "U"))
     jx, jy = 33.02, 63.5
@@ -313,8 +331,8 @@ def encoder(prj):
     p1, p2, p3 = s.P(jp, 1), s.P(jp, 2), s.P(jp, 3)
     s.w("+5V", p1, (p1[0] + 2.54, p1[1]), (p1[0] + 2.54, p1[1] - 2.54))
     s.power("+5V", p1[0] + 2.54, p1[1] - 2.54)
-    s.w("+24V", p3, (p3[0] + 2.54, p3[1]), (p3[0] + 2.54, p3[1] + 2.54))
-    s.power("+24V", p3[0] + 2.54, p3[1] + 2.54, 180)
+    s.w("+VIN", p3, (p3[0] + 2.54, p3[1]), (p3[0] + 2.54, p3[1] + 2.54))
+    s.power("+VIN", p3[0] + 2.54, p3[1] + 2.54, 180)
 
     def from_jumper(s_, pt):
         # Schottky after the jumper: nothing flows back through the TPS1H000, whatever the position
@@ -327,7 +345,7 @@ def encoder(prj):
         # VS is driven only when the shunt is fitted
         s_.power("PWR_FLAG", pt[0], p2[1])
     limited_supply(s, u, 101.6, p2[1] + 6.35, from_jumper, venc)
-    s.text("Shunt 1-2: 5 V, 2-3: 24 V,\nnone: no supply. 218 mA limit.", 20.32, 73.66)
+    s.text("Shunt 1-2: 5 V, 2-3: VIN (12 or 24 V),\nnone: no supply. 218 mA limit.", 20.32, 73.66)
 
     # connector
     j = next(r for r in on(f"ENC{n}_AP", "J") if c.by_ref()[r]["value"] == "ENCODER")

@@ -19,14 +19,14 @@ LED0603 = "LED_SMD:LED_0603_1608Metric"
 LED_G, LED_R = "C2289", "C2286"
 R1206 = "Resistor_SMD:R_1206_3216Metric"
 # The only terminal block of the board: pluggable 3.81 mm, 4 poles, 8 A (KF2EDGR-3.81-4P; plug KF2EDGK-3.81-4P).
-# Pinout rule of every terminal block: pole 1 withstands 24 V, pole 2 is 0 V. The plugs are all alike: the
-# POWER plug (+24 V, 0 V, FE) damages nothing whichever header it is plugged into.
+# Pinout rule of every terminal block: pole 1 withstands the supply voltage, pole 2 is 0 V. The plugs are all
+# alike: the POWER plug (+VIN, 0 V, FE) damages nothing whichever header it is plugged into.
 TB4 = ("Connector:Screw_Terminal_01x04", "Connector_Phoenix_MC:PhoenixContact_MC_1,5_4-G-3.81_1x04_P3.81mm_Horizontal",
        "C441184")
 
 # Passive palette: every resistor and capacitor of the board is one of these lines (one feeder each
 # on a pick-and-place). 0402 by default; 0603 for 1 uF 50 V and for the 120 ohm terminations
-# (75 mW under RS-422, above the 62.5 mW of an 0402); 1206 where 24 V is dropped.
+# (75 mW under RS-422, above the 62.5 mW of an 0402); 1206 where the supply voltage is dropped.
 PALETTE = {
     ("R", "49.9", R0402): "C25120",
     ("R", "1k", R0402): "C11702",
@@ -51,30 +51,32 @@ PALETTE = {
 c = Circuit(PALETTE, r_fp=R0402, c_fp=C0402)
 
 # --------------------------------------------------------------------------------------------
-c.block("24 V input protection")
-# Logic supply only: field 24 V of the modules never comes through here.
-c.part("J1", TB4[0], "POWER", TB4[1], TB4[2], {1: "24V_IN", 2: "GND", 3: "CHASSIS"},
-       "+24 V, 0 V, functional earth (the shields meet earth here, wired with the supply), pole 4 unused")
-c.part("F1", "Device:Fuse", "3A 63V", "Fuse:Fuse_1206_3216Metric", "C182445", {1: "24V_IN", 2: "24V_F"},
-       "12H1300C, 3 A 63 V fast acting, 50 A breaking; 1.9 A worst case load; a sustained overvoltage kills the TVS (short) before the fuse opens")
-c.part("D1", "Device:D_TVS", "SMBJ33CA", SMB, "C78420", {1: "24V_F", 2: "GND"},
+c.block("Supply input protection: 12 V or 24 V, 10.8 to 30 V")
+# Logic supply only: the field supply of the modules never comes through here.
+c.part("J1", TB4[0], "POWER", TB4[1], TB4[2], {1: "VIN_RAW", 2: "GND", 3: "CHASSIS"},
+       "+VIN (12 or 24 V), 0 V, functional earth (the shields meet earth here, wired with the supply), pole 4 unused")
+c.part("F1", "Device:Fuse", "3.5A 63V", "Fuse:Fuse_1206_3216Metric", "C182975", {1: "VIN_RAW", 2: "VIN_F"},
+       "12H1350C, 3.5 A 63 V fast acting, 50 A breaking; worst case load 1.9 A at 19.2 V, 2.4 A at 10.8 V (68 %); "
+       "a sustained overvoltage kills the TVS (short) before the fuse opens")
+c.part("D1", "Device:D_TVS", "SMBJ33CA", SMB, "C78420", {1: "VIN_F", 2: "GND"},
        "Bidirectional TVS: 33 V standoff, 53.3 V clamp; also clamps negative surges")
-c.part("D2", "Device:D_Schottky", "SS56B", SMB, "C14651", {1: "+24V", 2: "24V_F"},
-       "Reverse polarity: 60 V, 5 A")
+c.part("D2", "Device:D_Schottky", "SS56B", SMB, "C14651", {1: "+VIN", 2: "VIN_F"},
+       "Reverse polarity: 60 V, 5 A; 1.2 W at 2.4 A, needs copper")
 c.part("C1", "Device:C_Polarized", "47µF 63V", "Capacitor_SMD:CP_Elec_6.3x7.7", "C46550423",
-       {1: "+24V", 2: "GND"}, "Damps the hot-plug ringing of the ceramics and the cable")
+       {1: "+VIN", 2: "GND"}, "Damps the hot-plug ringing of the ceramics and the cable")
 
 # --------------------------------------------------------------------------------------------
 c.block("5 V buck (TI TPS54360B, 658 kHz, passive palette values, simulated)")
-c.C("C2", "2.2µF 100V", "+24V", "GND", fp=C1210)
-c.C("C3", "2.2µF 100V", "+24V", "GND", fp=C1210)
-# UVLO: 200 k over 16.8 k: start 15.25 V (16.97 V worst case), stop 14.57 V, hysteresis 0.68 V
-c.R("R1", "100k", "+24V", "EN1", note="UVLO top: R1 + R300 = 200 k (hysteresis 200 k x 3.4 uA = 0.68 V)")
+c.C("C2", "2.2µF 100V", "+VIN", "GND", fp=C1210)
+c.C("C3", "2.2µF 100V", "+VIN", "GND", fp=C1210)
+# UVLO: 200 k over 32.0 k: start 8.47 V (9.48 V worst case: EN 1.3 V, Ip min, 1 % resistors), stop 7.79 V,
+# hysteresis 0.68 V. The lowest supply, 10.8 V, gives about 10.5 V on +VIN before the buck starts.
+c.R("R1", "100k", "+VIN", "EN1", note="UVLO top: R1 + R300 = 200 k (hysteresis 200 k x 3.4 uA = 0.68 V)")
 c.R("R300", "100k", "EN1", "EN")
-c.R("R2", "12.1k", "EN", "EN4", note="UVLO bottom: R2 + R308 = 16.8 k: start 15.25 V (16.97 V worst case), stop 14.57 V")
-c.R("R308", "4.7k", "EN4", "GND")
+c.R("R2", "47k", "EN", "GND", note="UVLO bottom: R2 // R308 = 32.0 k: start 8.47 V (9.48 V worst case), stop 7.79 V")
+c.R("R308", "100k", "EN", "GND")
 c.part("U1", "Regulator_Switching:TPS54360DDA", "TPS54360BDDAR", None, "C524806",
-       {2: "+24V", 3: "EN", 4: "RT", 1: "BOOT", 8: "SW5", 6: "COMP", 5: "FB5", 7: "GND", 9: "GND"},
+       {2: "+VIN", 3: "EN", 4: "RT", 1: "BOOT", 8: "SW5", 6: "COMP", 5: "FB5", 7: "GND", 9: "GND"},
        "60 V, 3.5 A buck, current mode")
 c.R("R3", "100k", "RT", "RT1", note="With R301: 147 k, f(SW) = 92417 / 147^0.991 = 658 kHz")
 c.R("R301", "47k", "RT1", "GND")
@@ -125,18 +127,18 @@ c.C("C300", "10µF 25V", "+3V3", "GND", fp=C0805)
 
 # --------------------------------------------------------------------------------------------
 c.block("Supply monitoring and power LEDs")
-c.R("R11", "100k", "+24V", "VIN_SENSE", note="Full scale 73.5 V: no current injected, even in a surge")
+c.R("R11", "100k", "+VIN", "VIN_SENSE", note="Full scale 73.5 V: no current injected, even in a surge")
 c.R("R12", "4.7k", "VIN_SENSE", "GND")
 c.C("C11", "100nF", "VIN_SENSE", "GND")
-c.R("R13", "4.7k", "+24V", "LED24", fp=R1206, note="5 mA, 0.12 W")
-c.part("D6", "Device:LED", "green", LED0603, LED_G, {2: "LED24", 1: "GND"}, "24 V present")
+c.R("R13", "4.7k", "+VIN", "LEDVIN", fp=R1206, note="1.7 mA at 10.8 V, 5.9 mA and 0.17 W at 30 V")
+c.part("D6", "Device:LED", "green", LED0603, LED_G, {2: "LEDVIN", 1: "GND"}, "Supply present")
 c.R("R14", "1k", "+3V3", "LED3V3")
 c.part("D7", "Device:LED", "green", LED0603, LED_G, {2: "LED3V3", 1: "GND"}, "3.3 V present")
-c.R("R306", "4.7k", "+24V_DRV", "LED24O", fp=R1206, note="5 mA, 0.12 W")
-c.part("D300", "Device:LED", "green", LED0603, LED_G, {2: "LED24O", 1: "GND"},
-       "24 V outputs present: off while a short on a drive port, ESTOP, PROBE or SPINDLE holds +24V_DRV in current limit")
+c.R("R306", "4.7k", "+VIN_OUT", "LEDVOUT", fp=R1206, note="1.7 mA at 10.8 V, 5.9 mA and 0.17 W at 30 V")
+c.part("D300", "Device:LED", "green", LED0603, LED_G, {2: "LEDVOUT", 1: "GND"},
+       "VIN OUT present:off while a short on a drive port, ESTOP, PROBE or SPINDLE holds +VIN_OUT in current limit")
 c.block("Test points of the rails")
-for tp, net in (("TP4", "+24V"), ("TP5", "+24V_DRV"), ("TP6", "+5V"), ("TP7", "+3V3")):
+for tp, net in (("TP4", "+VIN"), ("TP5", "+VIN_OUT"), ("TP6", "+5V"), ("TP7", "+3V3")):
     c.part(tp, "Connector:TestPoint", net, "TestPoint:TestPoint_Pad_D1.5mm", "", {1: net}, "Pad")
 
 # --------------------------------------------------------------------------------------------
@@ -347,8 +349,8 @@ def limited_supply(vs, out, rcl, note):
     return u
 
 
-c.block("Drives: STEP/DIR RS-422, ENA open drain, ALM optocoupler, 24 V for the drive I/O")
-U_DRV24 = limited_supply("+24V", "+24V_DRV", "1k", "24 V of the drive ports, 480 mA limit")
+c.block("Drives: STEP/DIR RS-422, ENA open drain, ALM optocoupler, VIN OUT for the drive I/O")
+U_DRV24 = limited_supply("+VIN", "+VIN_OUT", "1k", "VIN OUT: supply of the drive I/O, probe and relay coil, 480 mA limit")
 for k in range(2):
     # One repeated sheet per pair of axes: a quad driver serves two axes.
     c.group(f"drv{k}")
@@ -366,7 +368,7 @@ for k in range(2):
         q = ref("Q")
         c.part(q, "Transistor_FET:AO3400A", "AO3422", "Package_TO_SOT_SMD:SOT-23", "C37130",
                {1: f"ENA{n}", 2: "GND", 3: f"ENA{n}_OUT"},
-               "55 V, 2 A, 0.2 ohm: sinks the servo-on input; survives ENA shorted to +24V_DRV (480 mA)")
+               "55 V, 2 A, 0.2 ohm: sinks the servo-on input; survives ENA shorted to +VIN_OUT (480 mA)")
         c.R(ref("R"), "100k", f"ENA{n}", "GND", note="Drive disabled at reset")
         c.R(ref("R"), "1k", f"ENA{n}", f"ENA{n}_LA")
         c.part(ref("D"), "Device:LED", "green ENA", LED0603, LED_G, {2: f"ENA{n}_LA", 1: "GND"},
@@ -377,7 +379,8 @@ for k in range(2):
         u = ref("U")
         c.part(u, "Isolator:LTV-357T", "LTV-357T-C", "Package_SO:SO-4_4.4x3.6mm_P2.54mm", "C119091",
                {1: f"ALM{n}_LED", 2: f"ALM{n}_IN", 4: f"ALM{n}", 3: "GND"})
-        c.R(ref("R"), "4.7k", "+24V_DRV", f"ALM{n}_R", fp=R1206, note="About 4.5 mA in both LEDs")
+        c.R(ref("R"), "4.7k", "+VIN_OUT", f"ALM{n}_R", fp=R1206,
+            note="4.5 mA at 24 V; 1.1 mA at 10 V with 1 V across the drive output (opto CTR 50 %: 0.55 mA, 0.33 mA needed)")
         c.part(ref("D"), "Device:LED", "red ALM", LED0603, LED_R, {2: f"ALM{n}_R", 1: f"ALM{n}_LED"},
                "On while current flows in the alarm input")
         c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: f"ALM{n}_R", 2: f"ALM{n}_IN"},
@@ -385,14 +388,14 @@ for k in range(2):
         c.R(ref("R"), "10k", f"ALM{n}", "+3V3")
         c.part(ref("J"), "Connector:RJ45_Shielded", "DRIVE", RJ45, "C3001539",
                {1: f"STEP{n}_P", 2: f"STEP{n}_N", 3: f"DIR{n}_P", 6: f"DIR{n}_N", 4: f"ENA{n}_OUT", 5: f"ALM{n}_IN",
-                7: "+24V_DRV", 8: "GND", "SH": "CHASSIS"},
-               "Pairs: 1-2 STEP, 3-6 DIR, 4-5 ENA/ALM, 7-8 +24 V/0 V like the encoder port: an Ethernet "
+                7: "+VIN_OUT", 8: "GND", "SH": "CHASSIS"},
+               "Pairs: 1-2 STEP, 3-6 DIR, 4-5 ENA/ALM, 7-8 VIN OUT/0 V like the encoder port: an Ethernet "
                "or encoder cable plugged by mistake shorts 7-8 into the current limit")
         c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
                {1: f"STEP{n}_P", 2: f"STEP{n}_N", 4: f"DIR{n}_P", 5: f"DIR{n}_N", 3: "GND", 8: "GND"},
                "ESD of STEP and DIR at the RJ45, flow-through")
 
-c.block("Encoders: RS-422, TTL or HTL, differential or single-ended, 5 V or 24 V supply")
+c.block("Encoders: RS-422, TTL or HTL, differential or single-ended, 5 V or VIN supply")
 # Each line: series 3.3 k (HTL current into the clamp), Schottky clamp to +5V and GND, symmetric
 # bias 4.7 k / 4.7 k to +5V at the receiver input. + lines pulled up to the encoder supply
 # (open-collector encoders). 120 ohm termination per pair through a jumper (RS-422 only).
@@ -400,8 +403,8 @@ for n in range(4):
     c.group(f"enc{n}")          # one repeated sheet per encoder port
     venc, vsel = f"VENC{n}", f"VSEL{n}"
     jp = ref("JP")
-    c.part(jp, "Connector_Generic:Conn_01x03", "ENC 5V|24V", HDR3,
-           "C41417360", {1: "+5V", 2: vsel, 3: "+24V"}, "Shunt on 1-2: 5 V encoder, on 2-3: 24 V; none: no supply")
+    c.part(jp, "Connector_Generic:Conn_01x03", "ENC 5V|VIN", HDR3,
+           "C41417360", {1: "+5V", 2: vsel, 3: "+VIN"}, "Shunt on 1-2: 5 V encoder, on 2-3: VIN (12 or 24 V); none: no supply")
     c.part(ref("D"), "Device:D_Schottky", "SS34", "Diode_SMD:D_SMA", "C8678", {1: f"VSD{n}", 2: vsel},
            "Blocks an external voltage on the encoder supply from flowing back through the TPS1H000, "
            "whichever the jumper position")
@@ -438,8 +441,10 @@ u = ref("U")
 c.part(u, "Bornier:TLP2361", "TLP2361", None, "C107626", {1: "PROBE_LED", 3: "PROBE_IN", 6: "+3V3", 5: "PROBE", 4: "GND"},
        "Inverting: PROBE low while the probe conducts")
 c.C(ref("C"), "100nF", "+3V3", "GND")
-c.R(ref("R"), "4.7k", "+24V_DRV", "PROBE_R", fp=R1206, note="1.8 mA in the opto at 19.2 V, 0.15 W at 30 V")
-c.R(ref("R"), "2.2k", "PROBE_LED", "PROBE_IN", note="Shunt: 2.1 mA in the opto at 19.2 V with a 2 V NPN drop; leakage below about 0.7 mA ignored")
+c.R(ref("R"), "4.7k", "+VIN_OUT", "PROBE_R", fp=R1206,
+    note="With the next one, 2.35 k: 1.4 mA in the opto at 10 V with a 2 V NPN drop (TLP2361: 1.3 mA max threshold)")
+c.R(ref("R"), "4.7k", "+VIN_OUT", "PROBE_R", fp=R1206, note="11.3 mA at 30 V, 0.15 W each")
+c.R(ref("R"), "4.7k", "PROBE_LED", "PROBE_IN", note="Shunt: a leakage below about 0.3 mA (two-wire sensor) stays below the threshold")
 c.part(ref("D"), "Device:LED", "green PROBE", LED0603, LED_G, {2: "PROBE_R", 1: "PROBE_LED"},
        "On while the probe conducts")
 c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: "PROBE_R", 2: "PROBE_IN"},
@@ -488,26 +493,29 @@ for group in (("RB_SCK", "RB_MOSI", "BUS_MISO", "RB_LATCH"), ("RB_OE", "BUS_IRQ"
 c.block("Spindle / laser: 0-10 V, PWM 5 V, enable and direction open drain")
 c.part(ref("J"), TB4[0], "SPINDLE A", TB4[1], TB4[2], {1: "SP_EN", 2: "GND", 3: "SP_AOUT", 4: "SP_DIR"},
        "EN, 0 V, 0-10 V, DIR: the whole wiring of a VFD on one plug")
-c.part(ref("J"), TB4[0], "SPINDLE B", TB4[1], TB4[2], {1: "+24V_DRV", 2: "GND", 3: "SP_PWM"},
-       "+24 V out (supply of a relay coil switched by EN or DIR), 0 V, PWM, pole 4 unused")
-# 0-10 V: DAC (0-3.3 V) x 3, op amp supplied by a 15 V zener rail from the protected 24 V
-c.R(ref("R"), "3.3k", "+24V", "V15", fp=R1206, note="Two 3.3 k in parallel: 2.5-11 mA over 19-33 V, 0.1 W each at 33 V")
-c.R(ref("R"), "3.3k", "+24V", "V15", fp=R1206)
-c.part(ref("D"), "Device:D_Zener", "BZT52C15", "Diode_SMD:D_SOD-123", "C2104", {1: "V15", 2: "GND"},
-       "15 V rail of the op amp: keeps it below its 40 V rating during 24 V surges")
-c.C(ref("C"), "1µF 50V", "V15", "GND", fp=C0603)
+c.part(ref("J"), TB4[0], "SPINDLE B", TB4[1], TB4[2], {1: "+VIN_OUT", 2: "GND", 3: "SP_PWM"},
+       "VIN OUT (supply of a relay coil switched by EN or DIR), 0 V, PWM, pole 4 unused")
+# 0-10 V: DAC (0-3.3 V) x 3.13, rail-to-rail op amp supplied by +VIN: 10 V into 10 k from 10.9 V of supply,
+# into 5 k from 11.2 V. 42 V absolute maximum, the limit already accepted for the TPS1H000.
 u = ref("U")
-c.part(u, "Bornier:OPAMP_DUAL", "LM2904DR2G", None, "C18229",
-       {3: "SP_DAC", 2: "SP_FB", 1: "SP_OA", 5: "GND", 6: "SP_UNUSED", 7: "SP_UNUSED", 8: "V15", 4: "GND"},
-       "Output swings to 13.5 V from 15 V; second half wired as a grounded follower")
+c.part(u, "Bornier:OPAMP_DUAL", "OPA2990IDR", None, "C2058283",
+       {3: "SP_DAC", 2: "SP_FB", 1: "SP_OA", 5: "GND", 6: "SP_UNUSED", 7: "SP_UNUSED", 8: "+VIN", 4: "GND"},
+       "40 V (42 V absolute), rail-to-rail input and output, 0.3 V headroom at 5 mA; "
+       "second half wired as a grounded follower")
+c.C(ref("C"), "100nF", "+VIN", "GND")
+c.C(ref("C"), "1µF 50V", "+VIN", "GND", fp=C0603)
 c.R(ref("R"), "1k", "SPINDLE_AOUT", "SP_DAC", note="DAC output filter with the next capacitor")
 c.C(ref("C"), "100nF", "SP_DAC", "GND")
-c.R(ref("R"), "100k", "SP_DAC", "GND", note="0 V while the DAC pin is not configured (reset, bootloader): the input "
-    "bias current of the LM2904 flows out of its pins and would charge the 100 nF to full scale")
-c.R(ref("R"), "10k", "SP_AOUT", "SP_FB", note="Gain 1 + 10/4.7 = 3.13, fed back after the 120 ohm; 0.7 mA from the 15 V rail")
+c.R(ref("R"), "100k", "SP_DAC", "GND", note="0 V while the DAC pin is not configured (reset, bootloader)")
+c.R(ref("R"), "10k", "SP_AOUT", "SP_FB", note="Gain 1 + 10/4.7 = 3.13, fed back after the 120 ohm; 0.7 mA at 10 V")
 c.C(ref("C"), "470pF", "SP_OA", "SP_FB", note="Closes the loop at high frequency: stable with the cable capacitance")
 c.R(ref("R"), "4.7k", "SP_FB", "GND")
-c.R(ref("R"), "120", "SP_OA", "SP_AOUT", fp=R0603, note="Isolates the cable capacitance, limits the current")
+c.R(ref("R"), "120", "SP_OA", "SP_AOUT", fp=R0603, note="Isolates the cable capacitance; current sense of the next PNP")
+c.part(ref("Q"), "Transistor_BJT:SS8550", "SS8550", "Package_TO_SOT_SMD:SOT-23", "C8542",
+       {2: "SP_OA", 1: "SP_AOUT", 3: "SP_FB"},
+       "25 V VCEO, 40 V VCBO: with 120 ohm from base to emitter it holds the 30 V supply. "
+       "Current limit: above 0.6 V across the 120 ohm (5 mA, 4 mA hot) it feeds SP_FB and pulls the output down; "
+       "an output shorted to 0 V draws 5 mA (op amp: 80 mA unlimited). Off below 3 mA (load 5 k and more)")
 c.part(ref("D"), "Device:D_TVS", "SMF15A", "Diode_SMD:D_SOD-123F", "C123802", {1: "SP_AOUT", 2: "GND"},
        "ESD and surge on the 0-10 V output")
 # PWM 5 V push-pull, TTL input threshold so the 3.3 V MCU drives it
@@ -519,7 +527,7 @@ c.R(ref("R"), "100k", "SPINDLE_PWM", "GND", note="Laser off while PB15 is not co
 c.R(ref("R"), "120", "SP_PWM_B", "SP_PWM_C", fp=R0603, note="With the next one, 240 ohm: 20 mA into a short (74AHCT: 25 mA)")
 c.R(ref("R"), "120", "SP_PWM_C", "SP_PWM", fp=R0603)
 c.part(ref("D"), "Device:D_TVS", "PESD5V0S1BA", "Diode_SMD:D_SOD-323", "C19224", {1: "SP_PWM_C", 2: "GND"},
-       "ESD between the two 120 ohm; a 24 V miswire burns the outer 120 ohm only (fuse), not the buffer")
+       "ESD between the two 120 ohm; a miswire to VIN burns the outer 120 ohm only (fuse), not the buffer")
 c.R(ref("R"), "2.2k", "SP_PWM_B", "SP_PWM_LA", note="1.3 mA: the buffer stays below 25 mA into a shorted output")
 c.part(ref("D"), "Device:LED", "green PWM", LED0603, LED_G, {2: "SP_PWM_LA", 1: "GND"},
        "Brightness follows the duty cycle")
@@ -571,16 +579,18 @@ u = ref("U")
 c.part(u, "Isolator:LTV-357T", "LTV-357T-C", "Package_SO:SO-4_4.4x3.6mm_P2.54mm", "C119091",
        {1: "ESTOP_LED", 2: "GND", 4: "ESTOP_IN", 3: "GND"},
        "ESTOP_IN low while the chain is closed: a broken wire reads as a stop")
-c.R(ref("R"), "4.7k", "ESTOP_24", "ESTOP_R", fp=R1206, note="4.4 mA at 24 V, 0.15 W at 30 V")
+c.R(ref("R"), "4.7k", "ESTOP_V", "ESTOP_R", fp=R1206, note="With the next one, 2.35 k: 8.7 mA at 24 V, 11.3 mA at 30 V")
+c.R(ref("R"), "4.7k", "ESTOP_V", "ESTOP_R", fp=R1206, note="0.15 W each at 30 V")
 c.part(ref("D"), "Device:LED", "green ESTOP OK", LED0603, LED_G, {2: "ESTOP_R", 1: "ESTOP_LED"},
        "On while the chain is closed")
-c.R(ref("R"), "2.2k", "ESTOP_LED", "GND",
-    note="Shunts 0.55 mA: off below 5 V (0.38 mA), 1.1 mA in the opto at 11 V (IEC 61131-2 type 3)")
+c.R(ref("R"), "1k", "ESTOP_LED", "GND",
+    note="Shunts 1.0-1.4 mA: off below 5 V, 1.1 mA in the opto from 9.5 V (12 V supply); "
+         "at 24 V, IEC 61131-2 type 3 (3.1 mA at 11 V)")
 c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: "ESTOP_R", 2: "GND"},
        "Reverse protection of both LEDs")
 c.R(ref("R"), "10k", "ESTOP_IN", "+3V3")
-c.part(ref("J"), TB4[0], "ESTOP | PROBE", TB4[1], TB4[2], {1: "+24V_DRV", 2: "GND", 3: "ESTOP_24", 4: "PROBE_IN"},
-       "+24 V out (dry contact of the chain, probe supply), 0 V, chain state (24 V = run), probe input")
+c.part(ref("J"), TB4[0], "ESTOP | PROBE", TB4[1], TB4[2], {1: "+VIN_OUT", 2: "GND", 3: "ESTOP_V", 4: "PROBE_IN"},
+       "VIN OUT (dry contact of the chain, probe supply), 0 V, chain state (VIN = run), probe input")
 # External watchdog: resets the MCU, whose reset state turns every output off through its pull resistor.
 u = ref("U")
 c.part(u, "Power_Supervisor:TPS3823-xxDBV", "TPS3828-33DBVR", "Package_TO_SOT_SMD:SOT-23-5", "C20032",

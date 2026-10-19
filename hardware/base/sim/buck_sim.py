@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: CERN-OHL-W-2.0
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
-"""Simulation of the 24 V -> 5 V buck (TPS54360B, power sheet of the base board).
+"""Simulation of the VIN (12 or 24 V) -> 5 V buck (TPS54360B, power sheet of the base board).
 
 TI publishes no SPICE model that ngspice can run, so the regulator is a behavioural model built
 from the datasheet (SNVSB93): fixed-frequency peak-current-mode control, gm(EA) = 350 uA/V with
 a DC gain of 10 000 and 2.5 MHz unity-gain bandwidth, +-30 uA output, COMP to switch current
 12 A/V, 5.5 A current limit through the COMP clamp, 135 ns minimum on-time, frequency foldback
 1/2/4/8 as FB falls, OVP, pulse skipping at COMP = 0.6 V, internal soft-start.
+
+Slope compensation: the datasheet (7.3.2) says the device adds a ramp that prevents sub-harmonic
+oscillation above 50 % duty cycle, without giving its value. The model uses Se = Sf / 2 = Vout / (2 L),
+the smallest ramp that keeps this promise up to 100 % duty with our inductor: the worst case.
 
 Usage: python buck_sim.py [scenario ...]   -> results.md and figures in this folder.
 """
@@ -30,9 +34,9 @@ MS, US = 1e-3, 1e-6
 # Board values (circuit.py) and the uncertain ones, which the scenarios sweep.
 BASE = dict(
     vin=24.0,          # source voltage
-    lcable=1.5e-6,     # 24 V wiring: about 2 m of pair
+    lcable=1.5e-6,     # supply wiring: about 2 m of pair
     rcable=0.04,
-    rfuse=0.03,        # F1, 12H1300C 3 A cold resistance (order of magnitude)
+    rfuse=0.03,        # F1, 12H1350C 3.5 A cold resistance (order of magnitude)
     cin=6.1e-6,        # C2 + C3 (2 x 2.2 uF 100 V, 3.6 uF at 24 V) + ceramics on the TPS1H000 VS and outputs (about 2.5 uF at 24 V)
     cbulk=47e-6,       # C1, aluminium electrolytic
     rbulk=1.0,         # C1 ESR: small 63 V part, high ESR
@@ -51,6 +55,7 @@ BASE = dict(
     t_on_src=0.0,      # source steps from 0 to vin at this time (hot plug)
     rsrc=0.0,          # source impedance (2 ohm for the IEC 61000-4-5 surge generator)
     tvs_rs=0.66,       # per diode of the back-to-back pair: SMBJ33CA, 53.3 V at 11.3 A (10/1000 us)
+    se=5.1 / 8.2e-6 / 2,   # slope compensation ramp, A/s, in switch current (see the docstring)
 )
 
 
@@ -109,7 +114,8 @@ def netlist(p):
         "Bfr fr 0 V = V(ph) - floor(V(ph))",
         # PWM latch: set by the clock, reset by the current comparator after the minimum on-time
         f"Bset st 0 V = u(30n - V(fr)/({FSW:.0f}*V(kf))) * u(V(comp) - 0.6) * u(0.848 - V(fb)) * u(V(vin) - 4.3)",
-        f"Brst rs 0 V = max(u(I(Vsense) - 12*(min(V(comp), {vmax}) - {p['v0']})) * u(V(fr)/({FSW:.0f}*V(kf)) - 135n),"
+        f"Brst rs 0 V = max(u(I(Vsense) + {p['se']:.6g}*V(fr)/({FSW:.0f}*V(kf)) - 12*(min(V(comp), {vmax}) - {p['v0']}))"
+        f" * u(V(fr)/({FSW:.0f}*V(kf)) - 135n),"
         " u(V(fr) - 0.97))",
         "Bq qt 0 V = V(st) + (1 - V(st)) * (1 - V(rs)) * u(V(q) - 0.5)",
         "Rq qt q 1k",
@@ -154,7 +160,7 @@ def loop_gain(rload, cout, vin=24.0, resr=BASE["resr"], mc=1.0):
 
     TI model of the datasheet (Fig. 28), plus the sampling double pole of peak current mode at
     fsw/2 (Ridley), whose Q depends on the duty cycle and on the slope compensation mc (unknown:
-    mc = 1, no compensation ramp, is the worst case).
+    mc = 1 is no ramp; mc_slope() gives the ramp of the model).
     """
     d = 5.4 / vin
     wn = np.pi * FSW
@@ -183,6 +189,11 @@ def loop_gain(rload, cout, vin=24.0, resr=BASE["resr"], mc=1.0):
     return fc, pm, gm, f, mag, ph
 
 
+def mc_slope(vin):
+    """Ridley's mc = 1 + Se / Sn for the ramp of the model, Sn the inductor up-slope."""
+    return 1 + BASE["se"] / ((vin - 5.4) / BASE["lout"])
+
+
 # --------------------------------------------------------------------------------------------
 # Scenarios
 
@@ -196,7 +207,7 @@ def i2t(t, i):
 
 
 def surge_pwl(v_dc, v_peak, t0):
-    """1.2/50 us open-circuit surge (IEC 61000-4-5) added to the 24 V supply."""
+    """1.2/50 us open-circuit surge (IEC 61000-4-5) added to the supply."""
     ts = np.concatenate([np.linspace(0, 1.2e-6, 7), np.linspace(1.5e-6, 400e-6, 120)])
     tau = 50e-6 / np.log(2)
     vs = np.where(ts <= 1.2e-6, ts / 1.2e-6, np.exp(-(ts - 1.2e-6) / tau))
@@ -206,8 +217,8 @@ def surge_pwl(v_dc, v_peak, t0):
 def scenarios():
     out = []
 
-    # 1. Start-up at 24 V and at 19.2 V, 2.5 A resistive load (sized load of the 5 V rail)
-    for vin in (19.2, 24.0, 30.0):
+    # 1. Start-up over the supply range (12 V and 24 V supplies), 2.5 A resistive load (sized load of the 5 V rail)
+    for vin in (10.8, 12.0, 19.2, 24.0, 30.0):
         p, r = simulate(vin=vin, rload=2.0, t_end=4 * MS)
         w = window(r, 3.5 * MS, 4 * MS)
         vo = r["v(out)"]
@@ -217,7 +228,7 @@ def scenarios():
                         iin_max=r["lc#branch"].max(), vin_max=r["v(vin)"].max()))
 
     # 2. Load steps 0.5 -> 2.5 -> 0.5 A, nominal and derated output capacitance
-    for vin in (19.2, 24.0, 30.0):
+    for vin in (10.8, 24.0, 30.0):
         for cout in (56e-6, 34e-6):
             steps = [(0, 0), (3 * MS, 0), (3 * MS + 1 * US, 2.0), (3.5 * MS, 2.0), (3.5 * MS + 1 * US, 0)]
             p, r = simulate(vin=vin, rload=10.0, cout=cout, iload=steps, t_end=4 * MS)
@@ -226,9 +237,9 @@ def scenarios():
                             vmin=w["v(out)"].min(), vmax=w["v(out)"].max(), il_max=w["l1#branch"].max()))
 
     # 3. Hot switch (Ron 0.19 ohm) at the lowest running input, 2.5 A
-    p, r = simulate(vin=14.6, rload=2.0, ron=0.19, t_end=4 * MS)
+    p, r = simulate(vin=7.8, rload=2.0, ron=0.19, t_end=4 * MS)
     w = window(r, 3.5 * MS, 4 * MS)
-    out.append(dict(name="14.6 V input (UVLO stop 14.57 V), Ron hot 0.19 ohm, 2.5 A", vout=w["v(out)"].mean(),
+    out.append(dict(name="7.8 V input (UVLO stop 7.79 V), Ron hot 0.19 ohm, 2.5 A", vout=w["v(out)"].mean(),
                     ripple=np.ptp(w["v(out)"])))
 
     # 4. Light load: 20 mA (pulse skipping)
@@ -254,7 +265,7 @@ def scenarios():
                         vin_max=w["v(vin)"].max(), iin_max=w["lc#branch"].max(),
                         i2t_fuse=i2t(w["t"], w["lc#branch"]), tvs_max=w["vtvs#branch"].max()))
 
-    # 7. Surge 0.5 kV 1.2/50 us, 2 ohm generator, line to line on the 24 V input
+    # 7. Surge 0.5 kV 1.2/50 us, 2 ohm generator, line to line on a 24 V input
     p, r = simulate(vin_pwl=surge_pwl(24.0, 500.0, 3 * MS), rsrc=2.0, rload=2.0, t_end=4 * MS)
     w = window(r, 2.9 * MS, 4 * MS)
     out.append(dict(name="surge 0.5 kV 1.2/50 us, 2 ohm", vin_max=w["v(vin)"].max(), vclamp=w["v(n2)"].max(),
@@ -265,7 +276,7 @@ def scenarios():
 
 
 def report(rows, loops):
-    lines = ["# 24 V -> 5 V buck (TPS54360B): simulation results", "",
+    lines = ["# VIN -> 5 V buck (TPS54360B): simulation results", "",
              "Generated by `buck_sim.py`. Behavioural model of the regulator from its datasheet;"
              " see the module docstring for what it includes.", "",
              "## Loop gain", "",
@@ -281,11 +292,13 @@ def report(rows, loops):
 
 if __name__ == "__main__":
     loops = []
-    for vin in (16.0, 24.0, 30.0):
+    for vin in (7.8, 10.8, 16.0, 24.0, 30.0):
         for rl in (20.0, 2.0, 5 / 3.5):
             for co in (34e-6, 56e-6, 80e-6):
-                fc, pm, gm, *_ = loop_gain(rl, co, vin)
-                loops.append((vin, rl, co, fc, pm, gm))
+                # worst of: the modelled ramp, and no ramp at all below 50 % duty cycle
+                mcs = [mc_slope(vin)] + ([1.0] if 5.4 / vin < 0.5 else [])
+                res = [loop_gain(rl, co, vin, mc=m)[:3] for m in mcs]
+                loops.append((vin, rl, co, min(x[0] for x in res), min(x[1] for x in res), min(x[2] for x in res)))
     rows = scenarios()
     report(rows, loops)
     for r in rows:

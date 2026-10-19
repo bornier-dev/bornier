@@ -20,7 +20,7 @@ def spindle(prj):
     # --- 0-10 V ------------------------------------------------------------------------------------
     u = next(r for r in on("SP_DAC", "U"))
     cx, cy = 132.08, 83.82
-    s.place(u, cx, cy, ref_at=(cx - 5.08, cy - 10.16), val_at=(cx - 5.08, cy - 12.7))
+    s.place(u, cx, cy, ref_at=(cx - 5.08, cy - 15.24), val_at=(cx - 5.08, cy - 17.78))
     P = lambda n: s.P(u, n)  # noqa: E731
     rin = next(r for r in on("SP_DAC", "R") if "SPINDLE_AOUT" in c.by_ref()[r]["pins"].values())
     rpd = next(r for r in on("SP_DAC", "R") if r != rin)
@@ -46,10 +46,12 @@ def spindle(prj):
        ref_at=(cx - 3.81, yf - 2.54), val_at=(cx - 2.54, yf + 3.81))
     fa, fb = sorted((s.P(rf, 1), s.P(rf, 2)))
     s.w("SP_FB", (nx - 2.54, yf), fa)
-    s.label("SP_FB", nx - 2.54, ny)
+    s.label("SP_FB", nx, yf)
     vr(s, rg, nx - 2.54, yf, dx=-5.08)
     s.rail("GND", *s.P(rg, 2))
-    s.rail("GND", *P(4), drop=2.54)
+    gx4, gy4 = P(4)
+    s.w("GND", (gx4, gy4), (gx4, gy4 + 2.54))
+    s.power("GND", gx4, gy4 + 2.54, show=False)
     # unused half: grounded follower
     (mx, my), (px, py), (bx, by) = P(6), P(5), P(7)
     s.w("SP_UNUSED", (mx, my), (mx - 2.54, my), (mx - 2.54, my - 7.62), (bx + 2.54, my - 7.62), (bx + 2.54, by), (bx, by))
@@ -59,7 +61,8 @@ def spindle(prj):
     # output
     rout = next(r for r in on("SP_AOUT", "R") if c.by_ref()[r]["value"] == "120")
     tvs = on("SP_AOUT", "D")[0]
-    hr(s, rout, ox + 10.16, oy, rot=90 if c.by_ref()[rout]["pins"]["1"] == "SP_OA" else 270)
+    hr(s, rout, ox + 15.24, oy, rot=90 if c.by_ref()[rout]["pins"]["1"] == "SP_OA" else 270,
+       ref_at=(ox + 12.7, oy - 2.54), val_at=(ox + 12.7, oy - 5.08))
     s.w("SP_OA", (ox, oy), sorted((s.P(rout, 1), s.P(rout, 2)))[0])
     ro = sorted((s.P(rout, 1), s.P(rout, 2)))[1]
     # gain set from SP_AOUT, after the 120 ohm; 470 pF from the op amp output closes the loop at HF
@@ -73,25 +76,30 @@ def spindle(prj):
     s.label("SP_AOUT", ro[0] + 15.24, oy)
     s.place(tvs, ro[0] + 7.62, oy + 3.81, rot=270, ref_at=(ro[0] + 10.16, oy + 3.81), val_at=(ro[0] + 10.16, oy + 6.35))
     s.rail("GND", *(sorted((s.P(tvs, 1), s.P(tvs, 2)), key=lambda p: p[1])[1]))
-    # 15 V rail of the op amp
+    # current limit: PNP across the 120 ohm, collector into SP_FB
+    q = on("SP_OA", "Q")[0]
+    lo = sorted((s.P(rout, 1), s.P(rout, 2)))[0]
+    xq, yq = ro[0], oy - 7.62                   # base down, emitter left, collector right
+    s.place(q, xq, yq, rot=90, mirror="y", ref_at=(xq + 2.54, yq - 8.89), val_at=(xq + 2.54, yq - 11.43))
+    s.w("SP_AOUT", s.P(q, 1), ro)
+    ex_, ey_ = s.P(q, 2)
+    s.w("SP_OA", (ex_, ey_), (lo[0], ey_), lo)
+    kx_, ky_ = s.P(q, 3)
+    s.w("SP_FB", (kx_, ky_), (kx_ + 5.08, ky_))
+    s.label("SP_FB", kx_ + 5.08, ky_)
+    # supply of the op amp: +VIN, decoupled at the pin, routed over the follower of the unused half
     vx, vy = P(8)
-    rz, rz2 = on("V15", "R")
-    dz = on("V15", "D")[0]
-    cz = on("V15", "C")[0]
-    xr = cx + 25.4
-    yr = cy - 20.32
-    s.w("V15", (vx, vy), (xr, vy), (xr, yr), (xr + 20.32, yr))
-    s.power("PWR_FLAG", xr + 5.08, yr)
-    vr(s, rz, xr, yr - 7.62)
-    s.rail("+24V", *s.P(rz, 1))
-    vr(s, rz2, xr + 15.24, yr - 7.62)
-    s.rail("+24V", *s.P(rz2, 1))
-    s.place(dz, xr + 10.16, yr + 3.81, rot=270, ref_at=(xr + 12.7, yr + 2.54), val_at=(xr + 12.7, yr + 5.08))
-    s.rail("GND", *(sorted((s.P(dz, 1), s.P(dz, 2)), key=lambda p: p[1])[1]))
-    vr(s, cz, xr + 20.32, yr)
-    s.rail("GND", *s.P(cz, 2))
-    s.label("V15", xr + 2.54, yr)
-    s.text("0-10 V: DAC x 3.13, gain taken after the 120 ohm; load 5 k or more.\nOp amp on a 15 V zener rail from +24V (two 3.3 k in parallel).", cx - 38.1, cy + 30.48)
+    xv, yr = vx + 5.08, cy - 33.02
+    c1, c2 = (r for r in on("+VIN", "C") if c.by_ref()[r]["block"].startswith("Spindle"))
+    s.w("+VIN", (vx, vy), (xv, vy), (xv, yr), (xv - 22.86, yr))
+    s.rail("+VIN", xv, yr, drop=2.54)
+    vr(s, c1, xv - 7.62, yr, dx=-8.89)
+    s.rail("GND", *s.P(c1, 2))
+    vr(s, c2, xv - 22.86, yr, dx=-11.43)
+    s.rail("GND", *s.P(c2, 2))
+    s.text("0-10 V: DAC x 3.13, gain taken after the 120 ohm; load 5 k or more.\n"
+           "Op amp supplied by +VIN (42 V absolute maximum): 10 V into 10 k from 10.9 V of supply,\n"
+           "into 5 k from 11.2 V. The PNP limits the output current to about 5 mA.", cx - 38.1, cy + 35.56)
 
     # --- PWM 5 V ------------------------------------------------------------------------------------
     ub = next(r for r in on("SP_PWM_B", "U"))
