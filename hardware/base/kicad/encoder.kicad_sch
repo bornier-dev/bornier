@@ -19014,7 +19014,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "SS34"
+		(property "Value" "SS56B"
 			(at 48.26 67.31 0)
 			(effects
 				(font
@@ -19023,7 +19023,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Diode_SMD:D_SMA"
+		(property "Footprint" "Diode_SMD:D_SMB"
 			(at 48.26 63.5 0)
 			(effects
 				(font
@@ -19053,7 +19053,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C8678"
+		(property "LCSC" "C14651"
 			(at 48.26 63.5 0)
 			(effects
 				(font

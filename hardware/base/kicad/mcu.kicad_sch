@@ -22519,8 +22519,8 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:D_TVS")
-		(at 111.76 97.79 270)
+		(lib_id "Power_Protection:TPD4E05U06DQA")
+		(at 109.22 119.38 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -22528,7 +22528,7 @@
 		(dnp no)
 		(uuid "cdd3feea-6780-5ccf-b561-450d9cf98aef")
 		(property "Reference" "D10"
-			(at 113.03 96.52 90)
+			(at 119.38 116.84 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22536,18 +22536,17 @@
 				(justify left)
 			)
 		)
-		(property "Value" "PESD5V0S1BA"
-			(at 113.03 99.06 90)
+		(property "Value" "TPD4E05U06DQAR"
+			(at 119.38 119.38 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" "Diode_SMD:D_SOD-323"
-			(at 111.76 97.79 90)
+		(property "Footprint" "Package_SON:USON-10_2.5x1.0mm_P0.5mm"
+			(at 109.22 119.38 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22557,7 +22556,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 111.76 97.79 90)
+			(at 109.22 119.38 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22566,8 +22565,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "ESD of NRST, which reaches the debug connector"
-			(at 111.76 97.79 90)
+		(property "Description" "ESD of NRST, which reaches the debug connector: one channel of the array of the PHY lines (one BOM line less)"
+			(at 109.22 119.38 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22576,8 +22575,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C19224"
-			(at 111.76 97.79 90)
+		(property "LCSC" "C138714"
+			(at 109.22 119.38 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22592,6 +22591,30 @@
 		(pin "2"
 			(uuid "7cc44afe-919f-5775-a9b7-8288677b6a1c")
 		)
+		(pin "3"
+			(uuid "2cc87a35-0fad-5ae8-a12e-e034082103f5")
+		)
+		(pin "4"
+			(uuid "a759a45d-4213-55a9-9548-e2c29a22e816")
+		)
+		(pin "5"
+			(uuid "b23ae6bc-b640-5e28-8725-c7d9537635f7")
+		)
+		(pin "6"
+			(uuid "67d1e55c-a5ba-5896-a0e4-65a56eba3c6e")
+		)
+		(pin "7"
+			(uuid "e194b364-defa-5262-b00b-3f3b2bf200e5")
+		)
+		(pin "8"
+			(uuid "939de512-695c-57df-8e7e-2400f861f831")
+		)
+		(pin "9"
+			(uuid "747b1c41-46ef-5b02-86fd-453fff6bb2c1")
+		)
+		(pin "10"
+			(uuid "aa44ba04-0ba0-5d78-a648-340b051ace76")
+		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/8301d91c-4617-5503-b457-9ef241064507"
@@ -22603,7 +22626,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 111.76 104.14 0)
+		(at 96.52 121.92 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -22611,7 +22634,7 @@
 		(dnp no)
 		(uuid "536b5930-7722-5124-a324-c1a7143d6147")
 		(property "Reference" "#PWRMCU22"
-			(at 111.76 104.14 0)
+			(at 96.52 121.92 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22620,7 +22643,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 111.76 107.95 0)
+			(at 96.52 125.73 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22628,7 +22651,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 111.76 104.14 0)
+			(at 96.52 121.92 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24636,6 +24659,34 @@
 			)
 		)
 	)
+	(no_connect
+		(at 106.68 106.68)
+		(uuid "ddb243b9-b897-566a-8116-7c455f5910d0")
+	)
+	(no_connect
+		(at 111.76 132.08)
+		(uuid "c8968dfc-e67a-5995-a187-9a5b663f6ef5")
+	)
+	(no_connect
+		(at 106.68 132.08)
+		(uuid "8c2422e1-90c0-5ab2-b06e-0b8d721bef4f")
+	)
+	(no_connect
+		(at 101.6 132.08)
+		(uuid "a7a5b5f2-561f-5024-b6dd-c0629bcd156b")
+	)
+	(no_connect
+		(at 116.84 132.08)
+		(uuid "49716c8b-325a-5b4d-9621-82bbc25164d7")
+	)
+	(no_connect
+		(at 101.6 106.68)
+		(uuid "e9d943a3-1913-5aa8-9373-b83b9ca1baf0")
+	)
+	(no_connect
+		(at 116.84 106.68)
+		(uuid "e3a0c5a0-2079-56a4-b75e-e007c8f0f40f")
+	)
 	(label "BOOT0"
 		(at 162.56 99.06 0)
 		(effects
@@ -25988,14 +26039,25 @@
 	)
 	(wire
 		(pts
-			(xy 111.76 101.6)
-			(xy 111.76 104.14)
+			(xy 111.76 93.98)
+			(xy 111.76 106.68)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "0c1ebc7f-84e5-5452-ba38-a0ae318aca26")
+		(uuid "3a80c6c8-c64b-50cb-9cc0-6058b23f2932")
+	)
+	(wire
+		(pts
+			(xy 96.52 119.38)
+			(xy 96.52 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b5345d1b-0e88-5d6e-a0ff-b8fae51b8449")
 	)
 	(wire
 		(pts

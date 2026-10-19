@@ -131,8 +131,11 @@ def spindle(prj):
     # ESD between the two 120 ohm
     tp = next(d for d in on("SP_PWM_C", "D"))
     jx_ = sorted((s.P(rs, 1), s.P(rs, 2)))[1][0]
-    s.place(tp, jx_, yy + 3.81, rot=270, ref_at=(jx_ + 2.54, yy + 3.81), val_at=(jx_ + 2.54, yy + 6.35))
-    s.rail("GND", *sorted((s.P(tp, 1), s.P(tp, 2)), key=lambda p: p[1])[1])
+    # ESD array, one channel used: channel 1 on top, ground on the right, clear of the PWM LED
+    s.place(tp, jx_ + 2.54, yy + 20.32, rot=270, mirror="y", ref_at=(jx_ - 2.54, yy + 35.56),
+            val_at=(jx_ - 2.54, yy + 38.1))
+    s.w("SP_PWM_C", (jx_, yy), s.P(tp, 1))
+    s.rail("GND", *s.P(tp, 3))
     re = sorted((s.P(rs2, 1), s.P(rs2, 2)))[1]
     s.w("SP_PWM", re, (re[0] + 20.32, yy))
     s.label("SP_PWM", re[0] + 20.32, yy)

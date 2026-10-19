@@ -27,7 +27,7 @@ The values follow the 5 V design example of the datasheet, which is specified fo
 
 Input side: 2 m of supply wiring (1.5 µH, 40 mΩ), F1 (12H1350C, 3.5 A), D1 (back-to-back zeners fitted to the
 SMBJ33CA clamp: 53.3 V at 11.3 A), D2, C1 (47 µF, 1 Ω ESR), C2 + C3 and the ceramics of the five TPS1H000 (VS and outputs), 6.1 µF at 24 V.
-Output: C5 + C6 derated to 56 µF, swept from 34 to 80 µF.
+Output: C5 (100 µF 10 V X5R 1210) derated to about 55 µF at 5 V, swept from 34 to 80 µF (38 µF at 85 °C and -20 %).
 
 ## Conclusions
 

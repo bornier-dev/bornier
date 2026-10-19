@@ -121,7 +121,7 @@ def power(prj):
     s.w("SW5", (213.36, y5), s.P("D3", 1))
     s.label("SW5", 203.2, y5)
     s.rail("GND", *s.P("D3", 2))
-    for ref, x in (("C5", 241.3), ("C6", 256.54)):
+    for ref, x in (("C5", 248.92),):
         vpart(s, ref, x, y5 + 2.54)
         s.w("+5V", (x, y5), s.P(ref, 1))
         s.rail("GND", *s.P(ref, 2))
@@ -625,9 +625,11 @@ def mcu(prj):
     s.glabel("NRST", xl - 78.74, yn, 180, "bidirectional")
     vpart(s, "C52", xl - 60.96, yn, label_dx=1.905)
     s.rail("GND", *s.P("C52", 2))
-    s.place("D10", xl - 68.58, yn + 3.81, rot=270, ref_at=(xl - 67.31, yn + 2.54), val_at=(xl - 67.31, yn + 5.08),
-            show_value=False)
-    s.rail("GND", *s.P("D10", 2))
+    # ESD array, one channel used: rotated so that channel 1 is on top, ground on the left
+    xp = xl - 68.58
+    s.place("D10", xp - 2.54, yn + 25.4, rot=270, ref_at=(xp + 7.62, yn + 22.86), val_at=(xp + 7.62, yn + 25.4))
+    s.w("NRST", (xp, yn), s.P("D10", 1))
+    s.rail("GND", *s.P("D10", 3))
     yb = P(94)[1]
     s.w("BOOT0", (xl, yb), (xl - 35.56, yb))
     s.place("R45", xl - 27.94, yb + 3.81, ref_at=(xl - 26.035, yb + 2.54), val_at=(xl - 26.035, yb + 5.08))

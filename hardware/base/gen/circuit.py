@@ -45,7 +45,7 @@ PALETTE = {
     ("C", "10µF 25V", C0805): "C15850",
     ("C", "1nF 2kV", C1206): "C9196",
     ("C", "2.2µF 100V", C1210): "C153036",
-    ("C", "47µF 10V", C1210): "C84494",
+    ("C", "100µF 10V", C1210): "C84455",
 }
 
 c = Circuit(PALETTE, r_fp=R0402, c_fp=C0402)
@@ -84,8 +84,8 @@ c.C("C4", "100nF", "BOOT", "SW5")
 c.part("D3", "Device:D_Schottky", "SS56B", SMB, "C14651", {1: "SW5", 2: "GND"}, "Catch diode: 60 V, 5 A")
 c.part("L1", "Device:L", "8.2µH", "Inductor_SMD:L_Sunlord_MWSA1004S", "C408486", {1: "SW5", 2: "+5V"},
        "Sunlord MWSA1004S-8R2MT, 8 A saturation: above the 6.8 A worst-case current limit")
-c.C("C5", "47µF 10V", "+5V", "GND", fp=C1210)
-c.C("C6", "47µF 10V", "+5V", "GND", fp=C1210)
+c.C("C5", "100µF 10V", "+5V", "GND", fp=C1210,
+    note="Murata GRM32ER61A107ME20L X5R: about 55 uF at 5 V, 38 uF at 85 °C and -20 %, inside the simulated 34-80 uF")
 c.R("R4", "47k", "+5V", "FB5A", note="Top R4 + R302 = 59.1 k, bottom R5 + R303 = 11 k: Vout = 0.8 x (1 + 59.1/11) = 5.10 V, above VBUS")
 c.R("R302", "12.1k", "FB5A", "FB5")
 c.R("R5", "10k", "FB5", "FB5B")
@@ -108,8 +108,9 @@ c.R("R8", "2.2k", "VBUS_SENSE", "GND", note="3.44 V at 5 V (PD9 is 5 V tolerant)
 # --------------------------------------------------------------------------------------------
 c.block("3.3 V buck, fed by the 5 V rail or by USB")
 # Each source reaches the buck through its own Schottky: neither feeds the other.
-c.part("D4", "Device:D_Schottky", "SS34", "Diode_SMD:D_SMA", "C8678", {1: "V3IN", 2: "+5V"})
-c.part("D5", "Device:D_Schottky", "SS34", "Diode_SMD:D_SMA", "C8678", {1: "VUSB_D", 2: "VBUS"})
+# SS56B, the part of the 24 V input, rather than a smaller Schottky: one BOM line less
+c.part("D4", "Device:D_Schottky", "SS56B", SMB, "C14651", {1: "V3IN", 2: "+5V"})
+c.part("D5", "Device:D_Schottky", "SS56B", SMB, "C14651", {1: "VUSB_D", 2: "VBUS"})
 # USB path switched off while +5V is present: +5V (4.96-5.24 V) is not guaranteed above VBUS (up to 5.25 V)
 c.part("Q11", "Transistor_FET:AO3401A", "AO3401A", "Package_TO_SOT_SMD:SOT-23", "C15127",
        {1: "QU_G", 2: "VUSB_D", 3: "V3IN"}, "P-MOS: on (VGS -4.6 V) on USB alone, off (VGS > -0.3 V) with +5V present")
@@ -293,8 +294,8 @@ c.C("C49", "100nF", "VDDA", "GND", note="VDDA (22)")
 c.C("C50", "1µF 50V", "VDDA", "GND", note="VREF+ (21)")
 c.C("C51", "100nF", "VDDA", "GND", note="VREF+ (21)")
 c.C("C52", "100nF", "NRST", "GND", note="At the NRST pin")
-c.part("D10", "Device:D_TVS", "PESD5V0S1BA", "Diode_SMD:D_SOD-323", "C19224", {1: "NRST", 2: "GND"},
-       "ESD of NRST, which reaches the debug connector")
+c.part("D10", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714", {1: "NRST", 3: "GND", 8: "GND"},
+       "ESD of NRST, which reaches the debug connector: one channel of the array of the PHY lines (one BOM line less)")
 c.R("R45", "10k", "BOOT0", "GND", note="BOOT0 low: boot from flash")
 c.part("SW1", "Switch:SW_Push", "BOOT", "Bornier:SW_XKB_TS-1187A", "C318884", {1: "+3V3", 2: "BOOT0"},
        "XKB TS-1187A-B-A-B, 5.1 x 5.1 mm: hold it during a reset or power-up to start the system bootloader. "
@@ -405,7 +406,7 @@ for n in range(4):
     jp = ref("JP")
     c.part(jp, "Connector_Generic:Conn_01x03", "ENC 5V|VIN", HDR3,
            "C41417360", {1: "+5V", 2: vsel, 3: "+VIN"}, "Shunt on 1-2: 5 V encoder, on 2-3: VIN (12 or 24 V); none: no supply")
-    c.part(ref("D"), "Device:D_Schottky", "SS34", "Diode_SMD:D_SMA", "C8678", {1: f"VSD{n}", 2: vsel},
+    c.part(ref("D"), "Device:D_Schottky", "SS56B", SMB, "C14651", {1: f"VSD{n}", 2: vsel},
            "Blocks an external voltage on the encoder supply from flowing back through the TPS1H000, "
            "whichever the jumper position")
     limited_supply(f"VSD{n}", venc, "2.2k", "Encoder supply, 218 mA limit")
@@ -526,8 +527,10 @@ c.C(ref("C"), "100nF", "+5V", "GND")
 c.R(ref("R"), "100k", "SPINDLE_PWM", "GND", note="Laser off while PB15 is not configured")
 c.R(ref("R"), "120", "SP_PWM_B", "SP_PWM_C", fp=R0603, note="With the next one, 240 ohm: 20 mA into a short (74AHCT: 25 mA)")
 c.R(ref("R"), "120", "SP_PWM_C", "SP_PWM", fp=R0603)
-c.part(ref("D"), "Device:D_TVS", "PESD5V0S1BA", "Diode_SMD:D_SOD-323", "C19224", {1: "SP_PWM_C", 2: "GND"},
-       "ESD between the two 120 ohm; a miswire to VIN burns the outer 120 ohm only (fuse), not the buffer")
+c.part(ref("D"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
+       {1: "SP_PWM_C", 3: "GND", 8: "GND"},
+       "ESD between the two 120 ohm (one channel of the array of the PHY lines); a miswire to VIN burns the outer "
+       "120 ohm (fuse) and may short the array, not the buffer")
 c.R(ref("R"), "2.2k", "SP_PWM_B", "SP_PWM_LA", note="1.3 mA: the buffer stays below 25 mA into a shorted output")
 c.part(ref("D"), "Device:LED", "green PWM", LED0603, LED_G, {2: "SP_PWM_LA", 1: "GND"},
        "Brightness follows the duty cycle")

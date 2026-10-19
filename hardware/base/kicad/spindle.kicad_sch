@@ -20587,8 +20587,9 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:D_TVS")
-		(at 162.56 166.37 270)
+		(lib_id "Power_Protection:TPD4E05U06DQA")
+		(at 165.1 182.88 270)
+		(mirror y)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -20596,7 +20597,7 @@
 		(dnp no)
 		(uuid "52cae7e0-0183-5e20-882c-5ced828083cc")
 		(property "Reference" "D60"
-			(at 165.1 166.37 90)
+			(at 160.02 198.12 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20604,8 +20605,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "PESD5V0S1BA"
-			(at 165.1 168.91 90)
+		(property "Value" "TPD4E05U06DQAR"
+			(at 160.02 200.66 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20613,8 +20614,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Diode_SMD:D_SOD-323"
-			(at 162.56 166.37 90)
+		(property "Footprint" "Package_SON:USON-10_2.5x1.0mm_P0.5mm"
+			(at 165.1 182.88 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20624,7 +20625,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 162.56 166.37 90)
+			(at 165.1 182.88 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20633,8 +20634,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "ESD between the two 120 ohm; a miswire to VIN burns the outer 120 ohm only (fuse), not the buffer"
-			(at 162.56 166.37 90)
+		(property "Description" "ESD between the two 120 ohm (one channel of the array of the PHY lines); a miswire to VIN burns the outer 120 ohm (fuse) and may short the array, not the buffer"
+			(at 165.1 182.88 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20643,8 +20644,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C19224"
-			(at 162.56 166.37 90)
+		(property "LCSC" "C138714"
+			(at 165.1 182.88 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20659,6 +20660,30 @@
 		(pin "2"
 			(uuid "c8c43a55-c21a-5136-971b-67a2012ca55a")
 		)
+		(pin "3"
+			(uuid "306e9c78-cfe4-555f-990e-c862b9fd682a")
+		)
+		(pin "4"
+			(uuid "5196a600-9103-5e80-a1a8-414272e758fc")
+		)
+		(pin "5"
+			(uuid "8ddb59a8-5672-5e2b-8fd8-4cc21aaff06d")
+		)
+		(pin "6"
+			(uuid "b42ea04b-7762-5023-a51e-725dba0ae5aa")
+		)
+		(pin "7"
+			(uuid "1dfc42cb-7d93-5a21-9b6e-32a411aaaaae")
+		)
+		(pin "8"
+			(uuid "28cb9f4e-e663-52b1-a435-3c9729220c2f")
+		)
+		(pin "9"
+			(uuid "d6579044-bb34-5cdb-ad98-35e7643d249e")
+		)
+		(pin "10"
+			(uuid "ccdb48d5-1efd-5bb6-839c-a75f3d371ef1")
+		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/94e22dc8-4473-5abb-86db-8eaae50e7184"
@@ -20670,7 +20695,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 162.56 172.72 0)
+		(at 177.8 185.42 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -20678,7 +20703,7 @@
 		(dnp no)
 		(uuid "884a26a3-c897-598b-b80d-c524da76f41d")
 		(property "Reference" "#PWRSPI16"
-			(at 162.56 172.72 0)
+			(at 177.8 185.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20687,7 +20712,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 162.56 176.53 0)
+			(at 177.8 189.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20695,7 +20720,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 162.56 172.72 0)
+			(at 177.8 185.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22532,6 +22557,34 @@
 		(uuid "bbc32a49-ba61-5e40-b61d-60a0f1d0e36b")
 	)
 	(no_connect
+		(at 167.64 170.18)
+		(uuid "8eb3d823-6024-509c-a944-9b03771e24e6")
+	)
+	(no_connect
+		(at 162.56 195.58)
+		(uuid "3ac07e6c-edf1-56e8-8a55-7661dc0151e2")
+	)
+	(no_connect
+		(at 167.64 195.58)
+		(uuid "a9faa2da-7c7e-5764-bc24-b82325a4551b")
+	)
+	(no_connect
+		(at 172.72 195.58)
+		(uuid "0303ab9f-c472-5519-8611-f6b198d4cc05")
+	)
+	(no_connect
+		(at 157.48 195.58)
+		(uuid "6b7da739-b97b-5516-8d9e-0cf2ed43713f")
+	)
+	(no_connect
+		(at 172.72 170.18)
+		(uuid "489e0ef7-1328-57ec-998e-576fdb6812d3")
+	)
+	(no_connect
+		(at 157.48 170.18)
+		(uuid "57475500-7a54-5e26-8e9f-b3e660dd769b")
+	)
+	(no_connect
 		(at 370.84 137.16)
 		(uuid "0d2e7b03-23e4-5880-8de1-df8a6a9ed7e5")
 	)
@@ -23043,14 +23096,25 @@
 	)
 	(wire
 		(pts
+			(xy 162.56 162.56)
 			(xy 162.56 170.18)
-			(xy 162.56 172.72)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "613225e5-95c5-5d81-97c6-6a7478fcb9db")
+		(uuid "8b206c18-e4e8-5a07-8f78-f1c769d887e2")
+	)
+	(wire
+		(pts
+			(xy 177.8 182.88)
+			(xy 177.8 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fd897d1e-b429-5b46-b1c4-06dd11f574f2")
 	)
 	(wire
 		(pts
