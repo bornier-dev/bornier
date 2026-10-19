@@ -15,7 +15,6 @@ or leads all around on the bottom side, where the board rests on the walls. A C-
 the board down through a keyhole cutout. Coordinates in mm, origin at the top left corner, x along the
 board, y across it; edge A (y = 0) and edge B (y = H) are the long edges.
 """
-import json
 import math
 import os
 import subprocess
@@ -27,6 +26,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
 from kicadgen.kicad import cli, footprint_dir  # noqa: E402
 from kicadgen.sexpr import parse  # noqa: E402
+sys.path.insert(0, HERE)
+import project  # noqa: E402
 
 KICAD = os.path.join(HERE, "..", "kicad")
 STD_FP = footprint_dir()
@@ -235,6 +236,32 @@ PACKAGE_RULE = """(rule "pads of one package: {ref}"
 	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('{ref}') && B.memberOfFootprint('{ref}')")
 	(constraint clearance (min {gap:.2f}mm)))
 """
+
+
+ISO_SEED = {"GNDISO", "/Modbus/VISO", "/Modbus/MB_A", "/Modbus/MB_B"}
+ISO_BARRIER = "U38"          # CA-IS3092W: its pins 9 to 16 are on the bus side
+BARRIER_RULE = """# Functional isolation of the Modbus port (ground loop break): 1 mm between the bus side and the rest.
+# KiCad evaluates one order of each pair only: the condition is written both ways.
+(rule "Modbus isolation barrier"
+	(condition "(({iso_a}) && !({iso_b}) && B.NetName != '' && B.NetName != 'unconnected-*') || (({iso_b}) && !({iso_a}) && A.NetName != '' && A.NetName != 'unconnected-*')")
+	(constraint clearance (min 1mm)))
+"""
+
+
+def iso_nets(fps):
+    """Nets on the bus side of the isolated transceiver: from the seed, through the parts of the sheet,
+    stopping at the transceiver and at the chassis (the 1 nF to the chassis bridges on purpose)."""
+    nets, grew = set(ISO_SEED), True
+    while grew:
+        grew = False
+        for ref, fp in fps.items():
+            if ref == ISO_BARRIER or fp.GetSheetname() != "/Modbus/":
+                continue
+            mine = {p.GetNetname() for p in fp.Pads()} - {"", "CHASSIS"}
+            if mine & nets and not mine <= nets:
+                nets |= mine
+                grew = True
+    return sorted(nets)
 
 
 def fine_pitch(fps, limit=0.2):
@@ -554,22 +581,15 @@ def main():
 
     out = os.path.join(KICAD, "base.kicad_pcb")
     board.SetFileName(out)
-    # Outside KiCad, SaveBoard rewrites the project file without the schematic settings (ERC pin map,
-    # severities, sheets): they are put back from the file as it was.
-    pro = os.path.join(KICAD, "base.kicad_pro")
-    before = json.load(open(pro, encoding="utf-8")) if os.path.exists(pro) else {}
-    pcbnew.SaveBoard(out, board)
-    after = json.load(open(pro, encoding="utf-8"))
-    for key in ("erc", "schematic", "sheets"):
-        if key in before:
-            after[key] = before[key]
-    with open(pro, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(after, f, indent=2, sort_keys=True, ensure_ascii=False)   # as KiCad writes it
-        f.write("\n")
+    project.apply_netclasses(board)
+    project.save(board, out)
     with open(os.path.join(KICAD, "base.kicad_dru"), "w", encoding="utf-8", newline="\n") as f:
         f.write(DRC_RULES)
         for ref, gap in sorted(fine_pitch(fps).items()):
             f.write(PACKAGE_RULE.format(ref=ref, gap=gap))
+        iso = iso_nets(fps)
+        f.write(BARRIER_RULE.format(iso_a=" || ".join(f"A.NetName == '{n}'" for n in iso),
+                                    iso_b=" || ".join(f"B.NetName == '{n}'" for n in iso)))
     print(f"{len(fps)} footprints, {len(nets)} nets -> {out}")
     if failed:
         raise SystemExit(f"{len(failed)} parts not placed:\n  " + "\n  ".join(failed))

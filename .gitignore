@@ -22,3 +22,6 @@ __pycache__/
 *-backups/
 fp-info-cache
 *.lck
+
+# Downloaded tools (Freerouting jar, see hardware/base/gen/route.py)
+hardware/tools/

@@ -37,3 +37,8 @@
 (rule "pads of one package: U4"
 	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U4') && B.memberOfFootprint('U4')")
 	(constraint clearance (min 0.12mm)))
+# Functional isolation of the Modbus port (ground loop break): 1 mm between the bus side and the rest.
+# KiCad evaluates one order of each pair only: the condition is written both ways.
+(rule "Modbus isolation barrier"
+	(condition "((A.NetName == '/Modbus/MB_A' || A.NetName == '/Modbus/MB_B' || A.NetName == '/Modbus/VISO' || A.NetName == 'GNDISO' || A.NetName == 'Net-(JP5-A)' || A.NetName == 'Net-(R242-Pad2)' || A.NetName == 'Net-(R244-Pad2)' || A.NetName == 'unconnected-(JP5-B-Pad3)') && !(B.NetName == '/Modbus/MB_A' || B.NetName == '/Modbus/MB_B' || B.NetName == '/Modbus/VISO' || B.NetName == 'GNDISO' || B.NetName == 'Net-(JP5-A)' || B.NetName == 'Net-(R242-Pad2)' || B.NetName == 'Net-(R244-Pad2)' || B.NetName == 'unconnected-(JP5-B-Pad3)') && B.NetName != '' && B.NetName != 'unconnected-*') || ((B.NetName == '/Modbus/MB_A' || B.NetName == '/Modbus/MB_B' || B.NetName == '/Modbus/VISO' || B.NetName == 'GNDISO' || B.NetName == 'Net-(JP5-A)' || B.NetName == 'Net-(R242-Pad2)' || B.NetName == 'Net-(R244-Pad2)' || B.NetName == 'unconnected-(JP5-B-Pad3)') && !(A.NetName == '/Modbus/MB_A' || A.NetName == '/Modbus/MB_B' || A.NetName == '/Modbus/VISO' || A.NetName == 'GNDISO' || A.NetName == 'Net-(JP5-A)' || A.NetName == 'Net-(R242-Pad2)' || A.NetName == 'Net-(R244-Pad2)' || A.NetName == 'unconnected-(JP5-B-Pad3)') && A.NetName != '' && A.NetName != 'unconnected-*')")
+	(constraint clearance (min 1mm)))
