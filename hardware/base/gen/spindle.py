@@ -1,0 +1,169 @@
+# SPDX-License-Identifier: CERN-OHL-W-2.0
+# SPDX-FileCopyrightText: 2026 Thomas Legrand
+"""Spindle / laser sheet: 0-10 V speed reference, 5 V PWM, enable and direction open drain.
+
+Called by schematic.py; the parts and their connections come from circuit.py.
+"""
+from circuit import c
+from motion import on, stub, vr, hr
+
+
+def spindle(prj):
+    s = prj.sheet("Spindle", "spindle.kicad_sch", "Spindle or laser: 0-10 V, PWM, enable, direction")
+    s.text("SPINDLE / LASER", 20.32, 17.78, 2.54, True)
+    s.text("A machine has a spindle or a laser: the outputs are shared.\n"
+           "0-10 V: VFD speed reference. PWM: 5 V push-pull (laser TTL input or PWM spindle).\n"
+           "EN, DIR: 60 V open drain to 0 V, for a VFD input to its common or a laser gate with its own pull-up.\n"
+           "Each digital output has a LED that shows its real state.", 20.32, 25.4)
+
+    # --- 0-10 V ------------------------------------------------------------------------------------
+    u = next(r for r in on("SP_DAC", "U"))
+    cx, cy = 132.08, 83.82
+    s.place(u, cx, cy, ref_at=(cx - 5.08, cy - 10.16), val_at=(cx - 5.08, cy - 12.7))
+    P = lambda n: s.P(u, n)  # noqa: E731
+    rin = next(r for r in on("SP_DAC", "R"))
+    cin = on("SP_DAC", "C")[0]
+    ax, ay = P(3)
+    hr(s, rin, ax - 27.94, ay, rot=90 if c.by_ref()[rin]["pins"]["1"] == "SPINDLE_AOUT" else 270)
+    a, b = sorted((s.P(rin, 1), s.P(rin, 2)))
+    s.w("SPINDLE_AOUT", a, (a[0] - 10.16, ay))
+    s.glabel("SPINDLE_AOUT", a[0] - 10.16, ay, 180, "input")
+    s.w("SP_DAC", b, (ax, ay))
+    vr(s, cin, ax - 17.78, ay)
+    s.rail("GND", *s.P(cin, 2))
+    # feedback under the body
+    nx, ny = P(2)
+    ox, oy = P(1)
+    rf = next(r for r in on("SP_FB", "R") if c.by_ref()[r]["value"] == "10k")
+    rg = next(r for r in on("SP_FB", "R") if c.by_ref()[r]["value"] == "4.7k")
+    yf = cy + 17.78
+    s.w("SP_FB", (nx, ny), (nx - 2.54, ny), (nx - 2.54, yf))
+    hr(s, rf, cx, yf, rot=270 if c.by_ref()[rf]["pins"]["1"] == "SP_AOUT" else 90,
+       ref_at=(cx - 3.81, yf - 2.54), val_at=(cx - 2.54, yf + 3.81))
+    fa, fb = sorted((s.P(rf, 1), s.P(rf, 2)))
+    s.w("SP_FB", (nx - 2.54, yf), fa)
+    s.label("SP_FB", nx - 2.54, ny)
+    vr(s, rg, nx - 2.54, yf, dx=-5.08)
+    s.rail("GND", *s.P(rg, 2))
+    s.rail("GND", *P(4), drop=2.54)
+    # unused half: grounded follower
+    (mx, my), (px, py), (bx, by) = P(6), P(5), P(7)
+    s.w("SP_UNUSED", (mx, my), (mx - 2.54, my), (mx - 2.54, my - 7.62), (bx + 2.54, my - 7.62), (bx + 2.54, by), (bx, by))
+    s.w("GND", (px, py), (px - 5.08, py))
+    s.power("GND", px - 5.08, py, 270, show=False)
+    s.quiet.update({"SP_UNUSED", "SP_FB", "SP_OA", "SP_DAC"})
+    # output
+    rout = next(r for r in on("SP_AOUT", "R") if c.by_ref()[r]["value"] == "120")
+    tvs = on("SP_AOUT", "D")[0]
+    hr(s, rout, ox + 10.16, oy, rot=90 if c.by_ref()[rout]["pins"]["1"] == "SP_OA" else 270)
+    s.w("SP_OA", (ox, oy), sorted((s.P(rout, 1), s.P(rout, 2)))[0])
+    ro = sorted((s.P(rout, 1), s.P(rout, 2)))[1]
+    # gain set from SP_AOUT, after the 120 ohm; 470 pF from the op amp output closes the loop at HF
+    s.w("SP_AOUT", fb, (ro[0] + 2.54, yf), (ro[0] + 2.54, oy))
+    cf = on("SP_OA", "C")[0]
+    vr(s, cf, ox + 3.81, oy)
+    cfb = s.P(cf, 2)
+    s.w("SP_FB", cfb, (cfb[0] + 2.54, cfb[1]))
+    s.label("SP_FB", cfb[0] + 2.54, cfb[1])
+    s.w("SP_AOUT", ro, (ro[0] + 15.24, oy))
+    s.label("SP_AOUT", ro[0] + 15.24, oy)
+    s.place(tvs, ro[0] + 7.62, oy + 3.81, rot=270, ref_at=(ro[0] + 10.16, oy + 3.81), val_at=(ro[0] + 10.16, oy + 6.35))
+    s.rail("GND", *(sorted((s.P(tvs, 1), s.P(tvs, 2)), key=lambda p: p[1])[1]))
+    # 15 V rail of the op amp
+    vx, vy = P(8)
+    rz, rz2 = on("V15", "R")
+    dz = on("V15", "D")[0]
+    cz = on("V15", "C")[0]
+    xr = cx + 25.4
+    yr = cy - 20.32
+    s.w("V15", (vx, vy), (xr, vy), (xr, yr), (xr + 20.32, yr))
+    s.power("PWR_FLAG", xr + 5.08, yr)
+    vr(s, rz, xr, yr - 7.62)
+    s.rail("+24V", *s.P(rz, 1))
+    vr(s, rz2, xr + 15.24, yr - 7.62)
+    s.rail("+24V", *s.P(rz2, 1))
+    s.place(dz, xr + 10.16, yr + 3.81, rot=270, ref_at=(xr + 12.7, yr + 2.54), val_at=(xr + 12.7, yr + 5.08))
+    s.rail("GND", *(sorted((s.P(dz, 1), s.P(dz, 2)), key=lambda p: p[1])[1]))
+    vr(s, cz, xr + 20.32, yr)
+    s.rail("GND", *s.P(cz, 2))
+    s.label("V15", xr + 2.54, yr)
+    s.text("0-10 V: DAC x 3.13, gain taken after the 120 ohm; load 5 k or more.\nOp amp on a 15 V zener rail from +24V (two 3.3 k in parallel).", cx - 38.1, cy + 30.48)
+
+    # --- PWM 5 V ------------------------------------------------------------------------------------
+    ub = next(r for r in on("SP_PWM_B", "U"))
+    bx_, by_ = 132.08, 162.56
+    s.place(ub, bx_, by_, ref_at=(bx_ + 5.08, by_ - 12.7), val_at=(bx_ + 5.08, by_ - 15.24))
+    Pb = lambda n: s.P(ub, n)  # noqa: E731
+    ix, iy = Pb(2)
+    rpd = next(r for r in on("SPINDLE_PWM", "R"))
+    s.w("SPINDLE_PWM", (ix, iy), (ix - 25.4, iy))
+    s.glabel("SPINDLE_PWM", ix - 25.4, iy, 180, "input")
+    vr(s, rpd, ix - 10.16, iy, dx=-5.08)
+    s.rail("GND", *s.P(rpd, 2))
+    ex, ey = Pb(1)
+    s.w("GND", (ex, ey), (ex, ey - 2.54))
+    s.power("GND", ex, ey - 2.54, 180, show=False)
+    s.rail("+5V", *Pb(5))
+    s.rail("GND", *Pb(3))
+    cb = next(r for r in on("+5V", "C") if c.by_ref()[r]["block"].startswith("Spindle"))
+    vr(s, cb, bx_ - 17.78, by_ - 22.86)
+    s.power("+5V", *s.P(cb, 1))
+    s.rail("GND", *s.P(cb, 2))
+    yx, yy = Pb(4)
+    rs = next(r for r in on("SP_PWM_B", "R") if c.by_ref()[r]["value"] == "120")
+    rs2 = next(r for r in on("SP_PWM_C", "R") if r != rs)
+    hr(s, rs, yx + 13.97, yy, rot=90 if c.by_ref()[rs]["pins"]["1"] == "SP_PWM_B" else 270)
+    s.w("SP_PWM_B", (yx, yy), sorted((s.P(rs, 1), s.P(rs, 2)))[0])
+    hr(s, rs2, yx + 21.59, yy, rot=90 if c.by_ref()[rs2]["pins"]["1"] == "SP_PWM_C" else 270)
+    s.quiet.add("SP_PWM_C")
+    # ESD between the two 120 ohm
+    tp = next(d for d in on("SP_PWM_C", "D"))
+    jx_ = sorted((s.P(rs, 1), s.P(rs, 2)))[1][0]
+    s.place(tp, jx_, yy + 3.81, rot=270, ref_at=(jx_ + 2.54, yy + 3.81), val_at=(jx_ + 2.54, yy + 6.35))
+    s.rail("GND", *sorted((s.P(tp, 1), s.P(tp, 2)), key=lambda p: p[1])[1])
+    re = sorted((s.P(rs2, 1), s.P(rs2, 2)))[1]
+    s.w("SP_PWM", re, (re[0] + 20.32, yy))
+    s.label("SP_PWM", re[0] + 20.32, yy)
+    rl = next(r for r in on("SP_PWM_LA", "R"))
+    dl = on("SP_PWM_LA", "D")[0]
+    vr(s, rl, yx + 5.08, yy)
+    s.place(dl, yx + 5.08, yy + 11.43, rot=90, ref_at=(yx + 7.62, yy + 10.16), val_at=(yx + 7.62, yy + 12.7))
+    s.w("SP_PWM_LA", s.P(rl, 2), s.P(dl, 2))
+    s.rail("GND", *s.P(dl, 1))
+    s.quiet.update({"SP_PWM_B", "SP_PWM_LA"})
+
+    # --- EN and DIR -------------------------------------------------------------------------------
+    for k, (sig, net) in enumerate((("SPINDLE_EN", "SP_EN"), ("SPINDLE_DIR", "SP_DIR"))):
+        q = on(net, "Q")[0]
+        qx, qy = 254.0 + 50.8 * k, 165.1
+        s.place(q, qx, qy, ref_at=(qx + 5.08, qy - 1.27), val_at=(qx + 5.08, qy + 1.27))
+        gx, gy = s.P(q, 1)
+        rg_ = next(r for r in on(sig, "R") if c.by_ref()[r]["value"] == "100k")
+        s.w(sig, (gx, gy), (gx - 27.94, gy))
+        s.glabel(sig, gx - 27.94, gy, 180, "input")
+        vr(s, rg_, gx - 7.62, gy, dx=-5.08)
+        s.rail("GND", *s.P(rg_, 2))
+        # indicator on the gate side: nothing reaches the field line
+        rl = on(f"{net}_LA", "R")[0]
+        led = on(f"{net}_LA", "D")[0]
+        vr(s, rl, gx - 17.78, gy, dx=-5.08)
+        s.place(led, gx - 17.78, s.P(rl, 2)[1] + 3.81, rot=90, ref_at=(gx - 25.4, s.P(rl, 2)[1] + 2.54),
+                val_at=(gx - 25.4, s.P(rl, 2)[1] + 5.08))
+        s.w(f"{net}_LA", s.P(rl, 2), s.P(led, 2))
+        s.rail("GND", *s.P(led, 1))
+        s.quiet.add(f"{net}_LA")
+        s.rail("GND", *s.P(q, 2))
+        dx_, dy_ = s.P(q, 3)
+        s.w(net, (dx_, dy_), (dx_ + 15.24, dy_))
+        s.label(net, dx_ + 15.24, dy_)
+
+    # --- connector --------------------------------------------------------------------------------
+    j = on("SP_AOUT", "J")[0]
+    jx, jy = 375.92, 116.84
+    s.place(j, jx, jy, ref_at=(jx - 2.54, jy - 10.16), val_at=(jx - 2.54, jy + 12.7))
+    for k, net in c.by_ref()[j]["pins"].items():
+        pt = s.P(j, k)
+        if net == "GND":
+            stub(s, pt, net, -5.08, "GND")
+        else:
+            stub(s, pt, net, -7.62)

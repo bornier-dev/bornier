@@ -16,3 +16,9 @@ SPDX-License-Identifier = "MPL-2.0"
 path = ["**/README.md", "CONTRIBUTING.md", "AGENTS.md"]
 SPDX-FileCopyrightText = "2026 Thomas Legrand"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+# Hardware design files, generated or edited with KiCad.
+[[annotations]]
+path = ["hardware/**/*.kicad_*", "hardware/**/sym-lib-table", "hardware/**/fp-lib-table", "hardware/**/results.md"]
+SPDX-FileCopyrightText = "2026 Thomas Legrand"
+SPDX-License-Identifier = "CERN-OHL-W-2.0"

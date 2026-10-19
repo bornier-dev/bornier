@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Bornier")(type "KiCad")(uri "${KIPRJMOD}/../../lib/symbols/bornier.kicad_sym")(options "")(descr "Bornier parts"))
+)

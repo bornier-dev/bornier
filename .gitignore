@@ -13,3 +13,12 @@ build/
 .metadata/
 .vscode/
 .idea/
+
+# Python bytecode of the generator scripts
+__pycache__/
+
+# KiCad per-user and transient files
+*.kicad_prl
+*-backups/
+fp-info-cache
+*.lck
