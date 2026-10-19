@@ -12082,30 +12082,12 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Connector:RJ45_Shielded"
-			(pin_names
-				(offset 1.016)
-			)
+		(symbol "Bornier:RJ45x2_Shielded"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
 			(property "Reference" "J"
-				(at -5.08 13.97 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify right)
-				)
-			)
-			(property "Value" "RJ45_Shielded"
-				(at 2.54 13.97 0)
-				(show_name no)
-				(do_not_autoplace no)
+				(at -7.62 13.97 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -12113,200 +12095,46 @@
 					(justify left)
 				)
 			)
-			(property "Footprint" ""
-				(at 0 0.635 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
+			(property "Value" "RJ45x2_Shielded"
+				(at -7.62 -11.43 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(justify left)
 				)
 			)
-			(property "Datasheet" ""
-				(at 0 0.635 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "RJ connector, 8P8C (8 positions 8 connected), Shielded"
+			(property "Footprint" "Bornier:RJ45x2_HongCheng_HC-WK88-H132-1X2-55B"
 				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
-			(property "ki_keywords" "8P8C RJ jack socket connector"
+			(property "Datasheet" "https://datasheet.lcsc.com/datasheet/pdf/dc2904e2d83d7d6c79679fa0f146db90.pdf"
 				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
-			(property "ki_fp_filters" "8P8C* RJ31* RJ32* RJ33* RJ34* RJ35* RJ41* RJ45* RJ49* RJ61*"
+			(property "Description" "Dual RJ45 jack, shielded, without magnetics or LEDs; unit A: port A and shield, unit B: port B"
 				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
+					(hide yes)
 				)
 			)
-			(symbol "RJ45_Shielded_0_1"
-				(polyline
-					(pts
-						(xy -6.35 1.905)
-						(xy -5.08 1.905)
-						(xy -5.08 1.905)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 0.635)
-						(xy -5.08 0.635)
-						(xy -5.08 0.635)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -0.635)
-						(xy -5.08 -0.635)
-						(xy -5.08 -0.635)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -1.905)
-						(xy -5.08 -1.905)
-						(xy -5.08 -1.905)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -3.175)
-						(xy -5.08 -3.175)
-						(xy -5.08 -3.175)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -6.35 -4.445)
-						(xy -6.35 6.985)
-						(xy 3.81 6.985)
-						(xy 3.81 4.445)
-						(xy 5.08 4.445)
-						(xy 5.08 3.175)
-						(xy 6.35 3.175)
-						(xy 6.35 -0.635)
-						(xy 5.08 -0.635)
-						(xy 5.08 -1.905)
-						(xy 3.81 -1.905)
-						(xy 3.81 -4.445)
-						(xy -6.35 -4.445)
-						(xy -6.35 -4.445)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -5.08 5.715)
-						(xy -6.35 5.715)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -5.08 4.445)
-						(xy -6.35 4.445)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -5.08 3.175)
-						(xy -6.35 3.175)
-						(xy -6.35 3.175)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
+			(symbol "RJ45x2_Shielded_0_1"
 				(rectangle
-					(start 7.62 12.7)
-					(end -7.62 -10.16)
+					(start -7.62 -10.16)
+					(end 7.62 12.7)
 					(stroke
 						(width 0.254)
 						(type default)
@@ -12316,18 +12144,18 @@
 					)
 				)
 			)
-			(symbol "RJ45_Shielded_1_1"
+			(symbol "RJ45x2_Shielded_1_1"
 				(pin passive line
 					(at 10.16 -7.62 180)
 					(length 2.54)
-					(name ""
+					(name "1"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "1"
+					(number "A1"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12338,14 +12166,14 @@
 				(pin passive line
 					(at 10.16 -5.08 180)
 					(length 2.54)
-					(name ""
+					(name "2"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "2"
+					(number "A2"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12356,14 +12184,14 @@
 				(pin passive line
 					(at 10.16 -2.54 180)
 					(length 2.54)
-					(name ""
+					(name "3"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "3"
+					(number "A3"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12374,14 +12202,14 @@
 				(pin passive line
 					(at 10.16 0 180)
 					(length 2.54)
-					(name ""
+					(name "4"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "4"
+					(number "A4"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12392,14 +12220,14 @@
 				(pin passive line
 					(at 10.16 2.54 180)
 					(length 2.54)
-					(name ""
+					(name "5"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "5"
+					(number "A5"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12410,14 +12238,14 @@
 				(pin passive line
 					(at 10.16 5.08 180)
 					(length 2.54)
-					(name ""
+					(name "6"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "6"
+					(number "A6"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12428,14 +12256,14 @@
 				(pin passive line
 					(at 10.16 7.62 180)
 					(length 2.54)
-					(name ""
+					(name "7"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "7"
+					(number "A7"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12446,14 +12274,14 @@
 				(pin passive line
 					(at 10.16 10.16 180)
 					(length 2.54)
-					(name ""
+					(name "8"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "8"
+					(number "A8"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12464,7 +12292,7 @@
 				(pin passive line
 					(at 0 -12.7 90)
 					(length 2.54)
-					(name ""
+					(name "SH"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -12472,6 +12300,152 @@
 						)
 					)
 					(number "SH"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "RJ45x2_Shielded_2_1"
+				(pin passive line
+					(at 10.16 -7.62 180)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 -5.08 180)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 -2.54 180)
+					(length 2.54)
+					(name "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 0 180)
+					(length 2.54)
+					(name "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 2.54 180)
+					(length 2.54)
+					(name "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 5.08 180)
+					(length 2.54)
+					(name "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 7.62 180)
+					(length 2.54)
+					(name "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 10.16 180)
+					(length 2.54)
+					(name "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B8"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -20032,15 +20006,15 @@
 		(uuid "3cd09c64-4627-5c8f-9f4f-8d9773d39741")
 	)
 	(symbol
-		(lib_id "Connector:RJ45_Shielded")
+		(lib_id "Bornier:RJ45x2_Shielded")
 		(at 33.02 165.1 0)
-		(unit 1)
+		(unit 2)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "10d6177d-8add-549c-8d4f-780fc6b18c6e")
-		(property "Reference" "J10"
+		(uuid "827601d1-44ca-5ebe-b71e-7e741e8a1548")
+		(property "Reference" "J6"
 			(at 27.94 149.86 0)
 			(effects
 				(font
@@ -20049,7 +20023,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "ENCODER"
+		(property "Value" "HC-WK88-H132-1X2-55B"
 			(at 27.94 152.4 0)
 			(effects
 				(font
@@ -20058,7 +20032,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Bornier:RJ45_HOAUC_HYCW48-RJ45-163B"
+		(property "Footprint" "Bornier:RJ45x2_HongCheng_HC-WK88-H132-1X2-55B"
 			(at 33.02 165.1 0)
 			(effects
 				(font
@@ -20078,7 +20052,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Pairs: 1-2 A, 3-6 B, 4-5 Z, 7-8 supply/0 V"
+		(property "Description" "Axis port pair. A, drive: 1-2 STEP, 3-6 DIR, 4-5 ENA/ALM, 7-8 VIN OUT/0 V. B, encoder: 1-2 A, 3-6 B, 4-5 Z, 7-8 supply/0 V. Supply always on 7-8: an Ethernet or encoder cable plugged by mistake shorts 7-8 into the current limit"
 			(at 33.02 165.1 0)
 			(effects
 				(font
@@ -20088,7 +20062,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3001539"
+		(property "LCSC" "C7501828"
 			(at 33.02 165.1 0)
 			(effects
 				(font
@@ -20098,50 +20072,47 @@
 				(hide yes)
 			)
 		)
-		(pin "1"
-			(uuid "35cbbcf8-1e9b-5e25-ba13-e7200f381f00")
+		(pin "B1"
+			(uuid "865b328b-9f3b-51c4-a8c3-a836954839c3")
 		)
-		(pin "2"
-			(uuid "d1f537b0-6e41-5fc9-81de-cac96f87fa09")
+		(pin "B2"
+			(uuid "88226714-859b-5558-af7e-797d6219d79b")
 		)
-		(pin "3"
-			(uuid "62fce9f6-29ef-52e0-ad9a-c1c044c878e7")
+		(pin "B3"
+			(uuid "9d7da62e-8a7d-597b-af33-faf1936cb309")
 		)
-		(pin "4"
-			(uuid "0c141daf-975e-53ae-a5a7-729ebaa82095")
+		(pin "B4"
+			(uuid "bcff3852-aa54-5a9d-a973-8c649b79699e")
 		)
-		(pin "5"
-			(uuid "2ac64908-d8c5-59ff-8f3c-b4edae3b785b")
+		(pin "B5"
+			(uuid "23d76c86-6027-5813-926f-b2091494af2b")
 		)
-		(pin "6"
-			(uuid "e3a5322f-b07c-54f9-a9a8-e252e45d595f")
+		(pin "B6"
+			(uuid "7c77db23-a7c5-5a98-9393-6d71f4cbf076")
 		)
-		(pin "7"
-			(uuid "4c1d2d68-71be-528c-8ea3-91aec67eccb0")
+		(pin "B7"
+			(uuid "dfb3a844-691c-55c1-aeda-357fcca7c65a")
 		)
-		(pin "8"
-			(uuid "9601e17a-1b23-5e93-8125-12bcc23dd1c7")
-		)
-		(pin "SH"
-			(uuid "f041c657-296f-5e5f-8128-4e72a4b57baa")
+		(pin "B8"
+			(uuid "9487afb1-5089-5fb4-88e2-a08926182eb5")
 		)
 		(instances
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "J10")
-					(unit 1)
+					(reference "J6")
+					(unit 2)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "J11")
-					(unit 1)
+					(reference "J7")
+					(unit 2)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "J12")
-					(unit 1)
+					(reference "J8")
+					(unit 2)
 				)
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "J13")
-					(unit 1)
+					(reference "J9")
+					(unit 2)
 				)
 			)
 		)
@@ -20272,27 +20243,6 @@
 					(reference "#PWRENC123")
 					(unit 1)
 				)
-			)
-		)
-	)
-	(global_label "CHASSIS"
-		(shape passive)
-		(at 33.02 180.34 270)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "7d48020f-f7d8-53a5-baca-5f535b7a77fd")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 33.02 180.34 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
 			)
 		)
 	)
@@ -25935,17 +25885,6 @@
 			(type default)
 		)
 		(uuid "5b2a28c8-463a-582a-a2c9-76afd6da6fb1")
-	)
-	(wire
-		(pts
-			(xy 33.02 177.8)
-			(xy 33.02 180.34)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "3169e26b-6217-50f8-b29d-57499d910722")
 	)
 	(wire
 		(pts

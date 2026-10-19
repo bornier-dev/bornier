@@ -243,7 +243,7 @@ c.C("C301", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the drive and encode
 c.C("C302", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the terminal block row")
 # Screw mounting, for a panel instead of the DIN rail profile: four M3 holes at the corners, clear of the
 # profile grooves along the long edges. H1 is plated and on CHASSIS: the screw earths the board to the panel.
-c.part("H1", "Mechanical:MountingHole_Pad", "M3 CHASSIS", "MountingHole:MountingHole_3.2mm_M3_Pad_Via", "",
+c.part("H1", "Mechanical:MountingHole_Pad", "M3 CHASSIS", "MountingHole:MountingHole_3.2mm_M3_Pad", "",
        {1: "CHASSIS"}, "Plated M3 hole, nearest corner to the POWER terminal block (FE pole)")
 for h in ("H2", "H3", "H4"):
     c.part(h, "Mechanical:MountingHole", "M3", "MountingHole:MountingHole_3.2mm_M3", "", {}, "Non-plated M3 hole")
@@ -320,7 +320,10 @@ c.part("J5", "Connector:Conn_ARM_SWD_TagConnect_TC2030", "TC2030", "Connector:Ta
 
 # --------------------------------------------------------------------------------------------
 # Motion: 4 drive ports and 4 encoder ports on shielded RJ45 without magnetics, probe input.
-RJ45 = "Bornier:RJ45_HOAUC_HYCW48-RJ45-163B"
+# One dual RJ45 per axis: port A (unit A, drive sheet) is the drive, port B (unit B, encoder sheet) the
+# encoder. Eight single jacks did not fit on the 150 mm edge with room between their shield legs.
+RJ45X2 = ("Bornier:RJ45x2_Shielded", "HC-WK88-H132-1X2-55B", "Bornier:RJ45x2_HongCheng_HC-WK88-H132-1X2-55B",
+          "C7501828")
 SOD323 = "Diode_SMD:D_SOD-323"
 
 
@@ -393,11 +396,15 @@ for k in range(2):
         c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: f"ALM{n}_R", 2: f"ALM{n}_IN"},
                "Reverse protection of both LEDs")
         c.R(ref("R"), "10k", f"ALM{n}", "+3V3")
-        c.part(ref("J"), "Connector:RJ45_Shielded", "DRIVE", RJ45, "C3001539",
-               {1: f"STEP{n}_P", 2: f"STEP{n}_N", 3: f"DIR{n}_P", 6: f"DIR{n}_N", 4: f"ENA{n}_OUT", 5: f"ALM{n}_IN",
-                7: "+VIN_OUT", 8: "GND", "SH": "CHASSIS"},
-               "Pairs: 1-2 STEP, 3-6 DIR, 4-5 ENA/ALM, 7-8 VIN OUT/0 V like the encoder port: an Ethernet "
-               "or encoder cable plugged by mistake shorts 7-8 into the current limit")
+        sym, val, fp, lcsc = RJ45X2
+        c.part(ref("J"), sym, val, fp, lcsc,
+               {"A1": f"STEP{n}_P", "A2": f"STEP{n}_N", "A3": f"DIR{n}_P", "A6": f"DIR{n}_N", "A4": f"ENA{n}_OUT",
+                "A5": f"ALM{n}_IN", "A7": "+VIN_OUT", "A8": "GND", "SH": "CHASSIS",
+                "B1": f"ENC{n}_AP", "B2": f"ENC{n}_AN", "B3": f"ENC{n}_BP", "B6": f"ENC{n}_BN", "B4": f"ENC{n}_ZP",
+                "B5": f"ENC{n}_ZN", "B7": f"VENC{n}", "B8": "GND"},
+               "Axis port pair. A, drive: 1-2 STEP, 3-6 DIR, 4-5 ENA/ALM, 7-8 VIN OUT/0 V. B, encoder: 1-2 A, "
+               "3-6 B, 4-5 Z, 7-8 supply/0 V. Supply always on 7-8: an Ethernet or encoder cable plugged by "
+               "mistake shorts 7-8 into the current limit", also=f"enc{n}")
         c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
                {1: f"STEP{n}_P", 2: f"STEP{n}_N", 4: f"DIR{n}_P", 5: f"DIR{n}_N", 3: "GND", 8: "GND"},
                "ESD of STEP and DIR at the RJ45, flow-through")
@@ -438,10 +445,7 @@ for n in range(4):
                {1: f"ENC{n}_{ch}P", 2: f"ENC{n}_{ch}T"},
                "Shunt on 1-2: 120 ohm termination (RS-422); on 2-3: parked, no termination")
         c.R(ref("R"), "120", f"ENC{n}_{ch}T", f"ENC{n}_{ch}N", fp=R0603)
-    c.part(ref("J"), "Connector:RJ45_Shielded", "ENCODER", RJ45, "C3001539",
-           {1: f"ENC{n}_AP", 2: f"ENC{n}_AN", 3: f"ENC{n}_BP", 6: f"ENC{n}_BN", 4: f"ENC{n}_ZP", 5: f"ENC{n}_ZN",
-            7: venc, 8: "GND", "SH": "CHASSIS"},
-           "Pairs: 1-2 A, 3-6 B, 4-5 Z, 7-8 supply/0 V")
+    # the encoder port is port B of the axis dual RJ45, created with the drive port above
 
 c.block("Probe: NPN or dry contact, fast optocoupler to the timer capture")
 u = ref("U")

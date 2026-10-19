@@ -33,14 +33,15 @@ class Circuit:
 
     def members(self, group):
         """References of a group, in creation order: the n-th part of two instances match."""
-        return [p["ref"] for p in self.parts if p["group"] == group]
+        return [p["ref"] for p in self.parts if group in (p["group"], p["also"])]
 
-    def part(self, ref, sym, value, fp=None, lcsc="", pins=None, note="", dnp=False):
+    def part(self, ref, sym, value, fp=None, lcsc="", pins=None, note="", dnp=False, also=None):
+        """also: a second repeated-sheet group, for a multi-unit part whose units sit on two sheets."""
         if any(p["ref"] == ref for p in self.parts):
             raise ValueError(f"duplicate reference {ref}")
         self.parts.append(dict(ref=ref, sym=sym, value=value, fp=fp, lcsc=lcsc,
                                pins={str(k): v for k, v in (pins or {}).items()},
-                               block=self._block, group=self._group, note=note, dnp=dnp))
+                               block=self._block, group=self._group, also=also, note=note, dnp=dnp))
 
     def _passive(self, kind, value, fp, lcsc):
         if fp is None and self.palette is not None:

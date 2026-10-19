@@ -63,6 +63,31 @@ def symbol(name, pins, width, height, ref="U", footprint="", datasheet="", descr
             gfx, pin_nodes, [Sym("embedded_fonts"), Sym("no")]]
 
 
+def symbol_units(name, units, box, ref="J", footprint="", datasheet="", description=""):
+    """Multi-unit symbol with the same body in every unit. units: one list per unit of
+    (number, name, electrical type, x, y, angle), pins at explicit library coordinates (Y up).
+    box: (x0, y0, x1, y1) of the body."""
+    x0, y0, x1, y1 = box
+    gfx = [Sym("symbol"), f"{name}_0_1",
+           [Sym("rectangle"), [Sym("start"), x0, y0], [Sym("end"), x1, y1],
+            [Sym("stroke"), [Sym("width"), 0.254], [Sym("type"), Sym("default")]],
+            [Sym("fill"), [Sym("type"), Sym("background")]]]]
+    nodes = [gfx]
+    for u, pins in enumerate(units, 1):
+        node = [Sym("symbol"), f"{name}_{u}_1"]
+        for num, pname, etype, x, y, ang in pins:
+            node.append([Sym("pin"), Sym(etype), Sym("line"), [Sym("at"), x, y, ang], [Sym("length"), PIN_LEN],
+                         [Sym("name"), pname, _font()], [Sym("number"), num, _font()]])
+        nodes.append(node)
+    return [Sym("symbol"), name, [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("yes")],
+            [Sym("on_board"), Sym("yes")],
+            _prop("Reference", ref, x0, y1 + 1.27, just="left"),
+            _prop("Value", name, x0, y0 - 1.27, just="left"),
+            _prop("Footprint", footprint, 0, 0, hide=True),
+            _prop("Datasheet", datasheet, 0, 0, hide=True),
+            _prop("Description", description, 0, 0, hide=True)] + nodes + [[Sym("embedded_fonts"), Sym("no")]]
+
+
 def write_library(path, symbols):
     lib = [Sym("kicad_symbol_lib"), [Sym("version"), Sym("20241209")], [Sym("generator"), "kicadgen"],
            [Sym("generator_version"), "10.0"]] + symbols

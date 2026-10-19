@@ -1,0 +1,12 @@
+(version 1)
+# Written by gen/pcb.py: Phoenix UM-BASIC 72 profile, board at level L1. The areas are drawn by pcb.py;
+# the mounting holes H* are not parts and may sit in them.
+(rule "end elements: no part on the top side at the short edges"
+	(condition "A.Type == 'Footprint' && A.Layer == 'F.Cu' && A.intersectsArea('profile end element') && A.Reference != 'H*'")
+	(constraint disallow footprint))
+(rule "profile walls: no part on the bottom side at the edges"
+	(condition "A.Type == 'Footprint' && A.Layer == 'B.Cu' && A.intersectsArea('profile wall')")
+	(constraint disallow footprint))
+(rule "profile walls: no through-hole lead at the edges, the board rests there"
+	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 3mm && A.intersectsArea('profile wall')")
+	(constraint disallow pad))

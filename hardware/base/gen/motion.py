@@ -18,7 +18,7 @@ GLOBAL = {"+VIN_OUT", "CHASSIS", "PROBE_IN"}   # nets shared across sheets or in
 def on(net, prefix="", group=None):
     """References of the parts with a pin on `net`, optionally filtered by prefix and group."""
     return [p["ref"] for p in c.parts if net in p["pins"].values() and p["ref"].startswith(prefix)
-            and (group is None or p["group"] == group)]
+            and (group is None or group in (p["group"], p["also"]))]
 
 
 def put_label(s, net, x, y, rot):
@@ -121,11 +121,15 @@ def limited_supply(s, u, x, y, vs_draw, out_net):
     s.quiet.update({f"{u}_DLY", f"{u}_CL"})
 
 
-def rj45(s, j, x, y, mirror=False):
-    """RJ45 with short stubs: labels on its signals, power symbols on GND."""
-    s.place(j, x, y, mirror="y" if mirror else None, ref_at=(x - 5.08, y - 15.24), val_at=(x - 5.08, y - 12.7))
+def rj45(s, j, x, y, port, mirror=False):
+    """One port (unit A or B) of a dual RJ45, with short stubs: labels on its signals, power symbols on GND.
+    The shield is drawn with port A."""
+    s.place(j, x, y, mirror="y" if mirror else None, ref_at=(x - 5.08, y - 15.24), val_at=(x - 5.08, y - 12.7),
+            unit="AB".index(port) + 1)
     d = -5.08 if mirror else 5.08
     for k, net in c.by_ref()[j]["pins"].items():
+        if not (k.startswith(port) or (k == "SH" and port == "A")):
+            continue
         pt = s.P(j, k)
         if k == "SH":
             s.w(net, pt, (pt[0], pt[1] + 2.54))
@@ -206,7 +210,7 @@ def drive_pair(prj):
     for n in (0, 1):
         yc = 76.2 + 101.6 * n
         j = next(r for r in on(f"STEP{n}_P", "J"))
-        rj45(s, j, 381.0, yc, mirror=True)
+        rj45(s, j, 381.0, yc, "A", mirror=True)
         # ESD of STEP and DIR next to the jack (flow-through on the board)
         esd = next(r for r in on(f"STEP{n}_P", "U") if c.by_ref()[r]["value"] == "TPD4E05U06DQAR")
         ex0, ey0 = 345.44, yc + 30.48
@@ -348,8 +352,8 @@ def encoder(prj):
     s.text("Shunt 1-2: 5 V, 2-3: VIN (12 or 24 V),\nnone: no supply. 218 mA limit.", 20.32, 73.66)
 
     # connector
-    j = next(r for r in on(f"ENC{n}_AP", "J") if c.by_ref()[r]["value"] == "ENCODER")
-    rj45(s, j, 33.02, 165.1)
+    j = next(r for r in on(f"ENC{n}_AP", "J"))
+    rj45(s, j, 33.02, 165.1, "B")
 
     # receiver
     rx = next(r for r in on(f"ENC{n}_A", "U") if c.by_ref()[r]["value"] == "AM26LV32EIDR")

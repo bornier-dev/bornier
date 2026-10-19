@@ -180,6 +180,7 @@ class Sheet:
         self.wnet = []
         self.pins = {}          # (ref, number) -> (x, y)
         self.placed = []
+        self.units = {}         # ref -> unit drawn on this sheet
         self.pwr = 0
         self.pwr_pts = []
         self.quiet = set()      # nets left without a label (short links whose name adds nothing)
@@ -196,22 +197,24 @@ class Sheet:
         return self.alias(net) if self.alias else net
 
     # --- parts -----------------------------------------------------------------------------
-    def place(self, ref, x, y, rot=0, mirror=None, ref_at=None, val_at=None, show_value=True, show_ref=True):
+    def place(self, ref, x, y, rot=0, mirror=None, ref_at=None, val_at=None, show_value=True, show_ref=True, unit=1):
+        """Place a symbol, or one unit of a multi-unit symbol (the other units go on other sheets)."""
         part = self.prj.parts[ref]
         sd = self.prj.sym_def(part["sym"])
         x, y = g(x), g(y)
-        for num, lx, ly, _ in pin_geometry(sd):
+        for num, lx, ly, _ in pin_geometry(sd, unit):
             rx, ry = transform(lx, ly, rot, mirror)
             self.pins[(ref, num)] = (g(x + rx), g(y - ry))
-        unknown = set(part["pins"]) - {n for n, *_ in pin_geometry(sd)}
+        unknown = set(part["pins"]) - {n for u in range(1, 10) for n, *_ in pin_geometry(sd, u)}
         if unknown:
             raise SystemExit(f"{ref} ({part['sym']}): unknown pins {sorted(unknown)}")
         self.placed.append(ref)
+        self.units[ref] = unit
         fp = part["fp"] or prop_value(sd, "Footprint")
         node = [Sym("symbol"), [Sym("lib_id"), part["sym"]], [Sym("at"), x, y, rot]]
         if mirror:
             node.append([Sym("mirror"), Sym(mirror)])
-        node += [[Sym("unit"), 1], [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("yes")],
+        node += [[Sym("unit"), unit], [Sym("exclude_from_sim"), Sym("no")], [Sym("in_bom"), Sym("yes")],
                  [Sym("on_board"), Sym("yes")], [Sym("dnp"), Sym("yes" if part["dnp"] else "no")],
                  [Sym("uuid"), self.prj.U(f"sym/{ref}")]]
         rx0, ry0 = ref_at or (x + 2.54, y - 1.27)
@@ -224,7 +227,7 @@ class Sheet:
             if hide:
                 eff.append([Sym("hide"), Sym("yes")])
             node.append([Sym("property"), k, v, [Sym("at"), g(px), g(py), rot % 180], eff])
-        for num in sorted({n for n, *_ in pin_geometry(sd)}, key=lambda s: (len(s), s)):
+        for num in sorted({n for n, *_ in pin_geometry(sd, unit)}, key=lambda s: (len(s), s)):
             node.append([Sym("pin"), num, [Sym("uuid"), self.prj.U(f"pin/{ref}/{num}")]])
         self.items.append(("symbol", ref, node))
 
@@ -377,7 +380,8 @@ class Sheet:
                 paths = []
                 for k, ((_, refmap, _), su) in enumerate(zip(self.instances, sheet_uuids)):
                     ref = refmap.get(key, key) if kind == "symbol" else (key if k == 0 else f"{key}{k}")
-                    paths.append([Sym("path"), f"/{root_uuid}/{su}", [Sym("reference"), ref], [Sym("unit"), 1]])
+                    paths.append([Sym("path"), f"/{root_uuid}/{su}", [Sym("reference"), ref],
+                                  [Sym("unit"), self.units.get(key, 1) if kind == "symbol" else 1]])
                 node.append([Sym("instances"), [Sym("project"), self.prj.name, *paths]])
             body.append(node)
         for a, b in self.wires:

@@ -9,7 +9,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
-from kicadgen.symgen import symbol, write_library  # noqa: E402
+from kicadgen.symgen import symbol, symbol_units, write_library  # noqa: E402
 
 PI, PO, IN, OUT, BI, PAS, OC = "power_in", "power_out", "input", "output", "bidirectional", "passive", "open_collector"
 
@@ -91,6 +91,19 @@ CA_IS3092W_PINS = [
 ]
 
 
+def rj45x2_units():
+    """Dual RJ45, one unit per port (A on the left, B on the right, front view), drawn like the
+    KiCad Connector:RJ45_Shielded symbol so that each unit sits where a single RJ45 did. The common
+    shield is in unit A."""
+    units = []
+    for port in "AB":
+        pins = [(f"{port}{k}", str(k), PAS, 10.16, -7.62 + 2.54 * (k - 1), 180) for k in range(1, 9)]
+        if port == "A":
+            pins.append(("SH", "SH", PAS, 0.0, -12.7, 90))
+        units.append(pins)
+    return units
+
+
 def main():
     # Side pins start 5 slots down so that their names clear the vertical names of the top pins.
     pins = [(n, nm, t, side, slot + 5 if side in "LR" else slot) for n, nm, t, side, slot in LAN9253_PINS]
@@ -117,6 +130,11 @@ def main():
                        footprint="Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm",
                        datasheet="https://datasheet.lcsc.com/datasheet/pdf/ee960fbdc33ef85219621c78fbff6cc1.pdf",
                        description="Isolated half-duplex RS-485 transceiver with integrated DC-DC, 5 kVrms"))
+    syms.append(symbol_units("RJ45x2_Shielded", rj45x2_units(), (-7.62, -10.16, 7.62, 12.7),
+                             footprint="Bornier:RJ45x2_HongCheng_HC-WK88-H132-1X2-55B",
+                             datasheet="https://datasheet.lcsc.com/datasheet/pdf/dc2904e2d83d7d6c79679fa0f146db90.pdf",
+                             description="Dual RJ45 jack, shielded, without magnetics or LEDs; unit A: port A and "
+                                         "shield, unit B: port B"))
     write_library(os.path.join(HERE, "bornier.kicad_sym"), syms)
 
 

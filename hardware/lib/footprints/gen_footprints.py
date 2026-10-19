@@ -51,40 +51,49 @@ def tht(num, x, y, drill, size, shape="circle"):
             f'(layers "*.Cu" "*.Mask"))')
 
 
-def rj45_hycw48():
-    """HOAUC HYCW48-RJ45-163B, shielded RJ45 without magnetics or LEDs (drawing HYC-RJ16011509).
+MODEL_DIR = "${KIPRJMOD}/../../lib/footprints/Bornier.3dshapes"
 
-    PC board layout, component side: 8 pins drill 0.89 on a 1.02 mm pitch (1.02 x 7 = 7.14), in two
-    rows 1.78 mm apart: pin 1 on the right of the front row, pin 8 on the left of the back row, so
-    odd pins at y = 1.78 and even pins at y = 0. Two shield pins drill 1.8, 16.26 mm apart, 3.56 mm
-    behind the locating pegs; two locating holes 3.25 mm, 12.7 mm apart, 4.32 mm in front of the
-    back row. Body 16.26 wide, 15.75 deep, back face 5.4 mm behind the shield pins.
-    Origin: centre of the back row; +y toward the opening (board edge).
+
+def rj45x2_hc_wk88():
+    """Hong Cheng HC-WK88-H132-1X2-55B, dual RJ45, shielded, without magnetics or LEDs (drawing
+    HC-WK88-H132-1X2-55B rev A, recommended PCB layout, top view).
+
+    Ports 14.10 mm apart. Per port, 8 contacts drill 1.00 in two rows 2.54 mm apart, 2.00 mm pitch in
+    a row, rows offset by 1.00 mm: pin n at 4.5 - n mm from the port centre, odd pins in the front row
+    (8.74 mm behind the front face), even pins in the back row. Two locating holes 3.20 mm, 25.60 mm
+    apart, 6.30 mm behind the front face; two shield legs drill 1.70, 29.50 mm apart, 4.00 mm behind
+    it. Body 29.70 wide, 13.20 deep, 13.50 high. Port A on the left, port B on the right (top view,
+    front face down). Pad names: A1-A8, B1-B8, SH.
+    Origin: centre of the front row; +y toward the front face (board edge).
     """
+    front = 8.74
     out = []
-    for n in range(1, 9):
-        x = 3.57 - (n - 1) * 1.02
-        y = 1.78 if n % 2 else 0.0
-        out.append(tht(n, x, y, 0.89, 1.4, "rect" if n == 1 else "circle"))
-    for x in (-8.13, 8.13):
-        out.append(tht("SH", x, 0.76, 1.8, 2.6))
-    for x in (-6.35, 6.35):
-        out.append(f'\t(pad "" np_thru_hole circle (at {x:g} 4.32) (size 3.25 3.25) (drill 3.25) (layers "*.Cu" "*.Mask"))')
-    back, front = 0.76 - 5.4, 0.76 - 5.4 + 15.75
+    for port, cx in (("A", -7.05), ("B", 7.05)):
+        for n in range(1, 9):
+            y = 0.0 if n % 2 else -2.54
+            out.append(tht(f"{port}{n}", cx + 4.5 - n, y, 1.0, 1.5, "rect" if n == 1 else "circle"))
+    for x in (-14.75, 14.75):
+        out.append(tht("SH", x, front - 4.0, 1.7, 2.2))     # 0.25 mm ring: 0.3 mm to the locating hole
+    for x in (-12.8, 12.8):
+        out.append(f'\t(pad "" np_thru_hole circle (at {x:g} {front - 6.3:g}) (size 3.2 3.2) (drill 3.2) (layers "*.Cu" "*.Mask"))')
+    back, half = front - 13.2, 29.7 / 2
+    name = "RJ45x2_HongCheng_HC-WK88-H132-1X2-55B"
     return "\n".join([
-        '(footprint "RJ45_HOAUC_HYCW48-RJ45-163B"',
+        f'(footprint "{name}"',
         '\t(version 20241229) (generator "gen_footprints") (layer "F.Cu")',
-        '\t(descr "Shielded RJ45 without magnetics, HOAUC HYCW48-RJ45-163B; drawing HYC-RJ16011509")',
+        '\t(descr "Dual RJ45, shielded, without magnetics or LEDs, Hong Cheng HC-WK88-H132-1X2-55B; drawing rev A")',
         '\t(attr through_hole)',
         f'\t(property "Reference" "REF**" (at 0 {back - 1.5:g} 0) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))',
-        f'\t(property "Value" "RJ45" (at 0 {front + 1.5:g} 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))',
-        rect("F.Fab", -8.13, back, 8.13, front, 0.1),
-        # silkscreen clear of the shield pads: back edge and the sides from y = 2.2 to the front
-        f'\t(fp_line (start -6.8 {back - 0.12:g}) (end 6.8 {back - 0.12:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
-        f'\t(fp_line (start -8.25 2.2) (end -8.25 {front + 0.12:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
-        f'\t(fp_line (start 8.25 2.2) (end 8.25 {front + 0.12:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
-        rect("F.CrtYd", -8.65, back - 0.5, 8.65, front + 0.5, 0.05),
-    ] + out + [")"]) + "\n"
+        f'\t(property "Value" "RJ45x2" (at 0 {front + 1.5:g} 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))',
+        rect("F.Fab", -half, back, half, front, 0.1),
+        # silkscreen: back edge, and the sides behind the shield legs
+        f'\t(fp_line (start {-half - 0.12:g} {back - 0.12:g}) (end {half + 0.12:g} {back - 0.12:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
+        f'\t(fp_line (start {-half - 0.12:g} {back - 0.12:g}) (end {-half - 0.12:g} {front - 5.6:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
+        f'\t(fp_line (start {half + 0.12:g} {back - 0.12:g}) (end {half + 0.12:g} {front - 5.6:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
+        rect("F.CrtYd", -half - 0.5, back - 0.5, half + 0.5, front + 0.5, 0.05),
+    ] + out + [
+        f'\t(model "{MODEL_DIR}/{name}.step" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))',
+        ")"]) + "\n"
 
 
 def hdr_1x3_smd():
@@ -114,8 +123,9 @@ def hdr_1x3_smd():
 
 def main():
     os.makedirs(LIB, exist_ok=True)
-    for name, text in (("SW_XKB_TS-1187A", sw_ts1187a()), ("RJ45_HOAUC_HYCW48-RJ45-163B", rj45_hycw48()),
-                       ("PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254", hdr_1x3_smd())):
+    for name, text in (("SW_XKB_TS-1187A", sw_ts1187a()),
+                       ("PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254", hdr_1x3_smd()),
+                       ("RJ45x2_HongCheng_HC-WK88-H132-1X2-55B", rj45x2_hc_wk88())):
         with open(os.path.join(LIB, name + ".kicad_mod"), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
 

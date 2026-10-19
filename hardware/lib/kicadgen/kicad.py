@@ -84,15 +84,15 @@ class Libraries:
         return node
 
 
-def pin_geometry(sym):
-    """Pins as (number, x, y, angle) in library coordinates (Y up), unit 1 only."""
+def pin_geometry(sym, unit=1):
+    """Pins of one unit as (number, x, y, angle) in library coordinates (Y up); unit 0 pins are common."""
     pins = []
-    for unit in find(sym, "symbol"):
-        tag = unit[1].rsplit("_", 2)
+    for node in find(sym, "symbol"):
+        tag = node[1].rsplit("_", 2)
         u, style = int(tag[-2]), int(tag[-1])
-        if u not in (0, 1) or style not in (0, 1):
+        if u not in (0, unit) or style not in (0, 1):
             continue
-        for p in find(unit, "pin"):
+        for p in find(node, "pin"):
             at, number = first(p, "at"), first(p, "number")
             if at is None or number is None:
                 raise ValueError(f"malformed pin in {sym[1]}")
