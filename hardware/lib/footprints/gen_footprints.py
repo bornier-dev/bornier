@@ -9,6 +9,12 @@ import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LIB = os.path.join(HERE, "Bornier.pretty")
+# 3D models written by gen_3d.py, found from the KiCad project of a board (hardware/<board>/kicad)
+MODEL_DIR = "${KIPRJMOD}/../../lib/footprints/Bornier.3dshapes"
+
+
+def model(name):
+    return f'\t(model "{MODEL_DIR}/{name}.step" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))'
 
 
 def rect(layer, x0, y0, x1, y1, width):
@@ -43,7 +49,7 @@ def sw_ts1187a():
         '\t(fp_line (start -1.8 -2.65) (end 1.8 -2.65) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
         '\t(fp_line (start -1.8 2.65) (end 1.8 2.65) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
         rect("F.CrtYd", -3.75, -2.85, 3.75, 2.85, 0.05),
-    ] + pads + [")"]) + "\n"
+    ] + pads + [model("SW_XKB_TS-1187A"), ")"]) + "\n"
 
 
 def tht(num, x, y, drill, size, shape="circle"):
@@ -51,7 +57,6 @@ def tht(num, x, y, drill, size, shape="circle"):
             f'(layers "*.Cu" "*.Mask"))')
 
 
-MODEL_DIR = "${KIPRJMOD}/../../lib/footprints/Bornier.3dshapes"
 
 
 def rj45x2_hc_wk88():
@@ -92,7 +97,7 @@ def rj45x2_hc_wk88():
         f'\t(fp_line (start {half + 0.12:g} {back - 0.12:g}) (end {half + 0.12:g} {front - 5.6:g}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
         rect("F.CrtYd", -half - 0.5, back - 0.5, half + 0.5, front + 0.5, 0.05),
     ] + out + [
-        f'\t(model "{MODEL_DIR}/{name}.step" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))',
+        model(name),
         ")"]) + "\n"
 
 
@@ -118,7 +123,7 @@ def hdr_1x3_smd():
         rect("F.Fab", -1.25, -3.81, 1.25, 3.81, 0.1),
         '\t(fp_line (start -3.4 -3.3) (end -3.4 -1.7) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))',
         rect("F.CrtYd", -3.7, -4.1, 3.7, 4.1, 0.05),
-    ] + pads + [")"]) + "\n"
+    ] + pads + [model("PinHeader_1x03_P2.54mm_Vertical_SMD_HX_PZ254"), ")"]) + "\n"
 
 
 def main():

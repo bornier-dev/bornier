@@ -97,12 +97,30 @@ def load_netlist():
     return comps, nets
 
 
+# 3D models of KiCad library footprints whose model is missing from KiCad 10: the same package under
+# another name, or a model written by hardware/lib/footprints/gen_3d.py from the part datasheet.
+STD_3D = "${KICAD10_3DMODEL_DIR}"
+OWN_3D = "${KIPRJMOD}/../../lib/footprints/Bornier.3dshapes"
+MODEL_OVERRIDE = {
+    "HVSSOP-8-1EP_3x3mm_P0.65mm_EP1.57x1.89mm": f"{STD_3D}/Package_SO.3dshapes/MSOP-8-1EP_3x3mm_P0.65mm_EP1.5x1.8mm.step",
+    "TI_SO-PowerPAD-8_ThermalVias": f"{STD_3D}/Package_SO.3dshapes/TI_SO-PowerPAD-8.step",
+    "Oscillator_SMD_SiT_PQFN-4Pin_2.0x1.6mm": f"{STD_3D}/Crystal.3dshapes/Crystal_SMD_2016-4Pin_2.0x1.6mm.step",
+    "RJ45_Hanrun_HR911105A_Horizontal": f"{OWN_3D}/RJ45_HanRun_HY911105AE.step",
+    "USB_Micro-B_Molex-105133-0001": f"{OWN_3D}/USB_Micro-B_Molex_105133-0001.step",
+}
+
+
 def load_fp(fpid):
     lib, name = fpid.split(":", 1)
     fp = pcbnew.FootprintLoad(LOCAL_FP.get(lib, os.path.join(STD_FP, lib + ".pretty")), name)
     if fp is None:
         raise SystemExit(f"footprint not found: {fpid}")
     fp.SetFPID(pcbnew.LIB_ID(lib, name))
+    if name in MODEL_OVERRIDE:
+        m = pcbnew.FP_3DMODEL()                     # the list hands out copies: replace it whole
+        m.m_Filename = MODEL_OVERRIDE[name]
+        fp.Models().clear()
+        fp.Models().push_back(m)
     return fp
 
 
@@ -210,22 +228,37 @@ def keepouts(board):
     rule_area(board, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], [B], "profile wall", footprints=False)
 
 
+# Distance from the footprint origin to the board edge, toward +y, when it is not the front of the
+# courtyard: the jack face goes to the edge, set back just enough for the pads of its front leads to clear
+# the 3.1 mm rim that rests on the profile walls.
+FRONT = {
+    # drawing rev A: face 8.74 mm in front of the front row; shield legs 4.0 behind the face, pad 2.2:
+    # face 0.2 mm inside the edge
+    "RJ45x2_HongCheng_HC-WK88-H132-1X2-55B": 8.74 + 0.2,
+    # HY911105AE: face 3.05 mm in front of the LED pins, pads 1.6: face 0.9 mm inside the edge
+    "RJ45_Hanrun_HR911105A_Horizontal": 14.31 + 0.9,
+}
+
+
+def front(fp, bottom):
+    return FRONT.get(str(fp.GetFPID().GetLibItemName()), bottom)
+
+
 def connectors(fps, comps):
     """Edge A: openings toward y = 0 (rotated 180); edge B: openings toward y = H. Returns the references."""
     by_value = {c["value"]: ref for ref, c in comps.items()}
     edge_a = sorted((r for r, c in comps.items() if c["value"] == AXIS_JACK), key=lambda r: int(r[1:]))
     edge_b = [by_value[v] for v in EDGE_B]
     ext = {ref: courtyard(fps[ref]) for ref in edge_a + edge_b}
-    left, _, right, bottom = ext[edge_a[0]]
     x0 = (W - PITCH_A * (len(edge_a) - 1)) / 2          # centre of the first jack
     for k, ref in enumerate(edge_a):
-        # rotated 180: the front (bottom of the courtyard) faces y = 0
-        place(fps[ref], x0 + PITCH_A * k, bottom, 180)
+        # rotated 180: the front faces y = 0
+        place(fps[ref], x0 + PITCH_A * k, front(fps[ref], ext[ref][3]), 180)
     widths = [ext[r][2] - ext[r][0] for r in edge_b]
     x = (W - sum(widths) - GAP_B * (len(EDGE_B) - 1)) / 2
     for ref, w in zip(edge_b, widths):
         left, _, right, bottom = ext[ref]
-        place(fps[ref], x - left, H - bottom, 0)
+        place(fps[ref], x - left, H - front(fps[ref], bottom), 0)
         x += w + GAP_B
     return edge_a + edge_b
 
