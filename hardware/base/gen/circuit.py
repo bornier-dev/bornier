@@ -241,6 +241,12 @@ for j, port, lines, rail, led, rs, ccap, esd in (
 c.C("C37", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="Chassis to ground, away from the ESC (checklist)")
 c.C("C301", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the drive and encoder RJ45 row")
 c.C("C302", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the terminal block row")
+# Screw mounting, for a panel instead of the DIN rail profile: four M3 holes at the corners, clear of the
+# profile grooves along the long edges. H1 is plated and on CHASSIS: the screw earths the board to the panel.
+c.part("H1", "Mechanical:MountingHole_Pad", "M3 CHASSIS", "MountingHole:MountingHole_3.2mm_M3_Pad_Via", "",
+       {1: "CHASSIS"}, "Plated M3 hole, nearest corner to the POWER terminal block (FE pole)")
+for h in ("H2", "H3", "H4"):
+    c.part(h, "Mechanical:MountingHole", "M3", "MountingHole:MountingHole_3.2mm_M3", "", {}, "Non-plated M3 hole")
 
 # --------------------------------------------------------------------------------------------
 c.block("Test points")
