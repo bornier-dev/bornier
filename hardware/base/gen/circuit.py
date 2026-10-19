@@ -18,6 +18,11 @@ LED0603 = "LED_SMD:LED_0603_1608Metric"
 # would stay dark on 3.3 V through 1 k; red KT-0603R (VF 1.8-2.4 V).
 LED_G, LED_R = "C2289", "C2286"
 R1206 = "Resistor_SMD:R_1206_3216Metric"
+# The only terminal block of the board: pluggable 3.81 mm, 4 poles, 8 A (KF2EDGR-3.81-4P; plug KF2EDGK-3.81-4P).
+# Pinout rule of every terminal block: pole 1 withstands 24 V, pole 2 is 0 V. The plugs are all alike: the
+# POWER plug (+24 V, 0 V, FE) damages nothing whichever header it is plugged into.
+TB4 = ("Connector:Screw_Terminal_01x04", "Connector_Phoenix_MC:PhoenixContact_MC_1,5_4-G-3.81_1x04_P3.81mm_Horizontal",
+       "C441184")
 
 # Passive palette: every resistor and capacitor of the board is one of these lines (one feeder each
 # on a pick-and-place). 0402 by default; 0603 for 1 uF 50 V and for the 120 ohm terminations
@@ -48,9 +53,8 @@ c = Circuit(PALETTE, r_fp=R0402, c_fp=C0402)
 # --------------------------------------------------------------------------------------------
 c.block("24 V input protection")
 # Logic supply only: field 24 V of the modules never comes through here.
-c.part("J1", "Connector:Screw_Terminal_01x02", "24 V",
-       "Connector_Phoenix_MSTB:PhoenixContact_MSTBA_2,5_2-G-5,08_1x02_P5.08mm_Horizontal", "C441204",
-       {1: "24V_IN", 2: "GND"}, "Pluggable terminal block, 5.08 mm, right angle (KF2EDGR-5.08-2P)")
+c.part("J1", TB4[0], "POWER", TB4[1], TB4[2], {1: "24V_IN", 2: "GND", 3: "CHASSIS"},
+       "+24 V, 0 V, functional earth (the shields meet earth here, wired with the supply), pole 4 unused")
 c.part("F1", "Device:Fuse", "3A 63V", "Fuse:Fuse_1206_3216Metric", "C182445", {1: "24V_IN", 2: "24V_F"},
        "12H1300C, 3 A 63 V fast acting, 50 A breaking; 1.9 A worst case load; a sustained overvoltage kills the TVS (short) before the fuse opens")
 c.part("D1", "Device:D_TVS", "SMBJ33CA", SMB, "C78420", {1: "24V_F", 2: "GND"},
@@ -128,6 +132,12 @@ c.R("R13", "4.7k", "+24V", "LED24", fp=R1206, note="5 mA, 0.12 W")
 c.part("D6", "Device:LED", "green", LED0603, LED_G, {2: "LED24", 1: "GND"}, "24 V present")
 c.R("R14", "1k", "+3V3", "LED3V3")
 c.part("D7", "Device:LED", "green", LED0603, LED_G, {2: "LED3V3", 1: "GND"}, "3.3 V present")
+c.R("R306", "4.7k", "+24V_DRV", "LED24O", fp=R1206, note="5 mA, 0.12 W")
+c.part("D300", "Device:LED", "green", LED0603, LED_G, {2: "LED24O", 1: "GND"},
+       "24 V outputs present: off while a short on a drive port, ESTOP, PROBE or SPINDLE holds +24V_DRV in current limit")
+c.block("Test points of the rails")
+for tp, net in (("TP4", "+24V"), ("TP5", "+24V_DRV"), ("TP6", "+5V"), ("TP7", "+3V3")):
+    c.part(tp, "Connector:TestPoint", net, "TestPoint:TestPoint_Pad_D1.5mm", "", {1: net}, "Pad")
 
 # --------------------------------------------------------------------------------------------
 c.block("25 MHz clock shared by the ESC and the MCU")
@@ -228,8 +238,6 @@ for j, port, lines, rail, led, rs, ccap, esd in (
 c.C("C37", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="Chassis to ground, away from the ESC (checklist)")
 c.C("C301", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the drive and encoder RJ45 row")
 c.C("C302", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the terminal block row")
-c.part("H1", "Mechanical:MountingHole_Pad", "PE", "MountingHole:MountingHole_3.2mm_M3_Pad_Via", "",
-       {1: "CHASSIS"}, "Protective earth lug (M3) near the field RJ45: the shields meet earth here")
 
 # --------------------------------------------------------------------------------------------
 c.block("Test points")
@@ -436,9 +444,6 @@ c.part(ref("D"), "Device:LED", "green PROBE", LED0603, LED_G, {2: "PROBE_R", 1: 
        "On while the probe conducts")
 c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: "PROBE_R", 2: "PROBE_IN"},
        "Reverse protection of both LEDs")
-c.part(ref("J"), "Connector:Screw_Terminal_01x03", "PROBE",
-       "Connector_Phoenix_MC:PhoenixContact_MC_1,5_3-G-3.81_1x03_P3.81mm_Horizontal", "C441183",
-       {1: "+24V_DRV", 2: "PROBE_IN", 3: "GND"}, "Pluggable 3.81 mm (KF2EDGR-3.81-3P): +24 V, input, 0 V")
 
 # --------------------------------------------------------------------------------------------
 c.block("Local bus: HE10 2x17 ribbon to the extension modules")
@@ -472,13 +477,19 @@ c.R(ref("R"), "100k", "BUS_SCK", "GND", note="SCK low while the MCU pin is not c
 c.R(ref("R"), "100k", "BUS_MOSI", "GND", note="MOSI defined while the MCU pin is not configured")
 c.R(ref("R"), "2.2k", "BUS_SDA", "+3V3", note="I2C at 100 kHz, ribbon and 12 modules: rise < 1 us")
 c.R(ref("R"), "2.2k", "BUS_SCL", "+3V3")
+# ESD of every ribbon signal, at the header: the board has no enclosure and the ribbon is plugged by hand
+for group in (("RB_SCK", "RB_MOSI", "BUS_MISO", "RB_LATCH"), ("RB_OE", "BUS_IRQ", "BUS_SDA", "BUS_SCL"),
+              ("RB_CS0", "RB_CS1", "RB_CS2", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
+              ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11")):
+    c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
+           dict(zip((1, 2, 4, 5), group)) | {3: "GND", 8: "GND"}, "ESD of the ribbon lines, at the HE10, flow-through")
 
 # --------------------------------------------------------------------------------------------
 c.block("Spindle / laser: 0-10 V, PWM 5 V, enable and direction open drain")
-c.part(ref("J"), "Connector:Screw_Terminal_01x06", "SPINDLE",
-       "Connector_Phoenix_MC:PhoenixContact_MC_1,5_6-G-3.81_1x06_P3.81mm_Horizontal", "C441186",
-       {1: "SP_AOUT", 2: "GND", 3: "SP_PWM", 4: "SP_EN", 5: "SP_DIR", 6: "GND"},
-       "Pluggable 3.81 mm (KF2EDGR-3.81-6P): 0-10 V, 0 V, PWM, EN, DIR, 0 V")
+c.part(ref("J"), TB4[0], "SPINDLE A", TB4[1], TB4[2], {1: "SP_EN", 2: "GND", 3: "SP_AOUT", 4: "SP_DIR"},
+       "EN, 0 V, 0-10 V, DIR: the whole wiring of a VFD on one plug")
+c.part(ref("J"), TB4[0], "SPINDLE B", TB4[1], TB4[2], {1: "+24V_DRV", 2: "GND", 3: "SP_PWM"},
+       "+24 V out (supply of a relay coil switched by EN or DIR), 0 V, PWM, pole 4 unused")
 # 0-10 V: DAC (0-3.3 V) x 3, op amp supplied by a 15 V zener rail from the protected 24 V
 c.R(ref("R"), "3.3k", "+24V", "V15", fp=R1206, note="Two 3.3 k in parallel: 2.5-11 mA over 19-33 V, 0.1 W each at 33 V")
 c.R(ref("R"), "3.3k", "+24V", "V15", fp=R1206)
@@ -491,6 +502,8 @@ c.part(u, "Bornier:OPAMP_DUAL", "LM2904DR2G", None, "C18229",
        "Output swings to 13.5 V from 15 V; second half wired as a grounded follower")
 c.R(ref("R"), "1k", "SPINDLE_AOUT", "SP_DAC", note="DAC output filter with the next capacitor")
 c.C(ref("C"), "100nF", "SP_DAC", "GND")
+c.R(ref("R"), "100k", "SP_DAC", "GND", note="0 V while the DAC pin is not configured (reset, bootloader): the input "
+    "bias current of the LM2904 flows out of its pins and would charge the 100 nF to full scale")
 c.R(ref("R"), "10k", "SP_AOUT", "SP_FB", note="Gain 1 + 10/4.7 = 3.13, fed back after the 120 ohm; 0.7 mA from the 15 V rail")
 c.C(ref("C"), "470pF", "SP_OA", "SP_FB", note="Closes the loop at high frequency: stable with the cable capacitance")
 c.R(ref("R"), "4.7k", "SP_FB", "GND")
@@ -518,6 +531,9 @@ for sig, net in (("SPINDLE_EN", "SP_EN"), ("SPINDLE_DIR", "SP_DIR")):
     c.R(ref("R"), "1k", sig, f"{net}_LA")
     c.part(ref("D"), "Device:LED", f"green {sig[8:]}", LED0603, LED_G, {2: f"{net}_LA", 1: "GND"},
            "On while the MCU commands the output")
+    c.part(ref("D"), "Device:D_TVS", "SMBJ33CA", SMB, "C78420", {1: net, 2: "GND"},
+           "Clamps the kick of a relay or solenoid coil driven without a flyback diode (36.7-53.3 V, "
+           "below the 55 V of the FET) and ESD")
 
 # --------------------------------------------------------------------------------------------
 c.block("Modbus RS-485, isolated: Bornier is the master of the line")
@@ -541,10 +557,8 @@ c.part(ref("JP"), "Jumper:Jumper_3_Open", "TERM", HDR3, "C41417360", {1: "MB_T",
 c.R(ref("R"), "120", "MB_A", "MB_T", fp=R0603)
 c.part(ref("D"), "Diode:SM712_SOT23", "PSM712-LF-T7", "Package_TO_SOT_SMD:SOT-23", "C32677",
        {1: "MB_A", 2: "MB_B", 3: "GNDISO"}, "-7/+12 V clamp, the RS-485 common-mode range")
-c.part(ref("J"), "Connector:Screw_Terminal_01x04", "MODBUS",
-       "Connector_Phoenix_MC:PhoenixContact_MC_1,5_4-G-3.81_1x04_P3.81mm_Horizontal", "C441184",
-       {1: "MB_A", 2: "MB_B", 3: "GNDISO", 4: "CHASSIS"},
-       "Pluggable 3.81 mm (KF2EDGR-3.81-4P): D1 (A, positive at idle), D0 (B), common, shield")
+c.part(ref("J"), TB4[0], "MODBUS", TB4[1], TB4[2], {1: "CHASSIS", 2: "GNDISO", 3: "MB_A", 4: "MB_B"},
+       "Shield, common, D1 (A, positive at idle), D0 (B)")
 for sig, colour in (("MB_TX", "TX"), ("MB_RX", "RX")):
     c.R(ref("R"), "1k", "+3V3", f"{sig}_LA")
     c.part(ref("D"), "Device:LED", f"green {colour}", LED0603, LED_G, {2: f"{sig}_LA", 1: sig},
@@ -565,10 +579,8 @@ c.R(ref("R"), "2.2k", "ESTOP_LED", "GND",
 c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: "ESTOP_R", 2: "GND"},
        "Reverse protection of both LEDs")
 c.R(ref("R"), "10k", "ESTOP_IN", "+3V3")
-c.part(ref("J"), "Connector:Screw_Terminal_01x03", "ESTOP",
-       "Connector_Phoenix_MC:PhoenixContact_MC_1,5_3-G-3.81_1x03_P3.81mm_Horizontal", "C441183",
-       {1: "+24V_DRV", 2: "ESTOP_24", 3: "GND"},
-       "Pluggable 3.81 mm: +24 V for a dry contact, chain state (24 V = run), 0 V")
+c.part(ref("J"), TB4[0], "ESTOP | PROBE", TB4[1], TB4[2], {1: "+24V_DRV", 2: "GND", 3: "ESTOP_24", 4: "PROBE_IN"},
+       "+24 V out (dry contact of the chain, probe supply), 0 V, chain state (24 V = run), probe input")
 # External watchdog: resets the MCU, whose reset state turns every output off through its pull resistor.
 u = ref("U")
 c.part(u, "Power_Supervisor:TPS3823-xxDBV", "TPS3828-33DBVR", "Package_TO_SOT_SMD:SOT-23-5", "C20032",

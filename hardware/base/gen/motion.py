@@ -12,7 +12,7 @@ import re
 
 from circuit import c
 
-GLOBAL = {"+24V_DRV", "CHASSIS"}   # nets shared by every instance: global labels
+GLOBAL = {"+24V_DRV", "CHASSIS", "PROBE_IN"}   # nets shared across sheets or instances: global labels
 
 
 def on(net, prefix="", group=None):
@@ -264,17 +264,13 @@ def drive_supply_probe(prj):
 
     up = on("PROBE_LED", "U")[0]
     px, py = 254.0, 66.04
-    s.text("PROBE: NPN sensor or dry contact between PROBE and 0 V;\nPROBE goes low (inverting).", 190.5, 38.1)
+    s.text("PROBE: NPN sensor or dry contact between PROBE and 0 V;\nPROBE goes low (inverting).\n"
+           "Terminal block shared with the emergency stop (Safety sheet).", 190.5, 38.1)
     s.place(up, px, py, ref_at=(px - 5.08, py - 7.62), val_at=(px - 5.08, py - 10.16))
-    jp = next(r for r in on("PROBE_IN", "J"))
     rend, jin = opto_input(s, up, 1, 3, "PROBE_R", "PROBE_LED", "PROBE_IN")
-    kx, ky = jin[0] + 13.97, jin[1]
-    s.place(jp, kx - 55.88, ky, mirror="y", ref_at=(kx - 60.96, ky - 6.35), val_at=(kx - 60.96, ky + 6.35))
-    j1, j2, j3 = s.P(jp, 1), s.P(jp, 2), s.P(jp, 3)
-    s.w("PROBE_IN", jin, j2)
-    s.w("+24V_DRV", rend, (kx - 38.1, rend[1]), (kx - 38.1, j1[1]), j1)
-    put_label(s, "+24V_DRV", kx - 38.1, rend[1], 90)
-    stub(s, j3, "GND", 5.08, "GND")
+    s.w("PROBE_IN", jin, (jin[0] - 15.24, jin[1]))
+    s.glabel("PROBE_IN", jin[0] - 15.24, jin[1], 180, "input")
+    stub(s, rend, "+24V_DRV", -7.62)
     vx, vy = s.P(up, 6)
     s.w("+3V3", (vx, vy), (vx + 5.08, vy))
     s.power("+3V3", vx + 5.08, vy)
@@ -292,7 +288,6 @@ def drive_supply_probe(prj):
     stub(s, s.P(rsh, 1), top_net, -5.08)
     stub(s, s.P(rsh, 2), bot_net, -5.08)
     s.label("PROBE_LED", *s.P(up, 1))
-    s.label("PROBE_IN", *s.P(up, 3))
     gx, gy = s.P(up, 4)
     s.w("GND", (gx, gy), (gx + 2.54, gy), (gx + 2.54, gy + 2.54))
     s.power("GND", gx + 2.54, gy + 2.54)

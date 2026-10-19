@@ -49,11 +49,14 @@ def safety(prj):
     # connector
     j = on("ESTOP_24", "J")[0]
     jx = ax - 78.74
-    s.place(j, jx, ay, mirror="y", ref_at=(jx - 5.08, ay - 6.35), val_at=(jx - 5.08, ay + 7.62))
-    j1, j2, j3 = s.P(j, 1), s.P(j, 2), s.P(j, 3)
-    s.w("ESTOP_24", j2, (j2[0], ay), r_in) if abs(j2[1] - ay) > 0.1 else s.w("ESTOP_24", j2, r_in)
+    s.place(j, jx, ay - 2.54, mirror="y", ref_at=(jx - 5.08, ay - 8.89), val_at=(jx - 5.08, ay + 7.62))  # pole 3 in line
+    j1, j2, j3, j4 = (s.P(j, k) for k in (1, 2, 3, 4))
+    s.w("ESTOP_24", j3, r_in)
     stub(s, j1, "+24V_DRV", 5.08)
-    stub(s, j3, "GND", 5.08, "GND")
+    s.w("GND", j2, (j2[0] + 1.27, j2[1]))
+    s.power("GND", j2[0] + 1.27, j2[1], 90, show=False)
+    s.w("PROBE_IN", j4, (j4[0] + 7.62, j4[1]))
+    s.glabel("PROBE_IN", j4[0] + 7.62, j4[1], 0, "output")
     # output side: collector pulled up, low while the chain is closed
     cx_, cy_ = s.P(u, 4)
     ex, ey = s.P(u, 3)
@@ -100,16 +103,12 @@ def safety(prj):
            "It also holds the reset while +3V3 is below 2.93 V. RESET LED: any reset (watchdog, debugger).",
            wx - 50.8, wy + 20.32)
 
-    # --- chassis and protective earth ------------------------------------------------------------
-    s.text("CHASSIS: shields of the RJ45 and of the Modbus cable. Earth lug H1 (M3) next to the field RJ45;\n"
-           "1 nF 2 kV to 0 V at each connector row (C37 at the EtherCAT ports).", 30.48, 165.1)
+    # --- chassis and functional earth ------------------------------------------------------------
+    s.text("CHASSIS: shields of the RJ45 and of the Modbus cable. Functional earth on pin 3 (FE) of the 24 V\n"
+           "terminal block J1; 1 nF 2 kV to 0 V at each connector row (C37 at the EtherCAT ports).", 30.48, 165.1)
     xs, ys = 50.8, 190.5
     s.w("CHASSIS", (xs, ys), (xs + 38.1, ys))
     s.glabel("CHASSIS", xs, ys, 180, "passive")
-    h = on("CHASSIS", "H")[0]
-    s.place(h, xs + 10.16, ys - 5.08, ref_at=(xs + 12.7, ys - 7.62), val_at=(xs + 12.7, ys - 5.08))
-    hp = s.P(h, 1)
-    s.w("CHASSIS", hp, (hp[0], ys))
     for k, ref in enumerate(("C301", "C302")):
         x = xs + 25.4 + 12.7 * k
         vr(s, ref, x, ys)

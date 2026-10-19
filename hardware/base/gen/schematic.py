@@ -47,10 +47,13 @@ def power(prj):
            "Fuse, bidirectional TVS, reverse polarity diode.\n"
            "Condition of use: dedicated 24 V supply in the same cabinet, short wiring\n"
            "(no 0.5 kV / 2 ohm surge immunity, see ../sim/README.md).", 20.32, y0 - 25.4)
-    s.place("J1", 30.48, y0, mirror="y", ref_at=(22.86, y0 - 5.08), val_at=(22.86, y0 - 2.54))
+    s.place("J1", 30.48, y0 + 2.54, mirror="y", ref_at=(22.86, y0 - 5.08), val_at=(22.86, y0 - 2.54))
     jx, jy2 = s.P("J1", 2)
-    s.w("GND", (jx, jy2), (jx + 2.54, jy2))
-    s.rail("GND", jx + 2.54, jy2, drop=5.08)
+    s.w("GND", (jx, jy2), (jx + 10.16, jy2))
+    s.rail("GND", jx + 10.16, jy2, drop=5.08)
+    fx, fy = s.P("J1", 3)
+    s.w("CHASSIS", (fx, fy), (fx + 2.54, fy), (fx + 2.54, fy + 12.7))
+    s.glabel("CHASSIS", fx + 2.54, fy + 12.7, 0, "passive")
     hpart(s, "F1", 48.26, y0)
     s.w("24V_IN", s.P("J1", 1), s.P("F1", 1))
     s.label("24V_IN", 38.1, y0)
@@ -256,6 +259,26 @@ def power(prj):
                 ref_at=(x + 5.08, s.P(rref, 2)[1] + 6.35), val_at=(x + 7.62, s.P(rref, 2)[1] + 8.89))
         s.w(net, s.P(rref, 2), s.P(dref, 2))
         s.rail("GND", *s.P(dref, 1))
+    # 24 V outputs (+24V_DRV, current limited on the drive supply sheet)
+    x = 111.76
+    vpart(s, "R306", x, ym)
+    s.w("+24V_DRV", (x, ym), (x, ym - 5.08))
+    s.glabel("+24V_DRV", x, ym - 5.08, 90, "passive")
+    s.place("D300", x, s.P("R306", 2)[1] + 7.62, rot=90,
+            ref_at=(x + 5.08, s.P("R306", 2)[1] + 6.35), val_at=(x + 7.62, s.P("R306", 2)[1] + 8.89))
+    s.w("LED24O", s.P("R306", 2), s.P("D300", 2))
+    s.rail("GND", *s.P("D300", 1))
+    # test points of the rails
+    s.text("Test points of the rails.", 76.2, ym + 30.48)
+    for k, (tp, net) in enumerate((("TP4", "+24V"), ("TP5", "+24V_DRV"), ("TP6", "+5V"), ("TP7", "+3V3"))):
+        tx, ty = 78.74 + 12.7 * k, ym + 50.8
+        s.place(tp, tx, ty, rot=180, ref_at=(tx - 1.27, ty + 5.08), show_value=False)
+        px_, py_ = s.P(tp, 1)
+        if net == "+24V_DRV":
+            s.w(net, (px_, py_), (px_, py_ - 5.08))
+            s.glabel(net, px_, py_ - 5.08, 90, "passive")
+        else:
+            s.rail(net, px_, py_)
 
 
 def clock(prj):

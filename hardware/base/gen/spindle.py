@@ -13,7 +13,8 @@ def spindle(prj):
     s.text("SPINDLE / LASER", 20.32, 17.78, 2.54, True)
     s.text("A machine has a spindle or a laser: the outputs are shared.\n"
            "0-10 V: VFD speed reference. PWM: 5 V push-pull (laser TTL input or PWM spindle).\n"
-           "EN, DIR: 60 V open drain to 0 V, for a VFD input to its common or a laser gate with its own pull-up.\n"
+           "EN, DIR: 55 V open drain to 0 V, for a VFD input to its common or a laser gate with its own pull-up;\n"
+           "a TVS clamps the kick of a relay coil driven without a flyback diode.\n"
            "Each digital output has a LED that shows its real state.", 20.32, 25.4)
 
     # --- 0-10 V ------------------------------------------------------------------------------------
@@ -21,7 +22,8 @@ def spindle(prj):
     cx, cy = 132.08, 83.82
     s.place(u, cx, cy, ref_at=(cx - 5.08, cy - 10.16), val_at=(cx - 5.08, cy - 12.7))
     P = lambda n: s.P(u, n)  # noqa: E731
-    rin = next(r for r in on("SP_DAC", "R"))
+    rin = next(r for r in on("SP_DAC", "R") if "SPINDLE_AOUT" in c.by_ref()[r]["pins"].values())
+    rpd = next(r for r in on("SP_DAC", "R") if r != rin)
     cin = on("SP_DAC", "C")[0]
     ax, ay = P(3)
     hr(s, rin, ax - 27.94, ay, rot=90 if c.by_ref()[rin]["pins"]["1"] == "SPINDLE_AOUT" else 270)
@@ -31,6 +33,8 @@ def spindle(prj):
     s.w("SP_DAC", b, (ax, ay))
     vr(s, cin, ax - 17.78, ay)
     s.rail("GND", *s.P(cin, 2))
+    vr(s, rpd, ax - 10.16, ay)
+    s.rail("GND", *s.P(rpd, 2))
     # feedback under the body
     nx, ny = P(2)
     ox, oy = P(1)
@@ -135,7 +139,7 @@ def spindle(prj):
     # --- EN and DIR -------------------------------------------------------------------------------
     for k, (sig, net) in enumerate((("SPINDLE_EN", "SP_EN"), ("SPINDLE_DIR", "SP_DIR"))):
         q = on(net, "Q")[0]
-        qx, qy = 254.0 + 50.8 * k, 165.1
+        qx, qy = 241.3 + 76.2 * k, 165.1
         s.place(q, qx, qy, ref_at=(qx + 5.08, qy - 1.27), val_at=(qx + 5.08, qy + 1.27))
         gx, gy = s.P(q, 1)
         rg_ = next(r for r in on(sig, "R") if c.by_ref()[r]["value"] == "100k")
@@ -154,16 +158,19 @@ def spindle(prj):
         s.quiet.add(f"{net}_LA")
         s.rail("GND", *s.P(q, 2))
         dx_, dy_ = s.P(q, 3)
-        s.w(net, (dx_, dy_), (dx_ + 15.24, dy_))
-        s.label(net, dx_ + 15.24, dy_)
+        s.w(net, (dx_, dy_), (dx_ + 20.32, dy_))
+        s.label(net, dx_ + 20.32, dy_)
+        tv = next(d for d in on(net, "D") if c.by_ref()[d]["sym"] == "Device:D_TVS")
+        s.place(tv, dx_ + 15.24, dy_ + 3.81, rot=270, ref_at=(dx_ + 17.78, dy_ + 3.81), val_at=(dx_ + 17.78, dy_ + 6.35))
+        s.rail("GND", *sorted((s.P(tv, 1), s.P(tv, 2)), key=lambda p: p[1])[1])
 
     # --- connector --------------------------------------------------------------------------------
-    j = on("SP_AOUT", "J")[0]
-    jx, jy = 375.92, 116.84
-    s.place(j, jx, jy, ref_at=(jx - 2.54, jy - 10.16), val_at=(jx - 2.54, jy + 12.7))
-    for k, net in c.by_ref()[j]["pins"].items():
-        pt = s.P(j, k)
-        if net == "GND":
-            stub(s, pt, net, -5.08, "GND")
-        else:
-            stub(s, pt, net, -7.62)
+    for j, jy in ((on("SP_AOUT", "J")[0], 106.68), (on("SP_PWM", "J")[0], 132.08)):
+        jx = 375.92
+        s.place(j, jx, jy, ref_at=(jx - 2.54, jy - 7.62), val_at=(jx - 2.54, jy + 10.16))
+        for k, net in c.by_ref()[j]["pins"].items():
+            pt = s.P(j, k)
+            if net == "GND":
+                stub(s, pt, net, -5.08, "GND")
+            else:
+                stub(s, pt, net, -7.62)

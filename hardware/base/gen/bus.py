@@ -68,6 +68,24 @@ def local_bus(prj):
             stub(s, pt, net, d)
     s.text("Ribbon: conductor n = pin n; a ground next to SCK and between groups.", jx - 25.4, jy + 27.94)
 
+    # ESD of the ribbon lines, placed at the header on the board
+    esds = [u for u in c.by_ref() if c.by_ref()[u]["value"] == "TPD4E05U06DQAR"
+            and c.by_ref()[u]["block"].startswith("Local bus")]
+    s.text("ESD of every ribbon signal at the header (TPD4E05U06, flow-through).", 116.84, 48.26)
+    for k, esd in enumerate(sorted(esds, key=lambda r: int(r[1:]))):
+        ex0, ey0 = 132.08, 63.5 + 30.48 * k
+        s.place(esd, ex0, ey0, ref_at=(ex0 + 3.81, ey0 - 8.89), val_at=(ex0 + 3.81, ey0 - 11.43))
+        for pin in ("1", "2", "4", "5"):
+            px_, py_ = s.P(esd, pin)
+            net = c.by_ref()[esd]["pins"][pin]
+            d = -5.08 if px_ < ex0 else 5.08
+            if net.startswith("BUS_"):
+                s.w(net, (px_, py_), (px_ + d, py_))
+                s.glabel(net, px_ + d, py_, 0 if d > 0 else 180, "bidirectional")
+            else:
+                stub(s, (px_, py_), net, d)
+        s.rail("GND", *s.P(esd, 3))
+
     # 3.3 V of the ribbon
     u = on("+3V3_BUS", "U")[0]
     ux, uy = 254.0, 76.2

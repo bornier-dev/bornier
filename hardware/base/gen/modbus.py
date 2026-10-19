@@ -132,16 +132,16 @@ def modbus(prj):
 
     # connector
     j = next(r for r in on("MB_A", "J") if c.by_ref()[r]["value"] == "MODBUS")
-    jx, jy = xe + 12.7, ay + 2.54
-    s.place(j, jx, jy, ref_at=(jx - 2.54, jy - 8.89), val_at=(jx - 2.54, jy + 10.16))
-    s.w("MB_A", (xe, ay), s.P(j, 1))
-    s.w("MB_B", (xe, by), s.P(j, 2))
-    g3 = s.P(j, 3)
-    s.w("GNDISO", g3, (g3[0] - 5.08, g3[1]))
-    s.power("GNDISO", g3[0] - 5.08, g3[1], 270, show=False)
-    g4 = s.P(j, 4)
-    s.w("CHASSIS", g4, (g4[0] - 7.62, g4[1]))
-    s.glabel("CHASSIS", g4[0] - 7.62, g4[1], 180, "passive")
+    jx, jy = xe + 12.7, ay - 2.54          # poles 3 and 4 (A, B) in line with the transceiver rows
+    s.place(j, jx, jy, ref_at=(jx - 2.54, jy - 11.43), val_at=(jx - 2.54, jy + 12.7))
+    s.w("MB_A", (xe, ay), s.P(j, 3))
+    s.w("MB_B", (xe, by), s.P(j, 4))
+    g2 = s.P(j, 2)
+    s.w("GNDISO", g2, (g2[0] - 2.54, g2[1]))
+    s.power("GNDISO", g2[0] - 2.54, g2[1], 270, show=False)
+    g1 = s.P(j, 1)
+    s.w("CHASSIS", g1, (g1[0] - 2.54, g1[1]), (g1[0] - 2.54, g1[1] - 5.08))
+    s.glabel("CHASSIS", g1[0] - 2.54, g1[1] - 5.08, 90, "passive")
     # HF return of the isolated side to the chassis, for the PSM712
     ch = next(r for r in on("GNDISO", "C") if "CHASSIS" in c.by_ref()[r]["pins"].values())
     hx, hy = jx - 17.78, jy + 17.78
