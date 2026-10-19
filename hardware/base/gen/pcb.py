@@ -7,12 +7,13 @@ Run with the Python shipped with KiCad:
 Reads the netlist of ../kicad/base.kicad_sch (run schematic.py first), writes ../kicad/base.kicad_pcb and
 the DRC rules of the profile, ../kicad/base.kicad_dru.
 
-Mechanics: Phoenix UM-BASIC 72 profile, board at the top level L1 (housing kit UM-BASIC-KIT-B72-L150-7035).
-The board rests on the profile walls: nothing rises above its long edges, which carry every connector. The
-end elements clamp the short edges: 3.1 mm without parts at each end on the top side, and 3.1 mm without
-parts or pads all around on the bottom side, where the board rests on the walls. A C-LOCK L1 in the
-middle holds the board down through a keyhole cutout. Coordinates in mm, origin at the top left corner,
-x along the board, y across it; edge A (y = 0) and edge B (y = 72) are the long edges.
+Mechanics: Phoenix UM-BASIC 108 profile, board 107.5 x 150 mm at the top level L1 (housing kit
+UM-BASIC-KIT-B108-L150-7035), or screwed onto a panel through four M3 holes at the corners. The board rests
+on the profile walls: nothing rises above its long edges, which carry every edge connector. The end
+elements clamp the short edges: 3.1 mm without parts at each end on the top side, and 3.1 mm without parts
+or leads all around on the bottom side, where the board rests on the walls. A C-LOCK L1 in the middle holds
+the board down through a keyhole cutout. Coordinates in mm, origin at the top left corner, x along the
+board, y across it; edge A (y = 0) and edge B (y = H) are the long edges.
 """
 import math
 import os
@@ -31,23 +32,30 @@ STD_FP = r"C:/Program Files/KiCad/10.0/share/kicad/footprints"
 LOCAL_FP = {"Bornier": os.path.join(HERE, "..", "..", "lib", "footprints", "Bornier.pretty")}
 MM = pcbnew.FromMM
 
-W, H = 150.0, 72.0            # UM-BASIC 72, kit L150
+W, H = 150.0, 107.5           # UM-BASIC 108, kit L150
 END_KEEP = 3.1                # top side, both short ends: clamped by the end elements
 RIM_KEEP = 3.1                # bottom side, whole perimeter: rests on the profile walls
-CLOCK = (75.0, 36.0)          # C-LOCK L1: keyhole cutout, 11 mm without parts on both sides
+CLOCK = (W / 2, H / 2)        # C-LOCK L1: keyhole cutout, 11 mm without parts on both sides
 CLOCK_KEEP = 5.5
 
 # Connectors on the long edges, left to right, found by value. Edge A: one dual RJ45 per axis (drive
 # port A, encoder port B), axes 0 to 3, at a pitch that keeps 0.8 mm between the shield leg holes of two
-# jacks. Edge B: EtherCAT IN and OUT, USB, terminal blocks, POWER at the right end.
+# jacks. Edge B: EtherCAT IN and OUT, terminal blocks, POWER at the right end. The USB jack is vertical
+# and sits next to the MCU.
 AXIS_JACK = "HC-WK88-H132-1X2-55B"
 PITCH_A = 33.0
-EDGE_B = ["HY911105AE IN", "HY911105AE OUT", "USB micro-B", "MODBUS", "SPINDLE A", "SPINDLE B", "ESTOP | PROBE",
-          "POWER"]
+EDGE_B = ["HY911105AE IN", "HY911105AE OUT", "MODBUS", "SPINDLE A", "SPINDLE B", "ESTOP | PROBE", "POWER"]
 GAP_B = 1.0                   # between groups on edge B
-# M3 holes. Edge A side: the holes of the Phoenix PE contacts (6.1 mm from the ends, 5.8 mm from the
-# edge), H1 plated on CHASSIS; edge B side: behind the connector row, which fills the edge.
-HOLES = {"H1": (143.9, 5.8), "H4": (6.1, 5.8), "H2": (4.0, 46.0), "H3": (146.0, 57.5)}
+# M3 holes at the corners, 4.5 mm from both edges, clear of the connector rows; H1, plated on CHASSIS,
+# next to POWER.
+HOLES = {"H1": (W - 4.5, H - 4.5), "H2": (4.5, H - 4.5), "H3": (4.5, 4.5), "H4": (W - 4.5, 4.5)}
+# PE contact (Phoenix UM-BASIC/PRO PE CONTACT L1): plated hole H5, 6.1 mm from the end and 30.2 mm from the
+# centre line (position of the Phoenix sample board), at the POWER end on the edge B side. The contact runs
+# under the board toward the DIN rail: no lead or bottom part over its body (12.4 to 33.2 mm from the centre
+# line, 3.0 to 9.0 mm from the end).
+PE_HOLE = (W - 6.1, H / 2 + 30.2)
+PE_BODY = (W - 9.0, H / 2 + 12.4, W - 3.0, H / 2 + 33.2)
+HOLES["H5"] = PE_HOLE
 
 
 def vec(x, y):
@@ -174,7 +182,7 @@ def circle(x, y, r, n=36):
 
 
 DRC_RULES = """(version 1)
-# Written by gen/pcb.py: Phoenix UM-BASIC 72 profile, board at level L1. The areas are drawn by pcb.py;
+# Written by gen/pcb.py: Phoenix UM-BASIC 108 profile, board at level L1. The areas are drawn by pcb.py;
 # the mounting holes H* are not parts and may sit in them.
 (rule "end elements: no part on the top side at the short edges"
 	(condition "A.Type == 'Footprint' && A.Layer == 'F.Cu' && A.intersectsArea('profile end element') && A.Reference != 'H*'")
@@ -198,6 +206,8 @@ def keepouts(board):
                  [(0, 0), (RIM_KEEP, 0), (RIM_KEEP, H), (0, H)], [(W - RIM_KEEP, 0), (W, 0), (W, H), (W - RIM_KEEP, H)]):
         rule_area(board, poly, [B], "profile wall", footprints=False)
     rule_area(board, circle(*CLOCK, CLOCK_KEEP), [F, B], "C-LOCK")
+    x0, y0, x1, y1 = PE_BODY
+    rule_area(board, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], [B], "profile wall", footprints=False)
 
 
 def connectors(fps, comps):
@@ -215,11 +225,7 @@ def connectors(fps, comps):
     x = (W - sum(widths) - GAP_B * (len(EDGE_B) - 1)) / 2
     for ref, w in zip(edge_b, widths):
         left, _, right, bottom = ext[ref]
-        # USB: 2.15 mm behind the edge line of the footprint (2.75), receptacle front 0.6 mm inside the board
-        # edge, so that the pads of its front shield legs (y = 1.3) clear the 3.1 mm rim on the profile wall
-        front = 4.9 if fps[ref].GetFPID().GetLibItemName() == "USB_Micro-B_Amphenol_10118194-0001LF_Horizontal" \
-            else bottom
-        place(fps[ref], x - left, H - front, 0)
+        place(fps[ref], x - left, H - bottom, 0)
         x += w + GAP_B
     return edge_a + edge_b
 
@@ -261,6 +267,7 @@ def main():
     fixed = set(connectors(fps, comps)) | set(HOLES)
     for ref, (x, y) in HOLES.items():
         place(fps[ref], x, y, 0)
+        fps[ref].Reference().SetVisible(False)          # no silkscreen: it would fall off the board edge
     # Not placed yet: parked in a grid to the right of the board
     for k, ref in enumerate(r for r in sorted(fps) if r not in fixed):
         place(fps[ref], W + 20 + 8 * (k % 40), 5 + 8 * (k // 40), 0)

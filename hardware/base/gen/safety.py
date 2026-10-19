@@ -109,17 +109,18 @@ def safety(prj):
     s.text("CHASSIS: shields of the RJ45 and of the Modbus cable. Functional earth on pin 3 (FE) of the supply\n"
            "terminal block J1; 1 nF 2 kV to 0 V at each connector row (C37 at the EtherCAT ports).", 30.48, 165.1)
     xs, ys = 50.8, 190.5
-    s.w("CHASSIS", (xs, ys), (xs + 50.8, ys))
+    s.w("CHASSIS", (xs, ys), (xs + 66.04, ys))
     s.glabel("CHASSIS", xs, ys, 180, "passive")
     for k, ref in enumerate(("C301", "C302")):
         x = xs + 25.4 + 12.7 * k
         vr(s, ref, x, ys)
         s.rail("GND", *s.P(ref, 2))
-    # mounting holes: H1 plated on CHASSIS, H2-H4 bare
+    # mounting holes: H1 and H5 plated on CHASSIS, H2-H4 bare
     s.place("H1", xs + 50.8, ys - 2.54, ref_at=(xs + 53.34, ys - 6.35), val_at=(xs + 53.34, ys - 3.81))
+    s.place("H5", xs + 66.04, ys - 2.54, ref_at=(xs + 68.58, ys - 6.35), val_at=(xs + 68.58, ys - 3.81))
     for k, h in enumerate(("H2", "H3", "H4")):
-        x = xs + 71.12 + 12.7 * k
+        x = xs + 91.44 + 12.7 * k
         s.place(h, x, ys - 2.54, ref_at=(x + 2.54, ys - 6.35), val_at=(x + 2.54, ys - 3.81))
     s.text("H1-H4: M3 holes at the corners, for screws and standoffs on a panel instead of the DIN rail\n"
-           "profile; clear of the profile grooves along the long edges. H1 is plated: the screw earths\n"
-           "CHASSIS to the panel. Place it at the corner nearest to J1.", xs + 25.4, ys + 17.78)
+           "profile. H1 is plated: the screw earths CHASSIS to the panel. H5: plated hole for the Phoenix\n"
+           "PE contact (UM-BASIC/PRO PE CONTACT L1), which earths CHASSIS to the DIN rail.", xs + 25.4, ys + 17.78)

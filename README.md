@@ -51,10 +51,11 @@ The STM32H523 footprint takes any STM32H5 in LQFP-100 (H523, H533, H562, H563) w
 change. The board is meant to be fed by a dedicated supply in the same cabinet; the
 simulation of the input stage and its limits is in [`hardware/base/sim/`](hardware/base/sim/README.md).
 
-The board is 72 × 150 mm. It mounts on a DIN rail in a Phoenix Contact UM-BASIC 72 profile
-(housing kit UM-BASIC-KIT-B72-L150-7035), resting on the profile walls at the top level, or
-screws onto a panel through four M3 holes, one of them plated to earth the board. Every connector
-sits on a long edge: the profile closes the short ones.
+The board is 107.5 × 150 mm. It mounts on a DIN rail in a Phoenix Contact UM-BASIC 108 profile
+(housing kit UM-BASIC-KIT-B108-L150-7035), resting on the profile walls at the top level, or
+screws onto a panel through four M3 holes at the corners, one of them plated to earth the board.
+A plated hole takes the Phoenix PE contact, which earths the board to the DIN rail. Every edge
+connector sits on a long edge: the profile closes the short ones; the USB jack is vertical.
 
 ## Repository layout
 

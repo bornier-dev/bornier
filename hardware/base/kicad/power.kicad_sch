@@ -21679,7 +21679,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Connector_USB:USB_Micro-B_Amphenol_10118194-0001LF_Horizontal"
+		(property "Footprint" "Connector_USB:USB_Micro-B_Molex-105133-0001"
 			(at 30.48 144.78 0)
 			(effects
 				(font
@@ -21699,7 +21699,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Molex 105133-0001, vertical: the plug comes from above, so the jack sits next to the MCU, away from the edges that the DIN rail profile holds"
 			(at 30.48 144.78 0)
 			(effects
 				(font
@@ -21709,7 +21709,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C132563"
+		(property "LCSC" "C782257"
 			(at 30.48 144.78 0)
 			(effects
 				(font

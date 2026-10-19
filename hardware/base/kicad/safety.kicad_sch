@@ -20535,16 +20535,16 @@
 		)
 	)
 	(symbol
-		(lib_id "Mechanical:MountingHole")
-		(at 121.92 187.96 0)
+		(lib_id "Mechanical:MountingHole_Pad")
+		(at 116.84 187.96 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "2e69d3f8-8135-5166-8f03-c10e2659532c")
-		(property "Reference" "H2"
-			(at 124.46 184.15 0)
+		(uuid "0711732f-1f7f-5bcb-a02f-d26f97d1551d")
+		(property "Reference" "H5"
+			(at 119.38 184.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20552,8 +20552,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "M3"
-			(at 124.46 186.69 0)
+		(property "Value" "PE CONTACT"
+			(at 119.38 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20561,8 +20561,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
-			(at 121.92 187.96 0)
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3_Pad"
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20572,7 +20572,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 121.92 187.96 0)
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20581,8 +20581,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Non-plated M3 hole"
-			(at 121.92 187.96 0)
+		(property "Description" "Plated hole for the Phoenix UM-BASIC/PRO PE CONTACT L1 (2202025), screwed under the board: earths CHASSIS to the DIN rail"
+			(at 116.84 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20592,7 +20592,86 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 121.92 187.96 0)
+			(at 116.84 187.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "55e6596c-c7c7-5ee0-a61f-85e99c94dcf6")
+		)
+		(instances
+			(project "base"
+				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/81b88da5-ff71-55f8-baa9-0128adc1edb3"
+					(reference "H5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 142.24 187.96 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "2e69d3f8-8135-5166-8f03-c10e2659532c")
+		(property "Reference" "H2"
+			(at 144.78 184.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M3"
+			(at 144.78 186.69 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
+			(at 142.24 187.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 142.24 187.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Description" "Non-plated M3 hole"
+			(at 142.24 187.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "LCSC" ""
+			(at 142.24 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20612,7 +20691,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 134.62 187.96 0)
+		(at 154.94 187.96 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -20620,7 +20699,7 @@
 		(dnp no)
 		(uuid "1579b891-825b-5402-bd1e-76b3297485af")
 		(property "Reference" "H3"
-			(at 137.16 184.15 0)
+			(at 157.48 184.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20629,7 +20708,7 @@
 			)
 		)
 		(property "Value" "M3"
-			(at 137.16 186.69 0)
+			(at 157.48 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20638,7 +20717,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
-			(at 134.62 187.96 0)
+			(at 154.94 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20648,7 +20727,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 134.62 187.96 0)
+			(at 154.94 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20658,7 +20737,7 @@
 			)
 		)
 		(property "Description" "Non-plated M3 hole"
-			(at 134.62 187.96 0)
+			(at 154.94 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20668,7 +20747,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 134.62 187.96 0)
+			(at 154.94 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20688,7 +20767,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 147.32 187.96 0)
+		(at 167.64 187.96 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -20696,7 +20775,7 @@
 		(dnp no)
 		(uuid "70addf50-9a0c-5541-b5ef-c73c8ce16aee")
 		(property "Reference" "H4"
-			(at 149.86 184.15 0)
+			(at 170.18 184.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20705,7 +20784,7 @@
 			)
 		)
 		(property "Value" "M3"
-			(at 149.86 186.69 0)
+			(at 170.18 186.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20714,7 +20793,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_3.2mm_M3"
-			(at 147.32 187.96 0)
+			(at 167.64 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20724,7 +20803,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 147.32 187.96 0)
+			(at 167.64 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20734,7 +20813,7 @@
 			)
 		)
 		(property "Description" "Non-plated M3 hole"
-			(at 147.32 187.96 0)
+			(at 167.64 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20744,7 +20823,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 147.32 187.96 0)
+			(at 167.64 187.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20762,7 +20841,7 @@
 			)
 		)
 	)
-	(text "H1-H4: M3 holes at the corners, for screws and standoffs on a panel instead of the DIN rail\nprofile; clear of the profile grooves along the long edges. H1 is plated: the screw earths\nCHASSIS to the panel. Place it at the corner nearest to J1."
+	(text "H1-H4: M3 holes at the corners, for screws and standoffs on a panel instead of the DIN rail\nprofile. H1 is plated: the screw earths CHASSIS to the panel. H5: plated hole for the Phoenix\nPE contact (UM-BASIC/PRO PE CONTACT L1), which earths CHASSIS to the DIN rail."
 		(exclude_from_sim no)
 		(at 76.2 208.28 0)
 		(effects
@@ -21121,6 +21200,17 @@
 	)
 	(wire
 		(pts
+			(xy 101.6 190.5)
+			(xy 116.84 190.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b41ad2ec-28b6-5503-8cbf-e2f15fe2e489")
+	)
+	(wire
+		(pts
 			(xy 76.2 198.12)
 			(xy 76.2 200.66)
 		)
@@ -21152,6 +21242,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "8596083a-b491-5770-9fa0-35489200277d")
+	)
+	(junction
+		(at 101.6 190.5)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "99379ff6-2f20-5da1-9a17-7fb7dfd2ec81")
 	)
 	(junction
 		(at 105.41 83.82)

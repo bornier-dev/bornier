@@ -97,8 +97,10 @@ c.C("C312", "100nF", "COMPY", "GND")
 # --------------------------------------------------------------------------------------------
 c.block("USB micro-B: bench power and DFU")
 c.part("J2", "Connector:USB_B_Micro", "USB micro-B",
-       "Connector_USB:USB_Micro-B_Amphenol_10118194-0001LF_Horizontal", "C132563",
-       {1: "VBUS", 2: "USB_DM", 3: "USB_DP", 5: "GND", "SH": "GND"})
+       "Connector_USB:USB_Micro-B_Molex-105133-0001", "C782257",
+       {1: "VBUS", 2: "USB_DM", 3: "USB_DP", 5: "GND", "SH": "GND"},
+       "Molex 105133-0001, vertical: the plug comes from above, so the jack sits next to the MCU, away from the "
+       "edges that the DIN rail profile holds")
 c.part("U2", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
        {1: "USB_DP", 2: "USB_DM", 4: "VBUS", 3: "GND", 8: "GND"},
        "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines")
@@ -247,6 +249,9 @@ c.part("H1", "Mechanical:MountingHole_Pad", "M3 CHASSIS", "MountingHole:Mounting
        {1: "CHASSIS"}, "Plated M3 hole, nearest corner to the POWER terminal block (FE pole)")
 for h in ("H2", "H3", "H4"):
     c.part(h, "Mechanical:MountingHole", "M3", "MountingHole:MountingHole_3.2mm_M3", "", {}, "Non-plated M3 hole")
+c.part("H5", "Mechanical:MountingHole_Pad", "PE CONTACT", "MountingHole:MountingHole_3.2mm_M3_Pad", "",
+       {1: "CHASSIS"}, "Plated hole for the Phoenix UM-BASIC/PRO PE CONTACT L1 (2202025), screwed under the board: "
+       "earths CHASSIS to the DIN rail")
 
 # --------------------------------------------------------------------------------------------
 c.block("Test points")
