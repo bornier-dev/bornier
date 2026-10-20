@@ -67,7 +67,7 @@ HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
-SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined by a straight track on layer 1
+SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined on layer 1 without a via
 COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
 # Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
 # +VIN to the supply jumpers of the four encoders: 4 x 0.6 A at most; 1 mm outer copper, 2.4 A at 10 degC
@@ -581,9 +581,18 @@ def mst(points):
     return edges
 
 
+def bends(a, b):
+    """Ways from a to b on one layer: straight, then an L, then a 45 degree bend at either end."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    k = min(abs(dx), abs(dy))
+    sx, sy = math.copysign(k, dx), math.copysign(k, dy)
+    return [[a, b], [a, (a[0], b[1]), b], [a, (b[0], a[1]), b],
+            [a, (a[0] + sx, a[1] + sy), b], [a, (b[0] - sx, b[1] - sy), b]]
+
+
 def short():
     """Pads facing each other: every edge of the spanning tree of a net without a plane, up to SHORT_MAX
-    long, as a straight track on layer 1 when it clears everything else."""
+    long, as a track on layer 1 (straight, else with one bend) when it clears everything else."""
     board = start("short")
     cu = Copper(board)
     planed = {"GND", "GNDISO", *SUPPLY_PLANES}
@@ -594,17 +603,25 @@ def short():
             if n and not n.startswith("unconnected-") and n not in planed and p.IsOnLayer(pcbnew.F_Cu):
                 pads[n].append(xy(p.GetPosition()))
     edges = sorted((d, n, pts[i], pts[j]) for n, pts in pads.items() for i, j, d in mst(pts))
-    laid = 0
+    laid, bent, blocked = 0, 0, []
     for d, n, a, b in edges:
         if d > SHORT_MAX:
             break
         width = project.CLASSES[project.class_of(n)][0]
-        if cu.track_ok(n, a, b, width, cu.near(a, b, width + 1.0), True):
-            cu.add_track(n, a, b, width, pcbnew.F_Cu)
-            laid += 1
+        path = next((p for p in bends(a, b) if all(cu.track_ok(n, u, v, width, cu.near(u, v, width + 1.0), True)
+                                                   for u, v in zip(p, p[1:]))), None)
+        if not path:
+            blocked.append(n)
+            continue
+        for u, v in zip(path, path[1:]):
+            if math.dist(u, v) > 1e-3:
+                cu.add_track(n, u, v, width, pcbnew.F_Cu)
+        laid += 1
+        bent += len(path) > 2
     print("short pass: spanning tree edges up to " + ", ".join(
         f"{m} mm {sum(1 for e in edges if e[0] <= m)}" for m in (1, 2, 3, 4, 5)) + f" (of {len(edges)})", flush=True)
-    print(f"   up to {SHORT_MAX} mm: {laid} laid, {sum(1 for e in edges if e[0] <= SHORT_MAX) - laid} blocked", flush=True)
+    print(f"   up to {SHORT_MAX} mm: {laid} laid ({bent} with a bend), {len(blocked)} blocked: {' '.join(blocked)}",
+          flush=True)
     project.save(board, PCB)
 
 
