@@ -637,7 +637,7 @@ def rail(name):
 def power(passes):
     board = start("power")
     stand_ins = chassis_stand_ins(board)
-    keep = {str(n) for n in board.GetNetsByName().keys() if project.class_of(str(n)) != "Default"}
+    keep = {str(n) for n in board.GetNetsByName().keys() if project.class_of(str(n)) in POWER_CLASSES}
     print(f"power pass: {len(keep)} nets", flush=True)
     freerouting(board, keep, passes)
     for t in list(board.GetTracks()):
@@ -656,7 +656,7 @@ def report(rpt):
     print(f"violations: {len(d['violations'])}, unconnected: {len(d['unconnected_items'])}, "
           f"parity: {len(d['schematic_parity'])}")
     print("   by type:", ", ".join(f"{t} {k}" for t, k in collections.Counter(v["type"] for v in d["violations"]).most_common()))
-    print("   power nets unrouted:", ", ".join(f"{n} {k}" for n, k in nets.most_common() if project.class_of(n) != "Default"))
+    print("   power nets unrouted:", ", ".join(f"{n} {k}" for n, k in nets.most_common() if project.class_of(n) in POWER_CLASSES))
     for v in d["violations"]:
         if not v["type"].startswith("silk"):
             print("  ", v["type"], " / ".join(i["description"][:60] for i in v["items"]))

@@ -29,7 +29,12 @@ CLASSES = {
     "Limited": (0.25, 0.1, 0.4, 0.2),    # current-limited supplies, 0.6 A at most: 0.9 A
     "Ground": (0.25, 0.1, 0.4, 0.2),     # stubs to the layer 2 plane, 0.9 A
     "Chassis": (0.5, 1.0, 0.8, 0.4),     # connector shields, FE, plated hole H1
+    # differential pairs, gap 0.15 mm (PAIR_GAP), layer 1 over the ground plane: sim/impedance.py
+    "Ethernet": (0.2, 0.15, 0.4, 0.2),   # 100 ohm (100.8 computed)
+    "USB": (0.265, 0.15, 0.4, 0.2),      # 90 ohm (90.4 computed)
 }
+PAIR_GAP = 0.15
+PAIR_KEEP = 0.3     # pair router: other copper this far from a pair, about 3 W (the DRC keeps the class clearance)
 # Board minimums, mm: JLCPCB multilayer at no extra cost
 RULES = {"min_track_width": 0.1, "min_clearance": 0.1, "min_via_diameter": 0.4, "min_through_hole_diameter": 0.2,
          "min_via_annular_width": 0.1}
@@ -40,6 +45,8 @@ PATTERNS = {
     "Limited": ["+VIN_OUT", "*/VSD", "*/VENC", "*/VSEL", "/Local bus/+3V3_BUS", "/Modbus/VISO"],
     "Ground": ["GND", "GNDISO"],
     "Chassis": ["CHASSIS"],
+    "Ethernet": [f"/ESC/{d}{p}{port}" for d in ("TX", "RX") for p in "PN" for port in "AB"],
+    "USB": ["USB_DP", "USB_DM"],
 }
 
 
