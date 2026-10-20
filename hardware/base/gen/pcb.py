@@ -366,7 +366,8 @@ KEY = {
     "SW1": (41.5, 51.5, 90),                        # BOOT
     "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
     "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
-    "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 74.0, 0),   # 5 V buck
+    "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 76.0, 0),   # 5 V buck
+    "C5": (142.5, 69.6, 0),                         # 5 V output capacitor, against the output of L1
     "U11": (AXIS_X[1] - 5.5, 36.0, 90), "U16": (AXIS_X[3] - 5.5, 36.0, 90),   # step/dir drivers, two axes each
 }
 for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
