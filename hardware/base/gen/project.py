@@ -7,8 +7,9 @@ map, severities, sheets) go, and the net classes fall back to the default one. s
 
 Widths from the currents of the rails (IPC-2221, outer copper 1 oz, 10 degC rise); the bulk of the
 current flows in the planes of layers 2 (GND) and 3 (supplies), so the rail tracks are short stubs.
-Clearances: 0.15 mm for signals up to 30 V (IPC-2221 B2, uncoated external: 0.1 mm), 1 mm between the
-chassis and everything else (ESD on the connector shields). Freerouting reads the classes, not the
+Clearances: 0.1 mm for signals up to 30 V (IPC-2221 B2, uncoated external: 0.1 mm), the JLCPCB
+multilayer minimum at no extra cost, as are the 0.4/0.2 mm vias; 1 mm between the chassis and everything
+else (ESD on the connector shields). Freerouting reads the classes, not the
 .kicad_dru: every clearance it must keep is here.
 """
 import copy
@@ -21,16 +22,21 @@ MM = pcbnew.FromMM
 
 CLASSES = {
     # name: (track width, clearance, via diameter, via drill), mm
-    "Default": (0.2, 0.15, 0.6, 0.3),
+    "Default": (0.1, 0.1, 0.4, 0.2),     # 0.45 A
     "Input": (1.5, 0.2, 0.8, 0.4),       # 3.5 A, fuse rating: plug to fuse, fuse to reverse diode
-    "Rail": (0.5, 0.2, 0.6, 0.3),        # +VIN, +5V, +3V3 stubs to their plane; buck nodes
-    "Limited": (0.4, 0.2, 0.6, 0.3),     # current-limited supplies, 0.6 A at most
-    "Ground": (0.4, 0.2, 0.6, 0.3),      # stubs to the layer 2 plane
-    "Chassis": (1.0, 1.0, 0.8, 0.4),     # connector shields, FE, plated hole H1
+    "Rail": (0.25, 0.1, 0.4, 0.2),       # +VIN, +5V, +3V3 stubs to their plane, 0.9 A
+    "Buck": (0.4, 0.15, 0.4, 0.2),       # buck nodes, 1 A: 1.2 A
+    "Limited": (0.25, 0.1, 0.4, 0.2),    # current-limited supplies, 0.6 A at most: 0.9 A
+    "Ground": (0.25, 0.1, 0.4, 0.2),     # stubs to the layer 2 plane, 0.9 A
+    "Chassis": (0.5, 1.0, 0.8, 0.4),     # connector shields, FE, plated hole H1
 }
+# Board minimums, mm: JLCPCB multilayer at no extra cost
+RULES = {"min_track_width": 0.1, "min_clearance": 0.1, "min_via_diameter": 0.4, "min_through_hole_diameter": 0.2,
+         "min_via_annular_width": 0.1}
 PATTERNS = {
     "Input": ["/Power/VIN_RAW", "/Power/VIN_F"],
-    "Rail": ["+VIN", "+5V", "+3V3", "/Power/V3IN", "/Power/SW5", "/Power/SW3", "/Power/VBUS"],
+    "Rail": ["+VIN", "+5V", "+3V3"],
+    "Buck": ["/Power/V3IN", "/Power/SW5", "/Power/SW3", "/Power/VBUS"],
     "Limited": ["+VIN_OUT", "*/VSD", "*/VENC", "*/VSEL", "/Local bus/+3V3_BUS", "/Modbus/VISO"],
     "Ground": ["GND", "GNDISO"],
     "Chassis": ["CHASSIS"],
@@ -74,6 +80,7 @@ def save(board, path):
     for key in ("erc", "schematic", "sheets"):
         if key in before:
             after[key] = before[key]
+    after["board"]["design_settings"]["rules"].update(RULES)
     ns = after["net_settings"]
     default = next(c for c in ns["classes"] if c["name"] == "Default")
     classes = []

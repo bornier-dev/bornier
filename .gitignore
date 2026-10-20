@@ -25,3 +25,9 @@ fp-info-cache
 
 # Downloaded tools (Freerouting jar, see hardware/base/gen/route.py)
 hardware/tools/
+
+# Routing passes: one board per pass, and the Freerouting and DRC exchange files (hardware/base/gen/route.py)
+hardware/base/kicad/stages/
+*.dsn
+*.ses
+*-drc.json

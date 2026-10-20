@@ -17,6 +17,7 @@ board, y across it; edge A (y = 0) and edge B (y = H) are the long edges.
 """
 import math
 import os
+import shutil
 import subprocess
 import sys
 
@@ -30,6 +31,7 @@ sys.path.insert(0, HERE)
 import project  # noqa: E402
 
 KICAD = os.path.join(HERE, "..", "kicad")
+STAGES = os.path.join(KICAD, "stages")      # one board per routing pass, not versioned (route.py)
 STD_FP = footprint_dir()
 LOCAL_FP = {"Bornier": os.path.join(HERE, "..", "..", "lib", "footprints", "Bornier.pretty")}
 MM = pcbnew.FromMM
@@ -334,6 +336,7 @@ def connectors(fps, comps):
 # zones of that sheet.
 HE10_Y = H / 2
 AXIS_X = [21.5, 55.0, 88.5, 118.0, 146.5]           # column boundaries, axes 0 to 3: the first two are shallower
+BARRIER_Y = 84.0            # Modbus isolation: the axis of U38, bus side below toward J13, 1 mm each side
 AXIS = [[(AXIS_X[k], 15.0, AXIS_X[k + 1], 58.0 if k > 1 else 47.0)] for k in range(4)]
 AXIS[0].append((END_KEEP, 15.0, AXIS_X[0], HE10_Y - 26.0))   # above the header
 AXIS[1].append((80.5, 47.0, AXIS_X[2], 59.5))                # right of the C-LOCK
@@ -344,7 +347,8 @@ ZONES = {
     "/ESC/": [(21.0, 47.5, 44.0, 87.5)],
     "/Clock/": [(21.0, 47.5, 69.0, 87.5)],
     "/MCU/": [(44.0, 47.5, 69.5, 76.0), (69.5, 59.5, 81.0, 76.0)],
-    "/Modbus/": [(36.0, 76.0, 67.0, 96.5)],
+    "/Modbus/": [(36.0, 76.0, 67.0, BARRIER_Y - 1.0)],
+    "/Modbus/ bus side": [(36.0, BARRIER_Y + 1.0, 67.0, 96.5)],
     "/Spindle/": [(67.0, 76.0, 98.0, 96.5)],
     "/Safety/": [(98.0, 76.0, 123.5, 96.5)],
     "/Drive supply and probe/": [(98.0, 76.0, 123.5, 96.5), (81.0, 59.5, 104.0, 76.0)],
@@ -360,7 +364,7 @@ KEY = {
     "J2": (78.5, 67.0, 0),                          # micro-B, next to the USB pins of the MCU
     "J5": (69.5, 73.0, 0),                          # Tag-Connect, at the SWD corner
     "SW1": (41.5, 51.5, 90),                        # BOOT
-    "U38": (55.5, 86.0, 270),                       # Modbus: bus side toward J13
+    "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
     "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
     "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 74.0, 0),   # 5 V buck
     "U11": (AXIS_X[1] - 5.5, 36.0, 90), "U16": (AXIS_X[3] - 5.5, 36.0, 90),   # step/dir drivers, two axes each
@@ -471,9 +475,10 @@ def free(rects, occ):
     return True
 
 
-def auto_place(fps, placed):
+def auto_place(fps, placed, iso):
     """Place each remaining part as close as possible to the pin it serves, inside its zone, without overlap."""
     occ = [r for fp in placed.values() for r in occupied(fp)]
+    bus = ZONES["/Modbus/ bus side"][0]
     def area(r):
         x0, y0, x1, y1 = courtyard(fps[r])
         return (x1 - x0) * (y1 - y0)
@@ -492,6 +497,11 @@ def auto_place(fps, placed):
                     continue
                 _, net, ax, ay, ar, apin = a
                 shapes = [(rot, *shape_at_origin(fp, rot)) for rot in (0, 90, 180, 270)]
+                # the isolation barrier: bus side parts below it, all the others off the bus side
+                mine = nets_of(fp) - {"CHASSIS"}
+                on_bus = fp.GetSheetname() == "/Modbus/" and mine and mine <= iso
+                sheet = "/Modbus/ bus side" if on_bus else fp.GetSheetname()
+                barred = [] if on_bus else [(bus[0], BARRIER_Y, bus[2], bus[3])]
 
                 def find(offsets, zones, tx, ty, air=0.0, limit=math.inf):
                     """First free spot along the offsets, the part grown by `air` on every side."""
@@ -503,15 +513,15 @@ def auto_place(fps, placed):
                             dx, dy = tx - px + ox, ty - py + oy
                             moved = [(x0 + dx, y0 + dy, x1 + dx, y1 + dy) for x0, y0, x1, y1 in rects]
                             if inside(moved, zones) and free([(x0 - air, y0 - air, x1 + air, y1 + air)
-                                                              for x0, y0, x1, y1 in moved], occ):
+                                                              for x0, y0, x1, y1 in moved], occ + barred):
                                 return dx, dy, rot, moved, math.hypot(ox, oy)
                     return None
 
                 spot = None
                 # the zone of the sheet, then the zone grown into its neighbours when it is full
                 for grow, offsets in ((0.0, OFFSETS), (4.0, OFFSETS_FAR), (8.0, OFFSETS_FAR), (12.0, OFFSETS_FAR)):
-                    zones = [(x0 - grow, y0 - grow, x1 + grow, y1 + grow)
-                             for x0, y0, x1, y1 in ZONES.get(fp.GetSheetname(), [(0, 0, W, H)])]
+                    zones = [(x0 - grow, max(y0 - grow, bus[1]) if on_bus else y0 - grow, x1 + grow, y1 + grow)
+                             for x0, y0, x1, y1 in ZONES.get(sheet, [(0, 0, W, H)])]
                     # a pin of another block: aim at the nearest point of the zone
                     z = min(zones, key=lambda z: math.dist((ax, ay), (min(max(ax, z[0]), z[2]), min(max(ay, z[1]), z[3]))))
                     tx, ty = min(max(ax, z[0]), z[2]), min(max(ay, z[1]), z[3])
@@ -577,7 +587,7 @@ def main():
         fps[ref].Reference().SetVisible(False)          # no silkscreen: it would fall off the board edge
     for ref, (x, y, rot) in KEY.items():
         place_centred(fps[ref], x, y, rot)
-    failed = auto_place(fps, {ref: fps[ref] for ref in fixed | set(KEY)})
+    failed = auto_place(fps, {ref: fps[ref] for ref in fixed | set(KEY)}, set(iso_nets(fps)))
 
     out = os.path.join(KICAD, "base.kicad_pcb")
     board.SetFileName(out)
@@ -590,6 +600,8 @@ def main():
         iso = iso_nets(fps)
         f.write(BARRIER_RULE.format(iso_a=" || ".join(f"A.NetName == '{n}'" for n in iso),
                                     iso_b=" || ".join(f"B.NetName == '{n}'" for n in iso)))
+    os.makedirs(STAGES, exist_ok=True)
+    shutil.copyfile(out, os.path.join(STAGES, "0-placed.kicad_pcb"))     # the start of the routing passes
     print(f"{len(fps)} footprints, {len(nets)} nets -> {out}")
     if failed:
         raise SystemExit(f"{len(failed)} parts not placed:\n  " + "\n  ".join(failed))
