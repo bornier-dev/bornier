@@ -67,6 +67,7 @@ HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
+PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, left out of the short pass
 SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined on layer 1 without a via
 COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
 # Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
@@ -600,7 +601,8 @@ def short():
     for fp in board.GetFootprints():
         for p in fp.Pads():
             n = p.GetNetname()
-            if n and not n.startswith("unconnected-") and n not in planed and p.IsOnLayer(pcbnew.F_Cu):
+            if (n and not n.startswith("unconnected-") and n not in planed and p.IsOnLayer(pcbnew.F_Cu)
+                    and not re.fullmatch(PAIRS, n)):
                 pads[n].append(xy(p.GetPosition()))
     edges = sorted((d, n, pts[i], pts[j]) for n, pts in pads.items() for i, j, d in mst(pts))
     laid, bent, blocked = 0, 0, []

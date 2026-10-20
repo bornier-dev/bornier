@@ -16,6 +16,7 @@ the board down through a keyhole cutout. Coordinates in mm, origin at the top le
 board, y across it; edge A (y = 0) and edge B (y = H) are the long edges.
 """
 import math
+import re
 import os
 import shutil
 import subprocess
@@ -367,6 +368,7 @@ KEY = {
     "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
     "JP5": (55.0, 93.3, 90),                        # Modbus termination, between U38 and J13
     "D66": (64.5, 93.5, 0),                         # Modbus line protection, facing the A/B pins of J13
+    "X1": (45.5, 81.5, 0),                          # 25 MHz: 8 mm from the clock input of the ESC, its series resistors at its output
     # encoder supply jumpers, +VIN pin up toward the layer 4 trunk above the axes, +5V pin down over its plane
     "JP1": (5.7, 22.35, 180), "JP2": (79.2, 20.25, 180), "JP3": (114.7, 24.25, 180), "JP4": (142.1, 31.3, 180),
     "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
@@ -377,6 +379,7 @@ KEY = {
 for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
     KEY[ref] = (max(JACK_X[k] - 4.0, AXIS_X[k] + 6.0), 38.0, 90)
 # Nets that do not locate a part: a capacitor on them goes to a power pin of an IC of its sheet.
+ETH_LINE = r"/ESC/(TX|RX)[PN][AB]"     # the four Ethernet pairs, PHY to magjack
 POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "GNDISO", "/Modbus/VISO", "/Local bus/+3V3_BUS"}
 # Protection parts go against the connector, not against the circuit they protect.
 PROTECT = {"TPD4E05U06DQAR", "SMBJ33CA", "SMF15A", "PSM712-LF-T7"}
@@ -448,6 +451,8 @@ def anchor_of(ref, fp, placed, used):
                 if step in (1, 3) and n in signal:
                     # protections and ICs that serve a connector: first, before the passives take the room
                     rk = 0 if (protect or ref[0] == "U") and r.startswith("J") else rank(r) if step == 1 else 6
+                    if r.startswith("X"):
+                        rk = -1     # an oscillator: its series resistors stand at its output
                     key = (rk, 0, r, p.GetNumber())
                 elif step == 2 and not signal and n in supply:
                     key = (rank(r), used.get((r, p.GetNumber()), 0), r, p.GetNumber())
@@ -491,6 +496,14 @@ def auto_place(fps, placed, iso):
     def decoupling(r):
         return r.startswith("C") and nets_of(fps[r]) <= POWER_NETS
 
+    def termination(r):
+        """A resistor on an Ethernet line: it belongs on the way of its pair, at the PHY pins."""
+        return r.startswith("R") and any(re.fullmatch(ETH_LINE, n) for n in nets_of(fps[r]))
+
+    def first(r):
+        """Placed in the first phase: ICs, oscillators, and the passives that must stand against their pins."""
+        return r[0] in "UX" or decoupling(r) or termination(r)
+
     def waits(r):
         """A decoupling capacitor waits for every IC of its sheet on its supply: it goes against one of them."""
         mine = nets_of(fps[r]) - {"GND", "GNDISO"}
@@ -500,15 +513,15 @@ def auto_place(fps, placed, iso):
     # decoupling capacitors first, against their pins; then bulky parts: small passives fit in the gaps
     todo = sorted((r for r in fps if r not in placed), key=lambda r: (not decoupling(r), -area(r), r))
     used, failed = {}, []
-    # first the ICs and their decoupling capacitors only, then the rest: the capacitors get the room next to
-    # the pins before the other passives anchored to the same ICs take it
+    # first the ICs, the oscillators, their decoupling capacitors and the Ethernet terminations only, then the
+    # rest: they get the room next to the pins before the other passives anchored to the same ICs take it
     for phase, rk in [(0, k) for k in range(7)] + [(1, k) for k in range(7)]:
         progress = True
         while progress:
             progress = False
             for ref in list(todo):
                 fp = fps[ref]
-                if phase == 0 and not (ref.startswith("U") or decoupling(ref)):
+                if phase == 0 and not first(ref):
                     continue
                 if decoupling(ref) and waits(ref):
                     continue
@@ -550,7 +563,7 @@ def auto_place(fps, placed, iso):
                     if spot:
                         # spread the parts: a spot with routing room around the part, if it is barely farther;
                         # not a decoupling capacitor, it stays against its pin
-                        if not decoupling(ref):
+                        if not (decoupling(ref) or termination(ref)):
                             spot = find(offsets, zones, tx, ty, AIR - GAP, spot[4] + AIR_SLACK) or spot
                         break
                 if not spot:
