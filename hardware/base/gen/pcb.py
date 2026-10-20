@@ -377,6 +377,11 @@ KEY = {
     "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
     "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 76.0, 0),   # 5 V buck
     "C5": (142.5, 69.6, 0),                         # 5 V output capacitor, against the output of L1
+    # 3.3 V buck, after the TPS62A02 layout example: inductor against SW, input capacitor across the VIN pins,
+    # output capacitors at the output of the inductor, feedback divider on the FB side, away from SW
+    "U3": (135.5, 83.6, 0), "L2": (132.1, 83.6, 180), "C9": (135.5, 86.05, 180),
+    "C10": (129.0, 83.6, 90), "C300": (131.6, 86.4, 0), "R10": (137.7, 83.6, 90), "R9": (139.0, 83.6, 270),
+    "D4": (130.4, 78.3, 180), "TP7": (125.3, 78.25, 0),
     "U11": (AXIS_X[1] - 5.5, 36.0, 90), "U16": (AXIS_X[3] - 5.5, 36.0, 90),   # step/dir drivers, two axes each
 }
 for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers

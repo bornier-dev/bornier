@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: CERN-OHL-W-2.0
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
-"""Base board routing, in passes: power first, then fast signals, then slow signals.
+"""Base board routing, in passes: planes and trunks, differential pairs, supplies, short links, fast signals,
+then the rest.
 
 Run with the Python shipped with KiCad, after pcb.py:
-    "C:/Program Files/KiCad/10.0/bin/python.exe" route.py <pass>      gnd, 3v3, 5v, vin, power [Freerouting passes]
+    "C:/Program Files/KiCad/10.0/bin/python.exe" route.py <pass> [Freerouting passes]      the passes of PASSES
     ... route.py back <pass>       the working board back to the end of that pass
     ... route.py report            zone fill and DRC of the working board
 Each pass starts from the stage written by the one before (../kicad/stages/, not versioned; pcb.py writes
@@ -16,9 +17,11 @@ Stack-up (JLC04161H-7628, 1.6 mm): L1 parts and signals, L2 ground plane (one is
 the Modbus port), L3 supply planes (+5V under the axes, +3V3 under the MCU, ESC and bus, +VIN at the
 power entry), L4 signals and a chassis band along the edges.
 
-Pass "gnd": the planes, then a stub and a via of its own from every surface pad of GND and GNDISO down
-to layer 2. Passes "3v3", "5v", "vin": the same for each supply, one at a time, down to its plane of layer 3, where
-the pad lies over it. Pass "power": Freerouting on the supply, ground and chassis nets left.
+Pass "trunk": the planes, and the wide tracks of TRUNKS. Pass "pairs": the differential pairs (pairs.py).
+Pass "gnd": a stub and a via of its own from every surface pad of GND and GNDISO down to layer 2. Passes
+"vin", "5v", "3v3", "phy": the same for each supply, one at a time, down to its plane of layer 3, the pads off
+their plane linked on layer 4. Pass "short": pads up to SHORT_MAX apart joined on layer 1. Passes "fast" and
+"signals": Freerouting on the clock and OCTOSPI, then on every net left but the chassis.
 """
 import collections
 import glob
@@ -50,8 +53,11 @@ W, H, EDGE = pcb.W, pcb.H, pcb.END_KEEP
 # around the 5 V buck input and down to the power entry.
 SUPPLY_PLANES = {
     "+5V": [(EDGE, 14.0, W - EDGE, 47.0), (131.5, 47.0, W - EDGE, 70.0)],
-    "+3V3": [(EDGE, 47.5, 131.0, 58.0), (EDGE, 58.0, 112.0, 71.0), (EDGE, 71.0, 123.0, H - EDGE)],
-    "+VIN": [(112.5, 58.5, 131.0, 70.5), (123.5, 70.5, W - EDGE, H - EDGE)],
+    # the last +3V3 rectangle: under the 3.3 V buck, a notch in the +VIN plane, which goes around it
+    "+3V3": [(EDGE, 47.5, 131.0, 58.0), (EDGE, 58.0, 112.0, 71.0), (EDGE, 71.0, 123.0, H - EDGE),
+             (123.0, 81.0, 137.5, 87.8)],
+    "+VIN": [(112.5, 58.5, 131.0, 70.5), (123.5, 70.5, W - EDGE, 80.5), (138.0, 80.5, W - EDGE, H - EDGE),
+             (123.5, 88.3, 138.0, H - EDGE)],
 }
 CHASSIS_BAND = 3.0          # layer 4, along the edges: the part-free rim where the board rests on the profile
 ISO_MARGIN = 1.0            # around the bus side of the Modbus port: the isolation barrier
@@ -59,7 +65,7 @@ POWER_CLASSES = {"Input", "Rail", "Buck", "Limited", "Ground", "Chassis"}
 # Passes, in order: each starts from the stage written by the one before (pcb.py writes "placed")
 RAILS = {"3v3": "+3V3", "5v": "+5V", "vin": "+VIN"}
 # The supplies that carry current first: the thin links of the later ones route around their tracks
-PASSES = ["placed", "trunk", "pairs", "gnd", "vin", "5v", "3v3", "phy", "short", "fast", "signals"]
+PASSES = ["placed", "trunk", "pairs", "gnd", "vin", "5v", "3v3", "phy", "short", "fast", "signals", "chassis"]
 SURFACE = (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN)   # surface pads, with or without paste
 # Mini-planes of the PHY supplies (LAN9253 checklist): net: the PHY; on layer 3, under the pads of the net on
 # the jack side of the PHY, cut into the +3V3 plane
@@ -175,24 +181,6 @@ def hull(pts):
     return half(pts) + half(pts[::-1])
 
 
-def chassis_stand_ins(board):
-    """Locked tracks that stand for the chassis band while Freerouting runs (it does not see zones on
-    signal layers); returns their UUIDs."""
-    stand_ins = []
-    c = CHASSIS_BAND / 2
-    for a, b in (((c, c), (W - c, c)), ((W - c, c), (W - c, H - c)), ((W - c, H - c), (c, H - c)), ((c, H - c), (c, c))):
-        t = pcbnew.PCB_TRACK(board)
-        t.SetStart(pcbnew.VECTOR2I(MM(a[0]), MM(a[1])))
-        t.SetEnd(pcbnew.VECTOR2I(MM(b[0]), MM(b[1])))
-        t.SetWidth(MM(CHASSIS_BAND))
-        t.SetLayer(pcbnew.B_Cu)
-        t.SetNet(board.FindNet("CHASSIS"))
-        t.SetLocked(True)
-        board.Add(t)
-        stand_ins.append(t.m_Uuid.AsString())
-    return stand_ins
-
-
 def grow(r, d):
     return r[0] - d, r[1] - d, r[2] + d, r[3] + d
 
@@ -238,20 +226,23 @@ def keep_nets(dsn, keep):
     return "".join(out)
 
 
-def freerouting(board, keep, passes):
+def freerouting(board, keep, passes, band_keepout=True):
     """Freerouting on the nets of `keep`, everything already on the board fixed; the new tracks and vias of
     these nets added to the board, locked. Not ImportSpecctraSES: it clears every track of the board first,
     and the nets left out of the DSN would lose theirs. Returns (tracks, vias) added."""
     dsn, ses = PCB.replace(".kicad_pcb", ".dsn"), PCB.replace(".kicad_pcb", ".ses")
     if not pcbnew.ExportSpecctraDSN(board, dsn):
         raise SystemExit("DSN export failed")
-    # the chassis in the network too, for its 1 mm clearance; what Freerouting routes on it is not taken
-    text = keep_nets(open(dsn, encoding="utf-8").read(), set(keep) | {"CHASSIS"})
+    # every net stays in the network: Freerouting drops the tracks of a net it does not know, and would cross
+    # them; it routes them all, only the nets of `keep` are taken back
+    text = open(dsn, encoding="utf-8").read()
     # the chassis band of layer 4 is a zone, which Freerouting does not see on a signal layer: keepouts
+    # (the chassis pass gives it as locked tracks instead, for the chassis to reach)
     u = 1000.0                      # DSN units: um, y up
     band = "".join(f"    (keepout (rect B.Cu {x0 * u:.0f} {-y1 * u:.0f} {x1 * u:.0f} {-y0 * u:.0f}))\n"
                    for x0, y0, x1, y1 in ((0, 0, W, CHASSIS_BAND + 0.5), (0, H - CHASSIS_BAND - 0.5, W, H),
-                                          (0, 0, CHASSIS_BAND + 0.5, H), (W - CHASSIS_BAND - 0.5, 0, W, H)))
+                                          (0, 0, CHASSIS_BAND + 0.5, H), (W - CHASSIS_BAND - 0.5, 0, W, H))
+                   ) if band_keepout else ""
     if "  (structure\n" not in text:
         raise SystemExit("DSN without a structure section")
     text = text.replace("  (structure\n", "  (structure\n" + band, 1)
@@ -260,6 +251,8 @@ def freerouting(board, keep, passes):
     text = re.sub(r'(\(padstack "Via\[0-3\]_\d+:\d+_um".*?\(attach)',
                   lambda m: re.sub(r'\(circle (\S+) (\d+)', lambda c: f"(circle {c.group(1)} {int(c.group(2)) + VIA_GROW}",
                                    m.group(1)), text, flags=re.S)
+    text = widen_pads(text, board)
+    text = isolate(text, board)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
     if os.path.exists(ses):
         os.remove(ses)
@@ -267,12 +260,73 @@ def freerouting(board, keep, passes):
     flags = subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
     r = subprocess.run([JAVA, "-Xmx1g", "-XX:+UseSerialGC", "-jar", JAR, "-de", dsn, "-do", ses, "-mp", str(passes),
                         "--router.fanout.enabled=false", "--gui.enabled=false"],
-                       capture_output=True, text=True, timeout=3600, creationflags=flags)
+                       capture_output=True, text=True, timeout=4 * 3600, creationflags=flags)
     log = (r.stdout + r.stderr).strip().splitlines()
     print("\n".join(log[-3:]), flush=True)
     if not os.path.exists(ses):
         raise SystemExit("Freerouting gave no result")
     return import_ses(board, ses, keep)
+
+
+def widen_pads(text, board):
+    """Footprints with a clearance of their own (the SO-4 optocouplers: 0.2 mm), which Freerouting does not
+    read: their pads drawn wider by the difference with the default clearance, in their image only."""
+    default = project.CLASSES["Default"][1]
+    wide = {}
+    for fp in board.GetFootprints():
+        c = fp.GetLocalClearance()
+        if c and mm(c) > default + 1e-6:
+            wide[fp.GetFPIDAsString()] = round((mm(c) - default) * 1000)
+    extra = []
+    # an image per footprint, and one more (name::1, ::2) for each instance whose pads differ
+    images = [(m.group(1), wide[m.group(2)]) for m in re.finditer(r'\(image "?(([^"\n]+?)(?:::\d+)?)"?\n', text)
+              if m.group(2) in wide]
+    for image, d in images:
+        m = re.search(r'\(image "?' + re.escape(image) + r'"?\n(.*?)\n    \)', text, re.S)
+        names = set(re.findall(r'\(pin (\S+)', m.group(1)))
+        body = m.group(1)
+        for n in names:
+            w = f"{n}_wide{d}"
+            body = re.sub(r'\(pin ' + re.escape(n) + r'(\s)', f"(pin {w}\\1", body)
+            pad = re.search(r'\(padstack ' + re.escape(n) + r'\n(.*?)\n    \)', text, re.S)
+            if pad and w not in "".join(extra):
+                shape = re.sub(r'\(rect (\S+) (-?\d+) (-?\d+) (-?\d+) (-?\d+)\)',
+                               lambda r: f"(rect {r.group(1)} {int(r.group(2)) - d} {int(r.group(3)) - d} "
+                                         f"{int(r.group(4)) + d} {int(r.group(5)) + d})", pad.group(1))
+                shape = re.sub(r'\(circle (\S+) (\d+)', lambda c: f"(circle {c.group(1)} {int(c.group(2)) + 2 * d}", shape)
+                extra.append(f"    (padstack {w}\n{shape}\n    )\n")
+        text = text[:m.start(1)] + body + text[m.end(1):]
+    if extra:
+        k = text.index("    (padstack ")
+        text = text[:k] + "".join(extra) + text[k:]
+    return text
+
+
+def isolate(text, board):
+    """The Modbus isolation barrier, which Freerouting does not read from the .kicad_dru: the nets of the bus
+    side in a class of their own, 1 mm from every other class."""
+    iso = set(pcb.iso_nets({fp.GetReference(): fp for fp in board.GetFootprints()}))
+    found = []
+    classes = []
+
+    def strip(m):
+        names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s"]+)', m.group(2))]
+        found.extend(n for n in names if n in iso)
+        rest = [n for n in names if n not in iso]
+        classes.append(m.group(1))
+        return f"(class {m.group(1)} " + " ".join(f'"{n}"' for n in rest)
+
+    text = re.sub(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', strip, text)
+    if not found:
+        return text
+    rules = f'    (class Isolated {" ".join(chr(34) + n + chr(34) for n in sorted(set(found)))}\n' \
+            f'      (circuit\n        (use_via "Via[0-3]_400:200_um")\n      )\n' \
+            f'      (rule\n        (width 250)\n        (clearance {round(project.CLASSES["Default"][1] * 1000)})\n      )\n    )\n'
+    for c in classes:
+        rules += f"    (class_class\n      (classes Isolated {c})\n      (rule\n        (clearance {round(ISO_MARGIN * 1000)})\n      )\n    )\n"
+    k = text.index("\n  (wiring")
+    end = text.rindex("  )", 0, k)
+    return text[:end] + rules + text[end:]
 
 
 def import_ses(board, ses, keep):
@@ -712,18 +766,21 @@ def short():
     cu = Copper(board)
     planed = {"GND", "GNDISO", *SUPPLY_PLANES, *PHY_ISLANDS}
     pads = collections.defaultdict(list)
+    narrow = {}
     for fp in board.GetFootprints():
         for p in fp.Pads():
             n = p.GetNetname()
             if (n and not n.startswith("unconnected-") and n not in planed and p.IsOnLayer(pcbnew.F_Cu)
                     and not re.fullmatch(PAIRS, n)):
                 pads[n].append(xy(p.GetPosition()))
+                narrow[n, xy(p.GetPosition())] = mm(min(p.GetSize(pcbnew.F_Cu).x, p.GetSize(pcbnew.F_Cu).y))
     edges = sorted((d, n, pts[i], pts[j]) for n, pts in pads.items() for i, j, d in mst(pts))
     laid, bent, blocked = 0, 0, []
     for d, n, a, b in edges:
         if d > SHORT_MAX:
             break
-        width = project.CLASSES[project.class_of(n)][0]
+        # no wider than the narrower pad: a wide class necks down to the pins of a fine-pitch part
+        width = min(project.CLASSES[project.class_of(n)][0], math.floor(min(narrow[n, a], narrow[n, b]) * 100) / 100 - 0.01)
         path = next((p for p in bends(a, b) if all(cu.track_ok(n, u, v, width, cu.near(u, v, width + 1.0), True)
                                                    for u, v in zip(p, p[1:]))), None)
         if not path:
@@ -745,18 +802,6 @@ def rail(name):
     board = start(name)
     net = RAILS[name]
     fanout_pass(board, name, {net})
-    project.save(board, PCB)
-
-
-def power(passes):
-    board = start("power")
-    stand_ins = chassis_stand_ins(board)
-    keep = {str(n) for n in board.GetNetsByName().keys() if project.class_of(str(n)) in POWER_CLASSES}
-    print(f"power pass: {len(keep)} nets", flush=True)
-    freerouting(board, keep, passes)
-    for t in list(board.GetTracks()):
-        if t.m_Uuid.AsString() in stand_ins:
-            board.Remove(t)
     project.save(board, PCB)
 
 
@@ -819,6 +864,26 @@ def main():
                     and not re.fullmatch(PAIRS, n)}
         tracks, vias = freerouting(board, nets, int(sys.argv[2]) if len(sys.argv) > 2 else 4)
         print(f"{step} pass: {len(nets)} nets, {tracks} track(s) and {vias} via(s) added", flush=True)
+        project.save(board, PCB)
+    elif step == "chassis":
+        # the band of layer 4 as locked tracks of the chassis while Freerouting runs, for its pads to reach
+        board = start(step)
+        c, ids = CHASSIS_BAND / 2, []
+        ring = [(c, c), (W - c, c), (W - c, H - c), (c, H - c), (c, c)]
+        for a, b in zip(ring, ring[1:]):
+            t = pcbnew.PCB_TRACK(board)
+            t.SetStart(vec(a))
+            t.SetEnd(vec(b))
+            t.SetWidth(MM(CHASSIS_BAND))
+            t.SetLayer(pcbnew.B_Cu)
+            t.SetNet(board.FindNet("CHASSIS"))
+            t.SetLocked(True)
+            board.Add(t)
+            ids.append(t.m_Uuid.AsString())
+        tracks, vias = freerouting(board, {"CHASSIS"}, int(sys.argv[2]) if len(sys.argv) > 2 else 4, band_keepout=False)
+        for t in [t for t in board.GetTracks() if t.m_Uuid.AsString() in ids]:
+            board.Remove(t)
+        print(f"chassis pass: {tracks} track(s) and {vias} via(s) added", flush=True)
         project.save(board, PCB)
     else:
         raise SystemExit(f"unknown pass: {step}")
