@@ -348,7 +348,7 @@ ZONES = {
     "/Clock/": [(21.0, 47.5, 69.0, 87.5)],
     "/MCU/": [(44.0, 47.5, 69.5, 76.0), (69.5, 59.5, 81.0, 76.0)],
     "/Modbus/": [(36.0, 76.0, 67.0, BARRIER_Y - 1.0)],
-    "/Modbus/ bus side": [(36.0, BARRIER_Y + 1.0, 67.0, 96.5)],
+    "/Modbus/ bus side": [(36.0, BARRIER_Y + 1.0, 70.0, 96.5)],    # 3 mm into the spindle block: J4 and U38 take the rest
     "/Spindle/": [(67.0, 76.0, 98.0, 96.5)],
     "/Safety/": [(98.0, 76.0, 123.5, 96.5)],
     "/Drive supply and probe/": [(98.0, 76.0, 123.5, 96.5), (81.0, 59.5, 104.0, 76.0)],
@@ -365,6 +365,8 @@ KEY = {
     "J5": (69.5, 73.0, 0),                          # Tag-Connect, at the SWD corner
     "SW1": (41.5, 51.5, 90),                        # BOOT
     "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
+    "JP5": (55.0, 93.3, 90),                        # Modbus termination, between U38 and J13
+    "D66": (64.5, 93.5, 0),                         # Modbus line protection, facing the A/B pins of J13
     "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
     "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 76.0, 0),   # 5 V buck
     "C5": (142.5, 69.6, 0),                         # 5 V output capacitor, against the output of L1
@@ -373,7 +375,7 @@ KEY = {
 for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
     KEY[ref] = (max(JACK_X[k] - 4.0, AXIS_X[k] + 6.0), 38.0, 90)
 # Nets that do not locate a part: a capacitor on them goes to a power pin of an IC of its sheet.
-POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "/Modbus/GNDISO"}
+POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "GNDISO", "/Modbus/VISO", "/Local bus/+3V3_BUS"}
 # Protection parts go against the connector, not against the circuit they protect.
 PROTECT = {"TPD4E05U06DQAR", "SMBJ33CA", "SMF15A", "PSM712-LF-T7"}
 RANK = {"U": 0, "Q": 1, "D": 2, "L": 2, "F": 2, "R": 3, "C": 3, "J": 4, "S": 5}
@@ -484,15 +486,30 @@ def auto_place(fps, placed, iso):
         x0, y0, x1, y1 = courtyard(fps[r])
         return (x1 - x0) * (y1 - y0)
 
-    # bulky parts first: small passives fit in the gaps they leave
-    todo = sorted((r for r in fps if r not in placed), key=lambda r: (-area(r), r))
+    def decoupling(r):
+        return r.startswith("C") and nets_of(fps[r]) <= POWER_NETS
+
+    def waits(r):
+        """A decoupling capacitor waits for every IC of its sheet on its supply: it goes against one of them."""
+        mine = nets_of(fps[r]) - {"GND", "GNDISO"}
+        return any(q not in placed and q.startswith("U") and f.GetSheetname() == fps[r].GetSheetname()
+                   and nets_of(f) & mine for q, f in fps.items())
+
+    # decoupling capacitors first, against their pins; then bulky parts: small passives fit in the gaps
+    todo = sorted((r for r in fps if r not in placed), key=lambda r: (not decoupling(r), -area(r), r))
     used, failed = {}, []
-    for rk in range(7):
+    # first the ICs and their decoupling capacitors only, then the rest: the capacitors get the room next to
+    # the pins before the other passives anchored to the same ICs take it
+    for phase, rk in [(0, k) for k in range(7)] + [(1, k) for k in range(7)]:
         progress = True
         while progress:
             progress = False
             for ref in list(todo):
                 fp = fps[ref]
+                if phase == 0 and not (ref.startswith("U") or decoupling(ref)):
+                    continue
+                if decoupling(ref) and waits(ref):
+                    continue
                 a = anchor_of(ref, fp, placed, used)
                 if a is None or a[0][0] > rk:
                     continue
@@ -521,15 +538,18 @@ def auto_place(fps, placed, iso):
                 spot = None
                 # the zone of the sheet, then the zone grown into its neighbours when it is full
                 for grow, offsets in ((0.0, OFFSETS), (4.0, OFFSETS_FAR), (8.0, OFFSETS_FAR), (12.0, OFFSETS_FAR)):
-                    zones = [(x0 - grow, max(y0 - grow, bus[1]) if on_bus else y0 - grow, x1 + grow, y1 + grow)
-                             for x0, y0, x1, y1 in ZONES.get(sheet, [(0, 0, W, H)])]
+                    zones = [(x0 - grow, y0 - grow, x1 + grow, y1 + grow) for x0, y0, x1, y1 in ZONES.get(sheet, [(0, 0, W, H)])]
+                    if on_bus:          # the bus side does not grow: its parts would carry the isolated ground away
+                        zones = ZONES[sheet]
                     # a pin of another block: aim at the nearest point of the zone
                     z = min(zones, key=lambda z: math.dist((ax, ay), (min(max(ax, z[0]), z[2]), min(max(ay, z[1]), z[3]))))
                     tx, ty = min(max(ax, z[0]), z[2]), min(max(ay, z[1]), z[3])
                     spot = find(offsets, zones, tx, ty)
                     if spot:
-                        # spread the parts: a spot with routing room around the part, if it is barely farther
-                        spot = find(offsets, zones, tx, ty, AIR - GAP, spot[4] + AIR_SLACK) or spot
+                        # spread the parts: a spot with routing room around the part, if it is barely farther;
+                        # not a decoupling capacitor, it stays against its pin
+                        if not decoupling(ref):
+                            spot = find(offsets, zones, tx, ty, AIR - GAP, spot[4] + AIR_SLACK) or spot
                         break
                 if not spot:
                     # parked to the right of the board, and reported

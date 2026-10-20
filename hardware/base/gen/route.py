@@ -44,11 +44,12 @@ mm = pcbnew.ToMM
 W, H, EDGE = pcb.W, pcb.H, pcb.END_KEEP
 
 # Layer 3 supply planes, (x0, y0, x1, y1): 0.5 mm between planes of different nets.
-# Each plane reaches the output of its regulator: +5V down to L1 and C5, +3V3 over the 3.3 V buck and the
-# logic of the safety and drive supply blocks, +VIN around the 5 V buck input and down to the power entry.
+# Each plane reaches the output of its regulator: +5V from L1 and C5 up the right edge to the axes, +3V3
+# from just under the axes over the 3.3 V buck and the logic of the safety and drive supply blocks, +VIN
+# around the 5 V buck input and down to the power entry.
 SUPPLY_PLANES = {
-    "+5V": [(EDGE, 14.0, W - EDGE, 47.0), (88.5, 47.0, W - EDGE, 58.0), (131.5, 58.0, W - EDGE, 70.0)],
-    "+3V3": [(EDGE, 47.5, 88.0, H - EDGE), (88.0, 58.5, 112.0, 71.0), (88.0, 71.0, 123.0, H - EDGE)],
+    "+5V": [(EDGE, 14.0, W - EDGE, 47.0), (131.5, 47.0, W - EDGE, 70.0)],
+    "+3V3": [(EDGE, 47.5, 131.0, 58.0), (EDGE, 58.0, 112.0, 71.0), (EDGE, 71.0, 123.0, H - EDGE)],
     "+VIN": [(112.5, 58.5, 131.0, 70.5), (123.5, 70.5, W - EDGE, H - EDGE)],
 }
 CHASSIS_BAND = 3.0          # layer 4, along the edges: the part-free rim where the board rests on the profile
@@ -65,6 +66,8 @@ HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
+NEW_VIA_COST = 1.0         # mm of track a new via is worth: an existing one is preferred at equal length
+VIA_PITCH = 1.0            # between vias of different nets: plane copper left between them, or a via cut off
 
 
 def rect_poly(x0, y0, x1, y1):
@@ -284,6 +287,8 @@ class Copper:
                 if o.pad and o.shape.Collide(via, MM(0.1)):
                     return False    # no via in a pad: the solder would flow down it
                 continue
+            if o.drill and not o.pad and math.dist(v, o.centre) < VIA_PITCH:
+                return False        # the planes would not reach it, or the other one
             if o.shape.Collide(via, MM(self.gap(net, o.net))):
                 return False
         return True
@@ -392,6 +397,9 @@ def link(cu, net, off):
     def path_ok(path):
         return all(cu.track_ok(net, p, q, width, cu.near(p, q, width + 1.0), False) for p, q in zip(path, path[1:]))
 
+    def length(path):
+        return sum(math.dist(p, q) for p, q in zip(path, path[1:]))
+
     def lay(path):
         for p, q in zip(path, path[1:]):
             if math.dist(p, q) > 1e-3:
@@ -402,26 +410,30 @@ def link(cu, net, off):
         progress = False
         todo.sort(key=lambda s: min((math.dist(s[1], t) for t in targets), default=math.inf))
         for name, a in list(todo):
-            done = None
+            best = None             # (track length, path, new via or None)
             for t in sorted(targets, key=lambda t: math.dist(a, t))[:LINK_TRIES]:
                 if math.dist(a, t) > LINK_REACH:
                     break
-                done = next((p for p in paths(a, t) if path_ok(p)), None)
-                if done:
+                p = next((p for p in paths(a, t) if path_ok(p)), None)
+                if p:
+                    best = (length(p), p, None)
                     break
-            if not done:
-                # a new via in the plane, the nearest reachable
-                for ox, oy in LINK_SPOTS:
-                    b = (a[0] + ox, a[1] + oy)
-                    if not cu.in_plane(net, b, r) or not cu.via_ok(net, b, r, cu.near(b, b, r + 1.0)):
-                        continue
-                    done = next((p for p in paths(a, b) if path_ok(p)), None)
-                    if done:
-                        cu.add_via(net, b, via_d, via_drill)
-                        targets.append(b)
-                        break
-            if done:
-                lay(done)
+            # a new via in the plane, the nearest reachable, when it makes the track shorter
+            for ox, oy in LINK_SPOTS:
+                if math.hypot(ox, oy) + NEW_VIA_COST >= (best[0] if best else LINK_REACH):
+                    break
+                b = (a[0] + ox, a[1] + oy)
+                if not cu.in_plane(net, b, r) or not cu.via_ok(net, b, r, cu.near(b, b, r + 1.0)):
+                    continue
+                p = next((p for p in paths(a, b) if path_ok(p)), None)
+                if p and length(p) + NEW_VIA_COST < (best[0] if best else math.inf):
+                    best = (length(p) + NEW_VIA_COST, p, b)
+                    break
+            if best:
+                if best[2]:
+                    cu.add_via(net, best[2], via_d, via_drill)
+                    targets.append(best[2])
+                lay(best[1])
                 targets.append(a)
                 todo.remove((name, a))
                 progress = True
