@@ -21,6 +21,7 @@ to layer 2. Passes "3v3", "5v", "vin": the same for each supply, one at a time, 
 the pad lies over it. Pass "power": Freerouting on the supply, ground and chassis nets left.
 """
 import collections
+import glob
 import math
 import os
 import re
@@ -37,7 +38,7 @@ import project  # noqa: E402
 from kicadgen.kicad import cli  # noqa: E402
 
 PCB = os.path.join(pcb.KICAD, "base.kicad_pcb")
-JAVA = os.environ.get("JAVA", "java")
+JAVA = os.environ.get("JAVA") or next(iter(sorted(glob.glob("C:/Program Files/Eclipse Adoptium/jre-2[5-9]*/bin/java.exe"))), "java")
 JAR = os.environ.get("FREEROUTING_JAR") or os.path.join(HERE, "..", "..", "tools", "freerouting-2.4.1.jar")
 MM = pcbnew.FromMM
 mm = pcbnew.ToMM
@@ -58,7 +59,7 @@ POWER_CLASSES = {"Input", "Rail", "Buck", "Limited", "Ground", "Chassis"}
 # Passes, in order: each starts from the stage written by the one before (pcb.py writes "placed")
 RAILS = {"3v3": "+3V3", "5v": "+5V", "vin": "+VIN"}
 # The supplies that carry current first: the thin links of the later ones route around their tracks
-PASSES = ["placed", "trunk", "pairs", "gnd", "vin", "5v", "3v3", "phy", "short", "power"]
+PASSES = ["placed", "trunk", "pairs", "gnd", "vin", "5v", "3v3", "phy", "short", "fast", "signals"]
 SURFACE = (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN)   # surface pads, with or without paste
 # Mini-planes of the PHY supplies (LAN9253 checklist): net: the PHY; on layer 3, under the pads of the net on
 # the jack side of the PHY, cut into the +3V3 plane
@@ -68,11 +69,14 @@ ZONE_GAP = 0.5              # zone to zone clearance (the KiCad default zone cle
 PLANE_INSET = 0.3           # a via stays this far inside the outline of its plane
 FANOUT_REACH = 2.5          # longest stub from a pad centre to its via
 FANOUT_EDGE = CHASSIS_BAND + 1.0    # vias stay off the chassis band and its clearance
+VIA_GROW = 100              # um added to the vias in the DSN (Freerouting keeps no hole clearance)
 HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
 PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, left out of the short pass
+# Pass "fast": the 25 MHz clock and the OCTOSPI between the ESC and the MCU, on both sides of their resistors
+FAST = r"(/Clock/)?CLK25(_ESC|_MCU)?|ESC_S(CK|CS|IO[0-3])|Net-\(U9-P(B2|B10|B1|B0|A7|A6)\)"
 SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined on layer 1 without a via
 COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
 # Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
@@ -224,31 +228,104 @@ def keep_nets(dsn, keep):
             if name in keep:
                 out.append(block)
         else:
-            head = re.match(r'\(class\s+(\S+)', block).group(1)
-            if head in POWER_CLASSES:
-                out.append(block)
+            # the class with its nets left out of the network dropped from its list; gone when none is left
+            head = re.match(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', block)
+            names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s"]+)', head.group(2))]
+            kept = [n for n in names if n in keep]
+            if kept:
+                out.append(f"(class {head.group(1)} " + " ".join(f'"{n}"' for n in kept) + block[head.end():])
         i = j + 1
     return "".join(out)
 
 
 def freerouting(board, keep, passes):
+    """Freerouting on the nets of `keep`, everything already on the board fixed; the new tracks and vias of
+    these nets added to the board, locked. Not ImportSpecctraSES: it clears every track of the board first,
+    and the nets left out of the DSN would lose theirs. Returns (tracks, vias) added."""
     dsn, ses = PCB.replace(".kicad_pcb", ".dsn"), PCB.replace(".kicad_pcb", ".ses")
     if not pcbnew.ExportSpecctraDSN(board, dsn):
         raise SystemExit("DSN export failed")
-    text = open(dsn, encoding="utf-8").read()
-    open(dsn, "w", encoding="utf-8", newline="\n").write(keep_nets(text, keep))
+    # the chassis in the network too, for its 1 mm clearance; what Freerouting routes on it is not taken
+    text = keep_nets(open(dsn, encoding="utf-8").read(), set(keep) | {"CHASSIS"})
+    # the chassis band of layer 4 is a zone, which Freerouting does not see on a signal layer: keepouts
+    u = 1000.0                      # DSN units: um, y up
+    band = "".join(f"    (keepout (rect B.Cu {x0 * u:.0f} {-y1 * u:.0f} {x1 * u:.0f} {-y0 * u:.0f}))\n"
+                   for x0, y0, x1, y1 in ((0, 0, W, CHASSIS_BAND + 0.5), (0, H - CHASSIS_BAND - 0.5, W, H),
+                                          (0, 0, CHASSIS_BAND + 0.5, H), (W - CHASSIS_BAND - 0.5, 0, W, H)))
+    if "  (structure\n" not in text:
+        raise SystemExit("DSN without a structure section")
+    text = text.replace("  (structure\n", "  (structure\n" + band, 1)
+    # Freerouting keeps copper to copper only; the board wants 0.25 mm from a hole to copper, 0.15 mm from the
+    # copper of a 0.4/0.2 via: its vias drawn 0.1 mm wider in the DSN, the real size kept in their name
+    text = re.sub(r'(\(padstack "Via\[0-3\]_\d+:\d+_um".*?\(attach)',
+                  lambda m: re.sub(r'\(circle (\S+) (\d+)', lambda c: f"(circle {c.group(1)} {int(c.group(2)) + VIA_GROW}",
+                                   m.group(1)), text, flags=re.S)
+    open(dsn, "w", encoding="utf-8", newline="\n").write(text)
     if os.path.exists(ses):
         os.remove(ses)
     # -Xmx1g and SerialGC: one core and 1 GB per JVM; low priority, the machine stays usable
     flags = subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
-    # fanout: a via next to each SMD pad of a plane net, before the routing passes
     r = subprocess.run([JAVA, "-Xmx1g", "-XX:+UseSerialGC", "-jar", JAR, "-de", dsn, "-do", ses, "-mp", str(passes),
-                        "--router.fanout.enabled=true", "--gui.enabled=false"],
+                        "--router.fanout.enabled=false", "--gui.enabled=false"],
                        capture_output=True, text=True, timeout=3600, creationflags=flags)
     log = (r.stdout + r.stderr).strip().splitlines()
-    print("\n".join([s for s in log if "Applied CLI" in s or "anout" in s][:10] + log[-6:]), flush=True)
-    if not os.path.exists(ses) or not pcbnew.ImportSpecctraSES(board, ses):
+    print("\n".join(log[-3:]), flush=True)
+    if not os.path.exists(ses):
         raise SystemExit("Freerouting gave no result")
+    return import_ses(board, ses, keep)
+
+
+def import_ses(board, ses, keep):
+    """The wires and vias of a Freerouting session for the nets of `keep` that the board does not have yet,
+    added locked. Returns (tracks, vias) added."""
+    text = open(ses, encoding="utf-8").read()
+    have = set()
+    for t in board.GetTracks():
+        a, b = (round(mm(t.GetStart().x), 3), round(mm(t.GetStart().y), 3)), (round(mm(t.GetEnd().x), 3), round(mm(t.GetEnd().y), 3))
+        have |= {(t.GetNetname(), a, b), (t.GetNetname(), b, a)}
+    k = 1e-4                        # session units: (resolution um 10), y up
+    added = [0, 0]
+    i = text.index("(network_out")
+    for m in re.finditer(r'\(net\s+("([^"]*)"|([^\s()]+))', text[i:]):
+        net = m.group(2) if m.group(2) is not None else m.group(3)
+        start = i + m.start()
+        end = text.find("\n      (net ", start + 5)
+        body = text[start:end if end > 0 else len(text)]
+        if net not in keep:
+            continue
+        ni = board.FindNet(net)
+        for w in re.finditer(r'\(path\s+(\S+)\s+(\d+)\s+([-\d\s]+)\)', body):
+            layer = board.GetLayerID(w.group(1))
+            width = int(w.group(2)) * k
+            xy_ = [int(v) for v in w.group(3).split()]
+            pts = [(xy_[n] * k, -xy_[n + 1] * k) for n in range(0, len(xy_), 2)]
+            for a, b in zip(pts, pts[1:]):
+                key = (net, (round(a[0], 3), round(a[1], 3)), (round(b[0], 3), round(b[1], 3)))
+                if key in have or math.dist(a, b) < 1e-4:
+                    continue
+                t = pcbnew.PCB_TRACK(board)
+                t.SetStart(vec(a))
+                t.SetEnd(vec(b))
+                t.SetWidth(MM(width))
+                t.SetLayer(layer)
+                t.SetNet(ni)
+                t.SetLocked(True)
+                board.Add(t)
+                added[0] += 1
+        for v in re.finditer(r'\(via\s+"Via\[0-3\]_(\d+):(\d+)_um"\s+(-?\d+)\s+(-?\d+)', body):
+            p = (int(v.group(3)) * k, -int(v.group(4)) * k)
+            key = (net, (round(p[0], 3), round(p[1], 3)), (round(p[0], 3), round(p[1], 3)))
+            if key in have:
+                continue
+            via = pcbnew.PCB_VIA(board)
+            via.SetPosition(vec(p))
+            via.SetWidth(MM(int(v.group(1)) / 1000))
+            via.SetDrill(MM(int(v.group(2)) / 1000))
+            via.SetNet(ni)
+            via.SetLocked(True)
+            board.Add(via)
+            added[1] += 1
+    return added
 
 
 def refill():
@@ -730,8 +807,19 @@ def main():
         board = start("pairs")
         pairs.run(board)
         project.save(board, PCB)
-    elif step == "power":
-        power(int(sys.argv[2]) if len(sys.argv) > 2 else 4)
+    elif step in ("fast", "signals"):
+        board = start(step)
+        names = {str(n) for n in board.GetNetsByName().keys()}
+        if step == "fast":
+            nets = {n for n in names if re.fullmatch(FAST, n)}
+        else:
+            # all the rest but the planes, the pairs and the chassis (its band is a zone of layer 4)
+            done = {"GND", "GNDISO", "CHASSIS", *SUPPLY_PLANES, *PHY_ISLANDS}
+            nets = {n for n in names if n and n not in done and not n.startswith("unconnected-")
+                    and not re.fullmatch(PAIRS, n)}
+        tracks, vias = freerouting(board, nets, int(sys.argv[2]) if len(sys.argv) > 2 else 4)
+        print(f"{step} pass: {len(nets)} nets, {tracks} track(s) and {vias} via(s) added", flush=True)
+        project.save(board, PCB)
     else:
         raise SystemExit(f"unknown pass: {step}")
     # a second LoadBoard fails in a process that has removed items: report from a fresh one
