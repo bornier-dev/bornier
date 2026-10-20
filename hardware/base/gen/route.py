@@ -57,7 +57,8 @@ ISO_MARGIN = 1.0            # around the bus side of the Modbus port: the isolat
 POWER_CLASSES = {"Input", "Rail", "Buck", "Limited", "Ground", "Chassis"}
 # Passes, in order: each starts from the stage written by the one before (pcb.py writes "placed")
 RAILS = {"3v3": "+3V3", "5v": "+5V", "vin": "+VIN"}
-PASSES = ["placed", "gnd", *RAILS, "power"]
+# The supplies that carry current first: the thin links of the later ones route around their tracks
+PASSES = ["placed", "trunk", "gnd", "vin", "5v", "3v3", "short", "power"]
 SURFACE = (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN)   # surface pads, with or without paste
 PLANE_INSET = 0.3           # a via stays this far inside the outline of its plane
 FANOUT_REACH = 2.5          # longest stub from a pad centre to its via
@@ -66,6 +67,14 @@ HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
+SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined by a straight track on layer 1
+COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
+# Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
+# +VIN to the supply jumpers of the four encoders: 4 x 0.6 A at most; 1 mm outer copper, 2.4 A at 10 degC
+# rise (IPC-2221), into the plane by two 0.8/0.4 mm vias.
+TRUNKS = {"+VIN": (1.0, 0.8, 0.4)}
+TRUNK_Y = (11.5, 16.0)     # layer 4 corridor of the trunks, the first clear line: under the jack leads, above the axes
+TRUNK_X = (135.0, W - FANOUT_EDGE)  # its way down to the plane, the first clear line from the right edge
 NEW_VIA_COST = 1.0         # mm of track a new via is worth: an existing one is preferred at equal length
 VIA_PITCH = 1.0            # between vias of different nets: plane copper left between them, or a via cut off
 
@@ -273,7 +282,7 @@ class Copper:
 
     def via_ok(self, net, v, r, near):
         """A via of radius r at v clear of the board edge, the C-LOCK, the copper of the other nets on every
-        layer, every hole and every pad."""
+        layer, every hole and every pad. Its hole is half its diameter (the via sizes of project.CLASSES)."""
         if not (FANOUT_EDGE + r <= v[0] <= W - FANOUT_EDGE - r and FANOUT_EDGE + r <= v[1] <= H - FANOUT_EDGE - r):
             return False
         if math.dist(v, pcb.CLOCK) < pcb.CLOCK_KEEP + r:
@@ -291,13 +300,16 @@ class Copper:
                 return False        # the planes would not reach it, or the other one
             if o.shape.Collide(via, MM(self.gap(net, o.net))):
                 return False
+            if not o.pad and o.shape.Collide(pcbnew.SHAPE_CIRCLE(vec(v), MM(r / 2)), MM(HOLE_GAP)):
+                return False        # its hole against the tracks of the other nets
         return True
 
     def track_ok(self, net, a, b, width, near, top):
         """A track from a to b on layer 1 (top) or 4, clear of the copper of the other nets on that layer and
         of the holes of the other nets."""
+        e = COPPER_EDGE + width / 2 if top else FANOUT_EDGE
         for p in (a, b):
-            if not (FANOUT_EDGE <= p[0] <= W - FANOUT_EDGE and FANOUT_EDGE <= p[1] <= H - FANOUT_EDGE):
+            if not (e <= p[0] <= W - e and e <= p[1] <= H - e):
                 return False
         if seg_dist(pcb.CLOCK, a, b) < pcb.CLOCK_KEEP + width / 2:
             return False
@@ -387,8 +399,9 @@ def link(cu, net, off):
     """Tracks on layer 4 from each via off its plane to a via of the net in the plane, an existing one or a
     new one, in an L or straight; the vias linked serve the next ones. Returns the vias left unlinked."""
     width, _, via_d, via_drill = project.CLASSES[project.class_of(net)]
-    r = via_d / 2
+    reach = LINK_REACH
     targets = [o.centre for o in cu.items if o.net == net and o.drill and not o.pad and cu.in_plane(net, o.centre, o.reach)]
+    r = via_d / 2
 
     def paths(a, b):
         # horizontal and vertical first: a diagonal across layer 4 would block its signals
@@ -412,7 +425,7 @@ def link(cu, net, off):
         for name, a in list(todo):
             best = None             # (track length, path, new via or None)
             for t in sorted(targets, key=lambda t: math.dist(a, t))[:LINK_TRIES]:
-                if math.dist(a, t) > LINK_REACH:
+                if math.dist(a, t) > reach:
                     break
                 p = next((p for p in paths(a, t) if path_ok(p)), None)
                 if p:
@@ -420,7 +433,7 @@ def link(cu, net, off):
                     break
             # a new via in the plane, the nearest reachable, when it makes the track shorter
             for ox, oy in LINK_SPOTS:
-                if math.hypot(ox, oy) + NEW_VIA_COST >= (best[0] if best else LINK_REACH):
+                if math.hypot(ox, oy) + NEW_VIA_COST >= (best[0] if best else reach):
                     break
                 b = (a[0] + ox, a[1] + oy)
                 if not cu.in_plane(net, b, r) or not cu.via_ok(net, b, r, cu.near(b, b, r + 1.0)):
@@ -478,7 +491,7 @@ def start(name):
 
 
 def fanout_pass(board, name, nets):
-    """Fanout of `nets`, then the vias off their plane linked on layer 4."""
+    """Fanout of `nets`, then the vias off their plane linked on layer 4. Returns the copper."""
     cu = Copper(board)
     left, off = fanout(cu, nets)
     unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net])]
@@ -486,20 +499,120 @@ def fanout_pass(board, name, nets):
           f"{len(unlinked)} left unlinked", flush=True)
     for s in left + unlinked:
         print("  ", s)
-    project.save(board, PCB)
+    return cu
 
+
+def trunks():
+    """The planes, then the wide tracks of TRUNKS, before any via: the fanouts route around them."""
+    board = start("trunk")
+    for layer in (pcbnew.In1_Cu, pcbnew.In2_Cu):
+        board.SetLayerType(layer, pcbnew.LT_POWER)     # planes: Freerouting connects to them, never routes on them
+    planes(board)
+    cu = Copper(board)
+    for net, spec in TRUNKS.items():
+        # through-hole pads off the plane
+        pads = [(f"{fp.GetReference()}.{p.GetNumber()}", xy(p.GetPosition())) for fp in board.GetFootprints()
+                for p in fp.Pads() if p.GetNetname() == net and p.GetDrillSize().x
+                and not cu.in_plane(net, xy(p.GetPosition()), mm(p.GetDrillSize().x))]
+        blocked = trunk(cu, net, pads, *spec)
+        print(f"trunk pass, {net}: {len(pads)} through-hole pad(s) off the plane " + " ".join(n for n, _ in pads) +
+              (f", blocked, nothing laid: {blocked}" if blocked else ", laid"), flush=True)
+    project.save(board, PCB)
 
 
 def gnd():
     board = start("gnd")
-    for layer in (pcbnew.In1_Cu, pcbnew.In2_Cu):
-        board.SetLayerType(layer, pcbnew.LT_POWER)     # planes: Freerouting connects to them, never routes on them
-    planes(board)
     fanout_pass(board, "gnd", {"GND", "GNDISO"})
+    project.save(board, PCB)
+
+
+def trunk(cu, net, pads, width, via_d, via_drill):
+    """A wide track on layer 4 for through-hole pads off their plane: along the first clear corridor of
+    TRUNK_Y, a drop to each pad, down the first clear line of TRUNK_X to two vias in the plane. All or
+    nothing; returns the blocked segments."""
+    r = via_d / 2
+
+    def clear(a, b):
+        return cu.track_ok(net, a, b, width, cu.near(a, b, width + 1.0), False)
+
+    def steps(lo, hi):
+        return [lo + 0.25 * i for i in range(int((hi - lo) / 0.25) + 1)]
+
+    xs = [a[0] for _, a in pads]
+    y = next((y for y in steps(*TRUNK_Y) if clear((min(xs), y), (TRUNK_X[1] - r, y))), None)
+    if y is None:
+        return [f"no clear corridor between y = {TRUNK_Y[0]} and {TRUNK_Y[1]}"]
+    for x in reversed(steps(TRUNK_X[0], TRUNK_X[1] - r)):
+        foot = next(((x, v) for v in steps(y, H) if cu.in_plane(net, (x, v), r)
+                     and cu.via_ok(net, (x, v), r, cu.near((x, v), (x, v), r + 1.0))), None)
+        twin = foot and (x, foot[1] + max(VIA_PITCH, via_d + HOLE_GAP))
+        if (foot and clear((x, y), twin) and cu.in_plane(net, twin, r)
+                and cu.via_ok(net, twin, r, cu.near(twin, twin, r + 1.0))):
+            break
+    else:
+        return ["no clear way down to the plane"]
+    xs = sorted(set(xs) | {x})
+    segs = list(zip([(u, y) for u in xs], [(u, y) for u in xs[1:]]))     # cut at every drop
+    segs += [((x, y), foot), (foot, twin)] + [((a[0], y), a) for _, a in pads]
+    blocked = [f"({a[0]:.1f}, {a[1]:.1f})-({b[0]:.1f}, {b[1]:.1f})" for a, b in segs if not clear(a, b)]
+    if blocked:
+        return blocked
+    for v in (foot, twin):
+        cu.add_via(net, v, via_d, via_drill)
+    for a, b in segs:
+        cu.add_track(net, a, b, width, pcbnew.B_Cu)
+    return []
+
+
+def mst(points):
+    """Edges (i, j, length) of the minimum spanning tree of the points (Prim)."""
+    if len(points) < 2:
+        return []
+    best = {i: (math.dist(points[0], points[i]), 0) for i in range(1, len(points))}
+    edges = []
+    while best:
+        i = min(best, key=lambda k: best[k][0])
+        d, j = best.pop(i)
+        edges.append((j, i, d))
+        for k in best:
+            dk = math.dist(points[i], points[k])
+            if dk < best[k][0]:
+                best[k] = (dk, i)
+    return edges
+
+
+def short():
+    """Pads facing each other: every edge of the spanning tree of a net without a plane, up to SHORT_MAX
+    long, as a straight track on layer 1 when it clears everything else."""
+    board = start("short")
+    cu = Copper(board)
+    planed = {"GND", "GNDISO", *SUPPLY_PLANES}
+    pads = collections.defaultdict(list)
+    for fp in board.GetFootprints():
+        for p in fp.Pads():
+            n = p.GetNetname()
+            if n and not n.startswith("unconnected-") and n not in planed and p.IsOnLayer(pcbnew.F_Cu):
+                pads[n].append(xy(p.GetPosition()))
+    edges = sorted((d, n, pts[i], pts[j]) for n, pts in pads.items() for i, j, d in mst(pts))
+    laid = 0
+    for d, n, a, b in edges:
+        if d > SHORT_MAX:
+            break
+        width = project.CLASSES[project.class_of(n)][0]
+        if cu.track_ok(n, a, b, width, cu.near(a, b, width + 1.0), True):
+            cu.add_track(n, a, b, width, pcbnew.F_Cu)
+            laid += 1
+    print("short pass: spanning tree edges up to " + ", ".join(
+        f"{m} mm {sum(1 for e in edges if e[0] <= m)}" for m in (1, 2, 3, 4, 5)) + f" (of {len(edges)})", flush=True)
+    print(f"   up to {SHORT_MAX} mm: {laid} laid, {sum(1 for e in edges if e[0] <= SHORT_MAX) - laid} blocked", flush=True)
+    project.save(board, PCB)
 
 
 def rail(name):
-    fanout_pass(start(name), name, {RAILS[name]})
+    board = start(name)
+    net = RAILS[name]
+    fanout_pass(board, name, {net})
+    project.save(board, PCB)
 
 
 def power(passes):
@@ -544,10 +657,14 @@ def main():
     if step == "back":
         shutil.copyfile(stage(sys.argv[2]), PCB)
         return print(f"{PCB} <- {stage(sys.argv[2])}")
-    if step == "gnd":
+    if step == "trunk":
+        trunks()
+    elif step == "gnd":
         gnd()
     elif step in RAILS:
         rail(step)
+    elif step == "short":
+        short()
     elif step == "power":
         power(int(sys.argv[2]) if len(sys.argv) > 2 else 4)
     else:

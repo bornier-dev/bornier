@@ -367,6 +367,8 @@ KEY = {
     "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
     "JP5": (55.0, 93.3, 90),                        # Modbus termination, between U38 and J13
     "D66": (64.5, 93.5, 0),                         # Modbus line protection, facing the A/B pins of J13
+    # encoder supply jumpers, +VIN pin up toward the layer 4 trunk above the axes, +5V pin down over its plane
+    "JP1": (5.7, 22.35, 180), "JP2": (79.2, 20.25, 180), "JP3": (114.7, 24.25, 180), "JP4": (142.1, 31.3, 180),
     "U36": (82.0, 86.0, 0),                         # spindle 0-10 V
     "U1": (128.0, 62.0, 0), "L1": (139.0, 62.0, 0), "C1": (139.0, 76.0, 0),   # 5 V buck
     "C5": (142.5, 69.6, 0),                         # 5 V output capacitor, against the output of L1
