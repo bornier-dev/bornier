@@ -28,7 +28,7 @@ TB4 = ("Connector:Screw_Terminal_01x04", "Connector_Phoenix_MC:PhoenixContact_MC
 # on a pick-and-place). 0402 by default; 0603 for 1 uF 50 V and for the 120 ohm terminations
 # (75 mW under RS-422, above the 62.5 mW of an 0402); 1206 where the supply voltage is dropped.
 PALETTE = {
-    ("R", "49.9", R0402): "C25120",
+    ("R", "49.9", R0603): "C23185",     # 0603: an Ethernet termination straddles the other line of its pair
     ("R", "1k", R0402): "C11702",
     ("R", "2.2k", R0402): "C25879",
     ("R", "4.7k", R0402): "C25900",
@@ -102,7 +102,7 @@ c.part("J2", "Connector:USB_B_Micro", "USB micro-B",
        "Molex 105133-0001, vertical: the plug comes from above, so the jack sits next to the MCU, away from the "
        "edges that the DIN rail profile holds")
 c.part("U2", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
-       {1: "USB_DP", 2: "USB_DM", 4: "VBUS", 3: "GND", 8: "GND"},
+       {1: "USB_DM", 2: "USB_DP", 4: "VBUS", 10: "USB_DM", 9: "USB_DP", 7: "VBUS", 3: "GND", 8: "GND"},     # channels in the order of the lines
        "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines")
 c.R("R7", "1k", "VBUS", "VBUS_SENSE", note="VBUS_SENSE on PD9 (USART3_RX input in the bootloader)")
 c.R("R8", "2.2k", "VBUS_SENSE", "GND", note="3.44 V at 5 V (PD9 is 5 V tolerant); low impedance: a leakage of D5 cannot fake VBUS")
@@ -149,8 +149,8 @@ c.block("25 MHz clock shared by the ESC and the MCU")
 c.part("X1", "Oscillator:SiT8008xx-7x-xxE", "SiT8008BI-71-33E-25.000000", None, "C806295",
        {1: "+3V3", 2: "GND", 3: "CLK25", 4: "+3V3"}, "25 MHz, ±20 ppm all-inclusive, -40 to +85 °C")
 c.C("C12", "100nF", "+3V3", "GND")
-c.R("R15", "49.9", "CLK25", "CLK25_ESC", note="Source series termination")
-c.R("R16", "49.9", "CLK25", "CLK25_MCU", note="Source series termination")
+c.R("R15", "49.9", "CLK25", "CLK25_ESC", fp=R0603, note="Source series termination")
+c.R("R16", "49.9", "CLK25", "CLK25_MCU", fp=R0603, note="Source series termination")
 
 # --------------------------------------------------------------------------------------------
 c.block("EtherCAT slave controller (LAN9253), reset, configuration straps")
@@ -228,18 +228,22 @@ c.R("R36", "1k", "LINK1", "LINK1_A")
 # --------------------------------------------------------------------------------------------
 c.block("EtherCAT ports: IN = port 0 (PHY A), OUT = port 1 (PHY B)")
 RJ = "Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal"
+# The lines on jack pins 1, 2, 3, 6 and on ESD channels 1, 2, 4, 5, in the order that routes without a crossing
+# (pairs.py): port A with P and N swapped on both pairs, port B with its TX and RX pairs swapped. The PHYs
+# correct the polarity and have HP Auto-MDIX (data sheet, key benefits; 100FD straps low).
 for j, port, lines, rail, led, rs, ccap, esd in (
-        ("J3", "IN", ("TXPA", "TXNA", "RXPA", "RXNA"), "VDD33TXRX1", "LINK0_A", ("R37", "R38", "R39", "R40"), "C35", "U7"),
-        ("J4", "OUT", ("TXPB", "TXNB", "RXPB", "RXNB"), "VDD33TXRX2", "LINK1_A", ("R41", "R42", "R43", "R44"), "C36", "U8")):
+        ("J3", "IN", ("TXNA", "TXPA", "RXNA", "RXPA"), "VDD33TXRX1", "LINK0_A", ("R37", "R38", "R39", "R40"), "C35", "U7"),
+        ("J4", "OUT", ("RXPB", "RXNB", "TXPB", "TXNB"), "VDD33TXRX2", "LINK1_A", ("R41", "R42", "R43", "R44"), "C36", "U8")):
     tp, tn, rp, rn = lines
     c.part(j, "Connector:RJ45_Hanrun_HR911105A_Horizontal", f"HY911105AE {port}", RJ, "C69427",
            {1: tp, 2: tn, 3: rp, 6: rn, 4: rail, 5: rail, 8: "CHASSIS", "SH": "CHASSIS", 9: led, 10: "GND"},
            "HanRun HY911105AE, -40/+85 °C; same footprint as HR911105A. Yellow LED unused")
     for r, n in zip(rs, lines):
-        c.R(r, "49.9", n, rail, note="1 %, at the ESC")
+        c.R(r, "49.9", n, rail, fp=R0603, note="1 %, at the ESC")
     c.C(ccap, "100nF", rail, "GND", note="Centre taps, at the magjack (checklist: 22 nF; any value from 22 nF up)")
     c.part(esd, "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
-           {1: tp, 2: tn, 4: rp, 5: rn, 3: "GND", 8: "GND"}, "ESD of the PHY lines, flow-through")
+           {1: tp, 2: tn, 4: rp, 5: rn, 10: tp, 9: tn, 7: rp, 6: rn, 3: "GND", 8: "GND"},
+           "ESD of the PHY lines, flow-through: the NC pins opposite each line carry it (TI: straight-through routing)")
 c.C("C37", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="Chassis to ground, away from the ESC (checklist)")
 c.C("C301", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the drive and encoder RJ45 row")
 c.C("C302", "1nF 2kV", "CHASSIS", "GND", fp=C1206, note="At the terminal block row")

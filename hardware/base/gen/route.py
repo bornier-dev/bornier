@@ -58,8 +58,13 @@ POWER_CLASSES = {"Input", "Rail", "Buck", "Limited", "Ground", "Chassis"}
 # Passes, in order: each starts from the stage written by the one before (pcb.py writes "placed")
 RAILS = {"3v3": "+3V3", "5v": "+5V", "vin": "+VIN"}
 # The supplies that carry current first: the thin links of the later ones route around their tracks
-PASSES = ["placed", "trunk", "gnd", "vin", "5v", "3v3", "short", "power"]
+PASSES = ["placed", "trunk", "pairs", "gnd", "vin", "5v", "3v3", "phy", "short", "power"]
 SURFACE = (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN)   # surface pads, with or without paste
+# Mini-planes of the PHY supplies (LAN9253 checklist): net: the PHY; on layer 3, under the pads of the net on
+# the jack side of the PHY, cut into the +3V3 plane
+PHY_ISLANDS = {"/ESC/VDD33TXRX1": "U4", "/ESC/VDD33TXRX2": "U4"}
+ISLAND_GROW = 1.0
+ZONE_GAP = 0.5              # zone to zone clearance (the KiCad default zone clearance is 0.508)
 PLANE_INSET = 0.3           # a via stays this far inside the outline of its plane
 FANOUT_REACH = 2.5          # longest stub from a pad centre to its via
 FANOUT_EDGE = CHASSIS_BAND + 1.0    # vias stay off the chassis band and its clearance
@@ -137,6 +142,33 @@ def planes(board):
     band = rect_poly(0, 0, W, H)
     band.BooleanSubtract(rect_poly(CHASSIS_BAND, CHASSIS_BAND, W - CHASSIS_BAND, H - CHASSIS_BAND))
     add_zone(board, "CHASSIS", pcbnew.B_Cu, band, 0, "chassis band")
+    fps = {fp.GetReference(): fp for fp in board.GetFootprints()}
+    for k, (net, phy) in enumerate(PHY_ISLANDS.items()):
+        # the pads of the net on the jack side of the PHY, their hull grown by ISLAND_GROW; a later island
+        # takes the overlap (higher priority)
+        cy = mm(fps[phy].GetPosition().y)
+        pts = [xy(p.GetPosition()) for fp in fps.values() for p in fp.Pads() if p.GetNetname() == net]
+        pts = [(x + ISLAND_GROW * math.cos(a), y + ISLAND_GROW * math.sin(a))
+               for x, y in pts if y > cy for a in (i * math.pi / 8 for i in range(16))]
+        poly = pcbnew.SHAPE_POLY_SET()
+        poly.NewOutline()
+        for x, y in hull(pts):
+            poly.Append(MM(x), MM(y))
+        add_zone(board, net, pcbnew.In2_Cu, poly, k + 1, f"{net.split('/')[-1]} island")
+
+
+def hull(pts):
+    """Convex hull, counter-clockwise (monotone chain)."""
+    pts = sorted(set(pts))
+
+    def half(seq):
+        h = []
+        for p in seq:
+            while len(h) > 1 and (h[-1][0] - h[-2][0]) * (p[1] - h[-2][1]) - (h[-1][1] - h[-2][1]) * (p[0] - h[-2][0]) <= 0:
+                h.pop()
+            h.append(p)
+        return h[:-1]
+    return half(pts) + half(pts[::-1])
 
 
 def chassis_stand_ins(board):
@@ -247,10 +279,12 @@ class Copper:
         fps = list(board.GetFootprints())
         self.board = board
         self.gap = gap_of(set(pcb.iso_nets({fp.GetReference(): fp for fp in fps})))
-        self.plane = {}             # net: outlines of its zones on layers 2 and 3
-        for z in board.Zones():
-            if not z.GetIsRuleArea() and z.GetLayer() in (pcbnew.In1_Cu, pcbnew.In2_Cu):
-                self.plane.setdefault(z.GetNetname(), []).append(z.Outline())
+        self.plane = {}             # net: (outline, outlines of the zones of other nets cut into it) per zone
+        zones = [z for z in board.Zones() if not z.GetIsRuleArea() and z.GetLayer() in (pcbnew.In1_Cu, pcbnew.In2_Cu)]
+        for z in zones:
+            above = [o.Outline() for o in zones if o.GetLayer() == z.GetLayer() and o.GetNetname() != z.GetNetname()
+                     and o.GetAssignedPriority() > z.GetAssignedPriority()]
+            self.plane.setdefault(z.GetNetname(), []).append((z.Outline(), above))
         self.items = []
         for fp in fps:
             for p in fp.Pads():
@@ -277,16 +311,19 @@ class Copper:
         return [o for o in self.items if seg_dist(o.centre, a, b) < o.reach + margin]
 
     def in_plane(self, net, v, r):
-        ring = [vec((v[0] + (r + PLANE_INSET) * math.cos(a), v[1] + (r + PLANE_INSET) * math.sin(a)))
-                for a in (k * math.pi / 4 for k in range(8))]
-        return any(all(o.Contains(q) for q in ring) for o in self.plane.get(net, []))
+        """Inside a zone of the net, and off the zones of other nets cut into it, with their clearance."""
+        def ring(d):
+            return [vec((v[0] + d * math.cos(a), v[1] + d * math.sin(a))) for a in (k * math.pi / 4 for k in range(8))]
+        inner, outer = ring(r + PLANE_INSET), ring(r + PLANE_INSET + ZONE_GAP)
+        return any(all(o.Contains(q) for q in inner) and not any(c.Contains(q) for c in above for q in outer + [vec(v)])
+                   for o, above in self.plane.get(net, []))
 
     def via_ok(self, net, v, r, near):
         """A via of radius r at v clear of the board edge, the C-LOCK, the copper of the other nets on every
         layer, every hole and every pad. Its hole is half its diameter (the via sizes of project.CLASSES)."""
         if not (FANOUT_EDGE + r <= v[0] <= W - FANOUT_EDGE - r and FANOUT_EDGE + r <= v[1] <= H - FANOUT_EDGE - r):
             return False
-        if math.dist(v, pcb.CLOCK) < pcb.CLOCK_KEEP + r:
+        if math.dist(v, pcb.CLOCK) < pcb.CLOCK_CUT + COPPER_EDGE + r:
             return False
         via = pcbnew.SHAPE_CIRCLE(vec(v), MM(r))
         for o in near:
@@ -301,8 +338,8 @@ class Copper:
                 return False        # the planes would not reach it, or the other one
             if o.shape.Collide(via, MM(self.gap(net, o.net))):
                 return False
-            if not o.pad and o.shape.Collide(pcbnew.SHAPE_CIRCLE(vec(v), MM(r / 2)), MM(HOLE_GAP)):
-                return False        # its hole against the tracks of the other nets
+            if o.shape.Collide(pcbnew.SHAPE_CIRCLE(vec(v), MM(r / 2)), MM(HOLE_GAP)):
+                return False        # its hole against the copper of the other nets, pads included
         return True
 
     def track_ok(self, net, a, b, width, near, top):
@@ -312,7 +349,7 @@ class Copper:
         for p in (a, b):
             if not (e <= p[0] <= W - e and e <= p[1] <= H - e):
                 return False
-        if seg_dist(pcb.CLOCK, a, b) < pcb.CLOCK_KEEP + width / 2:
+        if seg_dist(pcb.CLOCK, a, b) < pcb.CLOCK_CUT + COPPER_EDGE + width / 2:
             return False
         seg = pcbnew.SHAPE_SEGMENT(vec(a), vec(b), MM(width))
         for o in near:
@@ -596,7 +633,7 @@ def short():
     long, as a track on layer 1 (straight, else with one bend) when it clears everything else."""
     board = start("short")
     cu = Copper(board)
-    planed = {"GND", "GNDISO", *SUPPLY_PLANES}
+    planed = {"GND", "GNDISO", *SUPPLY_PLANES, *PHY_ISLANDS}
     pads = collections.defaultdict(list)
     for fp in board.GetFootprints():
         for p in fp.Pads():
@@ -682,8 +719,17 @@ def main():
         gnd()
     elif step in RAILS:
         rail(step)
+    elif step == "phy":
+        board = start("phy")
+        fanout_pass(board, "phy", set(PHY_ISLANDS))
+        project.save(board, PCB)
     elif step == "short":
         short()
+    elif step == "pairs":
+        import pairs
+        board = start("pairs")
+        pairs.run(board)
+        project.save(board, PCB)
     elif step == "power":
         power(int(sys.argv[2]) if len(sys.argv) > 2 else 4)
     else:

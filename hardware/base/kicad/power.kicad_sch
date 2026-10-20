@@ -22230,6 +22230,58 @@
 			)
 		)
 	)
+	(global_label "USB_DM"
+		(shape bidirectional)
+		(at 48.26 157.48 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "5611ee72-8071-5076-8d7a-313cd160c0ea")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 48.26 157.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "USB_DP"
+		(shape bidirectional)
+		(at 48.26 172.72 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "6f11de04-f08c-5a24-b4d8-fd5c6f9718ea")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 48.26 172.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+	)
+	(label "VBUS"
+		(at 73.66 157.48 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "75278319-5e52-5de8-bac0-128b24d9ce50")
+	)
 	(symbol
 		(lib_id "Device:D_Schottky")
 		(at 271.78 139.7 180)
@@ -25607,18 +25659,6 @@
 		(uuid "d55c4f08-80eb-5edd-8265-6dcc88ff77eb")
 	)
 	(no_connect
-		(at 73.66 157.48)
-		(uuid "3215ec76-20be-526f-b7e9-a20167051096")
-	)
-	(no_connect
-		(at 48.26 172.72)
-		(uuid "7934dcfd-ff3f-52dd-8f01-3f43b1cac5c3")
-	)
-	(no_connect
-		(at 48.26 157.48)
-		(uuid "17b14fc4-999b-561f-918f-ba21d11e61c2")
-	)
-	(no_connect
 		(at 335.28 86.36)
 		(uuid "2bdd98cb-36fd-50b4-97b5-d4400b19f8cc")
 	)
@@ -26381,79 +26421,35 @@
 	(wire
 		(pts
 			(xy 38.1 144.78)
-			(xy 43.18 144.78)
+			(xy 45.72 144.78)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "ec2cc29c-f01b-5c21-aa6b-cd44a3c54334")
+		(uuid "b58ff083-9dac-5e38-b28c-03055cac963e")
 	)
 	(wire
 		(pts
-			(xy 43.18 144.78)
+			(xy 45.72 144.78)
 			(xy 68.58 144.78)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "b6df3fd3-396c-5077-8cbc-fae144a13e68")
+		(uuid "1bb77757-cf39-5f51-9c52-fddd9a32a87b")
 	)
 	(wire
 		(pts
-			(xy 43.18 144.78)
-			(xy 43.18 162.56)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "78d81230-2bab-5a49-bb29-07132c8345a4")
-	)
-	(wire
-		(pts
-			(xy 43.18 162.56)
-			(xy 48.26 162.56)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "300f73a4-e6e2-5cfb-be3f-c99cbf167907")
-	)
-	(wire
-		(pts
-			(xy 38.1 147.32)
-			(xy 45.72 147.32)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "1a43c2f3-a1cf-5b9e-9f1d-07a0535f79c2")
-	)
-	(wire
-		(pts
-			(xy 45.72 147.32)
-			(xy 68.58 147.32)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bcf906e2-2912-5ab8-8a2a-905f20ffec6a")
-	)
-	(wire
-		(pts
-			(xy 45.72 147.32)
+			(xy 45.72 144.78)
 			(xy 45.72 167.64)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "8214714c-52dc-5d46-ad66-50e59744c47e")
+		(uuid "90ef3614-1886-55af-a0ae-cf796f5cd971")
 	)
 	(wire
 		(pts
@@ -26465,6 +26461,50 @@
 			(type default)
 		)
 		(uuid "85a0a66e-3d33-55ce-bc3f-048264c878c6")
+	)
+	(wire
+		(pts
+			(xy 38.1 147.32)
+			(xy 43.18 147.32)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e065d16f-3d88-5c95-886c-96cbd007773c")
+	)
+	(wire
+		(pts
+			(xy 43.18 147.32)
+			(xy 68.58 147.32)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3edb38b7-0cf5-5987-a057-1ed5cda4bc9c")
+	)
+	(wire
+		(pts
+			(xy 43.18 147.32)
+			(xy 43.18 162.56)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a1dd29d6-8e4d-50c7-a633-c94b9135331a")
+	)
+	(wire
+		(pts
+			(xy 43.18 162.56)
+			(xy 48.26 162.56)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "300f73a4-e6e2-5cfb-be3f-c99cbf167907")
 	)
 	(wire
 		(pts
@@ -27244,16 +27284,16 @@
 		(uuid "922c4835-89b3-509e-b903-8fd7991893c5")
 	)
 	(junction
-		(at 43.18 144.78)
+		(at 43.18 147.32)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "62834754-478b-5c91-a3bf-a4e081df2d88")
+		(uuid "3451b877-7f37-51a6-90a4-5ea5d27641c8")
 	)
 	(junction
-		(at 45.72 147.32)
+		(at 45.72 144.78)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "44366078-9bb8-529b-b298-707f4c870726")
+		(uuid "774626a2-1a8b-5723-a3b4-fc69775d340d")
 	)
 	(junction
 		(at 60.96 76.2)

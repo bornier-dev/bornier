@@ -18979,7 +18979,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 55.88 90)
 			(effects
 				(font
@@ -19009,7 +19009,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 55.88 90)
 			(effects
 				(font
@@ -19226,7 +19226,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 60.96 90)
 			(effects
 				(font
@@ -19256,7 +19256,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 60.96 90)
 			(effects
 				(font
@@ -19473,7 +19473,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 66.04 90)
 			(effects
 				(font
@@ -19503,7 +19503,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 66.04 90)
 			(effects
 				(font
@@ -19720,7 +19720,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 71.12 90)
 			(effects
 				(font
@@ -19750,7 +19750,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 71.12 90)
 			(effects
 				(font
@@ -19967,7 +19967,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 76.2 90)
 			(effects
 				(font
@@ -19997,7 +19997,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 76.2 90)
 			(effects
 				(font
@@ -20214,7 +20214,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 81.28 90)
 			(effects
 				(font
@@ -20244,7 +20244,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 81.28 90)
 			(effects
 				(font
@@ -20461,7 +20461,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 86.36 90)
 			(effects
 				(font
@@ -20491,7 +20491,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 86.36 90)
 			(effects
 				(font
@@ -20708,7 +20708,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 91.44 90)
 			(effects
 				(font
@@ -20738,7 +20738,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 91.44 90)
 			(effects
 				(font
@@ -20955,7 +20955,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 96.52 90)
 			(effects
 				(font
@@ -20985,7 +20985,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 96.52 90)
 			(effects
 				(font
@@ -21202,7 +21202,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 101.6 90)
 			(effects
 				(font
@@ -21232,7 +21232,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 101.6 90)
 			(effects
 				(font
@@ -21449,7 +21449,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 106.68 90)
 			(effects
 				(font
@@ -21479,7 +21479,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 106.68 90)
 			(effects
 				(font
@@ -21696,7 +21696,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 111.76 90)
 			(effects
 				(font
@@ -21726,7 +21726,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 111.76 90)
 			(effects
 				(font
@@ -21943,7 +21943,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 116.84 90)
 			(effects
 				(font
@@ -21973,7 +21973,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 116.84 90)
 			(effects
 				(font
@@ -22027,7 +22027,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 119.38 90)
 			(effects
 				(font
@@ -22057,7 +22057,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 119.38 90)
 			(effects
 				(font
@@ -22274,7 +22274,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 121.92 90)
 			(effects
 				(font
@@ -22304,7 +22304,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 121.92 90)
 			(effects
 				(font
@@ -22521,7 +22521,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 127 90)
 			(effects
 				(font
@@ -22551,7 +22551,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 127 90)
 			(effects
 				(font
@@ -22605,7 +22605,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 129.54 90)
 			(effects
 				(font
@@ -22635,7 +22635,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 129.54 90)
 			(effects
 				(font
@@ -22852,7 +22852,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 132.08 90)
 			(effects
 				(font
@@ -22882,7 +22882,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 132.08 90)
 			(effects
 				(font
@@ -22936,7 +22936,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
 			(at 80.01 134.62 90)
 			(effects
 				(font
@@ -22966,7 +22966,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25120"
+		(property "LCSC" "C23185"
 			(at 80.01 134.62 90)
 			(effects
 				(font

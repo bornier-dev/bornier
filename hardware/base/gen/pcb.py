@@ -41,7 +41,8 @@ W, H = 150.0, 107.5           # UM-BASIC 108, kit L150
 END_KEEP = 3.1                # top side, both short ends: clamped by the end elements
 RIM_KEEP = 3.1                # bottom side, whole perimeter: rests on the profile walls
 CLOCK = (W / 2, H / 2)        # C-LOCK L1: keyhole cutout, 11 mm without parts on both sides
-CLOCK_KEEP = 5.5
+CLOCK_KEEP = 5.5            # no part within: the clip bears on both sides
+CLOCK_CUT = 4.3             # the cutout itself: half the length of its slot, copper keeps its edge clearance from it
 
 # Connectors on the long edges, left to right, found by value. Edge A: one dual RJ45 per axis (drive
 # port A, encoder port B), axes 0 to 3, at a pitch that keeps 0.8 mm between the shield leg holes of two
@@ -368,6 +369,8 @@ KEY = {
     "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
     "JP5": (55.0, 93.3, 90),                        # Modbus termination, between U38 and J13
     "D66": (64.5, 93.5, 0),                         # Modbus line protection, facing the A/B pins of J13
+    "U7": (26.0, 84.0, 0),                          # port A ESD, on the way west to J3, flow-through east-west
+    "U8": (36.5, 85.0, 90),                         # port B ESD, under its PHY pins, flow-through north-south
     "X1": (45.5, 81.5, 0),                          # 25 MHz: 8 mm from the clock input of the ESC, its series resistors at its output
     # encoder supply jumpers, +VIN pin up toward the layer 4 trunk above the axes, +5V pin down over its plane
     "JP1": (5.7, 22.35, 180), "JP2": (79.2, 20.25, 180), "JP3": (114.7, 24.25, 180), "JP4": (142.1, 31.3, 180),
@@ -380,6 +383,14 @@ for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
     KEY[ref] = (max(JACK_X[k] - 4.0, AXIS_X[k] + 6.0), 38.0, 90)
 # Nets that do not locate a part: a capacitor on them goes to a power pin of an IC of its sheet.
 ETH_LINE = r"/ESC/(TX|RX)[PN][AB]"     # the four Ethernet pairs, PHY to magjack
+PAIR_LINE = ETH_LINE + r"|USB_D[PM]"     # all the differential pairs
+# Lanes of the differential pairs, (x0, y0, x1, y1): no part but those on the pairs (LAN9253 checklist: no other
+# component in or near the TX and RX lanes), with room on their outer sides for the terminations. Port A:
+# down from the PHY pins, west through its ESD to J3; port B: down through its ESD to J4; USB: east from the
+# MCU to its ESD, down to J2.
+LANES = [(30.0, 78.9, 33.0, 86.0), (12.5, 80.4, 33.0, 89.0),
+         (32.5, 78.9, 40.5, 89.0),
+         (64.2, 56.8, 76.8, 58.7), (75.0, 56.8, 76.8, 65.5)]
 POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "GNDISO", "/Modbus/VISO", "/Local bus/+3V3_BUS"}
 # Protection parts go against the connector, not against the circuit they protect.
 PROTECT = {"TPD4E05U06DQAR", "SMBJ33CA", "SMF15A", "PSM712-LF-T7"}
@@ -430,8 +441,19 @@ def nets_of(fp):
     return {p.GetNetname() for p in fp.Pads()} - {""}
 
 
+# Parts that serve a given part, not the one the rules would find: the centre tap capacitors of the magjacks
+ANCHOR_TO = {"C35": "J3", "C36": "J4"}
+
+
 def anchor_of(ref, fp, placed, used):
     """(rank, net, x, y) of the pin the part serves, or None while that pin is not placed."""
+    if ref in ANCHOR_TO:
+        other = placed.get(ANCHOR_TO[ref])
+        if other is None:
+            return None
+        p = next(p for p in other.Pads() if p.GetNetname() in nets_of(fp) - {"GND"})
+        return ((0, 0, other.GetReference(), p.GetNumber()), p.GetNetname(), pcbnew.ToMM(p.GetPosition().x),
+                pcbnew.ToMM(p.GetPosition().y), other.GetReference(), p.GetNumber())
     sheet = fp.GetSheetname()
     mine = nets_of(fp)
     signal = mine - POWER_NETS
@@ -535,6 +557,8 @@ def auto_place(fps, placed, iso):
                 on_bus = fp.GetSheetname() == "/Modbus/" and mine and mine <= iso
                 sheet = "/Modbus/ bus side" if on_bus else fp.GetSheetname()
                 barred = [] if on_bus else [(bus[0], BARRIER_Y, bus[2], bus[3])]
+                if not any(re.fullmatch(PAIR_LINE, n) for n in mine) and ref not in ANCHOR_TO:
+                    barred = barred + LANES     # the centre tap capacitors stand at the jack, among the lines
 
                 def find(offsets, zones, tx, ty, air=0.0, limit=math.inf):
                     """First free spot along the offsets, the part grown by `air` on every side."""

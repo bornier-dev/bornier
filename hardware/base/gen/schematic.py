@@ -157,7 +157,7 @@ def power(prj):
     # ESD array under the lines, flow-through on the board
     xe, ye = 60.96, yu + 25.4
     s.place("U2", xe, ye, ref_at=(xe + 3.81, ye - 8.89), val_at=(xe + 3.81, ye - 11.43))
-    for net, jpin, epin, xv in (("USB_DP", 3, 1, xe - 17.78), ("USB_DM", 2, 2, xe - 15.24)):
+    for net, jpin, epin, xv in (("USB_DP", 3, 2, xe - 15.24), ("USB_DM", 2, 1, xe - 17.78)):
         jx_, jy_ = s.P("J2", jpin)
         s.w(net, (jx_, jy_), (xe + 7.62, jy_))
         s.glabel(net, xe + 7.62, jy_, 0, "bidirectional")
@@ -169,6 +169,9 @@ def power(prj):
     s.w("GND", (x, y), (x, y + 2.54), (s.P("J2", 5)[0], y + 2.54))
     s.rail("GND", *s.P("J2", 5), drop=5.08)
     s.rail("GND", *s.P("U2", 3))
+    for pin_e, net in ((10, "USB_DM"), (9, "USB_DP")):      # flow-through
+        s.glabel(net, *s.P("U2", pin_e), 0, "bidirectional", tag=f"U2.{pin_e}")
+    s.label("VBUS", *s.P("U2", 7), tag="U2.7")
     vb = s.P("J2", 1)
     hpart(s, "D5", 271.78, vb[1], rot=180)
     s.w("VBUS", vb, (101.6, vb[1]), s.P("D5", 2))
@@ -466,8 +469,8 @@ def esc(prj):
 
     # --- right: ports ----------------------------------------------------------------------------
     for j, pins, rail, rs, cct, esd in (
-            ("J3", (53, 52, 55, 54), "VDD33TXRX1", ("R37", "R38", "R39", "R40"), "C35", "U7"),
-            ("J4", (62, 63, 60, 61), "VDD33TXRX2", ("R41", "R42", "R43", "R44"), "C36", "U8")):
+            ("J3", (52, 53, 54, 55), "VDD33TXRX1", ("R37", "R38", "R39", "R40"), "C35", "U7"),
+            ("J4", (60, 61, 62, 63), "VDD33TXRX2", ("R41", "R42", "R43", "R44"), "C36", "U8")):
         tp, tn, rp, rn = [P(n) for n in pins]
         nets = [c.by_ref()["U4"]["pins"][str(n)] for n in pins]
         xr0 = tp[0]
@@ -475,10 +478,9 @@ def esc(prj):
         xj = 345.44
         s.place(j, xj, y0 + 7.62, ref_at=(xj - 7.62, y0 - 6.35), val_at=(xj - 7.62, y0 - 3.81))
         jp = {k: s.P(j, k) for k in (1, 2, 3, 4, 5, 6, 8, 9, 10, "SH")}
-        turns = (None, 317.5, 314.96, 312.42)
-        s.w(nets[0], tp, jp[1])
-        for k, (pin, jpin, xt) in enumerate(((tn, jp[2], turns[1]), (rp, jp[3], turns[2]), (rn, jp[6], turns[3]))):
-            s.w(nets[k + 1], pin, (xt, pin[1]), (xt, jpin[1]), jpin)
+        turns = (320.04, 317.5, 314.96, 312.42)     # one column per line: the lines may cross, never touch
+        for k, (pin, jpin) in enumerate(((tp, jp[1]), (tn, jp[2]), (rp, jp[3]), (rn, jp[6]))):
+            s.w(nets[k], pin, (turns[k], pin[1]), (turns[k], jpin[1]), jpin)
         yrail = y0 - 15.24
         xs_r = [xr0 + 7.62 + 7.62 * k for k in range(4)]
         s.w(rail, (xs_r[0] - 5.08, yrail), (xs_r[-1], yrail))
@@ -515,6 +517,8 @@ def esc(prj):
             s.w(net, (xv_, src_y), (xv_, ey), (ex, ey))
         gx, gy = s.P(esd, 3)
         s.rail("GND", gx, gy)
+        for pin_e in (10, 9, 7, 6):     # flow-through: the NC pin opposite each line carries it
+            s.label(c.by_ref()[esd]["pins"][str(pin_e)], *s.P(esd, pin_e), tag=f"{esd}.{pin_e}")
         s.text(f"{'IN: port 0 (PHY A)' if j == 'J3' else 'OUT: port 1 (PHY B)'}", xj + 7.62, y0 - 10.16, 1.524, True)
     s.place("C37", 378.46, 120.65, ref_at=(381.0, 119.38), val_at=(381.0, 121.92))
     s.w("CHASSIS", s.P("C37", 1), (378.46, 113.03))

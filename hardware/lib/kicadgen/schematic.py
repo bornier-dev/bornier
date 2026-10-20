@@ -279,19 +279,22 @@ class Sheet:
         return err
 
     # --- labels, power symbols, text -------------------------------------------------------------
-    def label(self, name, x, y, rot=0):
-        """Net label anchored at (x, y); its text runs toward rot (0 right, 90 up, 180 left, 270 down)."""
+    def label(self, name, x, y, rot=0, tag=""):
+        """Net label anchored at (x, y); its text runs toward rot (0 right, 90 up, 180 left, 270 down). A second
+        label of the same net on the sheet needs a tag: the UUID is drawn from the sheet, the net and the tag."""
         just = Sym("right") if rot in (180, 270) else Sym("left")
-        self.items.append(("label", name, [Sym("label"), self.shown(name), [Sym("at"), g(x), g(y), rot],
+        key = f"label/{self.name}/{name}" + (f"/{tag}" if tag else "")
+        # a tagged label (on a pin without a wire) does not name the net: its wires still get their own label
+        self.items.append(("label" if not tag else "tagged label", name, [Sym("label"), self.shown(name), [Sym("at"), g(x), g(y), rot],
                                            font() + [[Sym("justify"), just, Sym("bottom")]],
-                                           [Sym("uuid"), self.prj.U(f"label/{self.name}/{name}")]]))
+                                           [Sym("uuid"), self.prj.U(key)]]))
 
-    def glabel(self, name, x, y, rot=0, shape="bidirectional"):
+    def glabel(self, name, x, y, rot=0, shape="bidirectional", tag=""):
         just = Sym("right") if rot in (180, 270) else Sym("left")
         self.items.append(("glabel", name, [Sym("global_label"), name, [Sym("shape"), Sym(shape)],
                                             [Sym("at"), g(x), g(y), rot], [Sym("fields_autoplaced"), Sym("yes")],
                                             font() + [[Sym("justify"), just]],
-                                            [Sym("uuid"), self.prj.U(f"glabel/{self.name}/{name}")],
+                                            [Sym("uuid"), self.prj.U(f"glabel/{self.name}/{name}" + (f"/{tag}" if tag else ""))],
                                             [Sym("property"), "Intersheetrefs", "${INTERSHEET_REFS}",
                                              [Sym("at"), g(x), g(y), 0], font() + [[Sym("hide"), Sym("yes")]]]]))
 
