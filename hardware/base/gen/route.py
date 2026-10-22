@@ -87,8 +87,10 @@ VARIANTS = [{}, {"via_costs": 25}, {"via_costs": 100}, {"start_ripup_costs": 50}
 HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 # longest layer 4 link of a supply pass: a longer one, laid straight before the signals, walls them off (the
-# +5V of the laser buffer U37 ran 35 mm across the MCU); its via is left to Freerouting with the signals
-RAIL_LINK_MAX = 5.0
+# +5V of the laser buffer U37 ran 35 mm across the MCU); its via is left to Freerouting with the signals.
+# Shorter ones stay: at 5 mm, Freerouting failed to finish a few of them (the input of U10, the +3V3 of the
+# encoder receivers)
+RAIL_LINK_MAX = 12.0
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
 PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, left out of the short pass
@@ -96,7 +98,10 @@ PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, 
 FAST = r"(/Clock/)?CLK25(_ESC|_MCU)?|ESC_S(CK|CS|IO[0-3])|Net-\(U9-P(B2|B10|B1|B0|A7|A6)\)"
 SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined on layer 1 without a via
 ESCAPE_PAD = 0.5           # pass complete: IC pads narrower than this get a way out (fine pitch)
-RIP_REACH = 3.0            # pass complete: signal copper this close to an end of a missing connection ripped up
+# pass complete: signal copper this close to an end of a missing connection ripped up; 0: none. At 3 mm it
+# took 94 to 131 nets around the MCU, which Freerouting did not all route again (21 connections missing
+# became 43, then 183)
+RIP_REACH = 0.0
 RIPPED = PCB.replace(".kicad_pcb", "-ripped.json")
 COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
 # Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
@@ -725,8 +730,10 @@ def complete():
     start("complete")
     rpt = refill()
     # the rip-up in a process of its own: a board that has lost items breaks the next calls of the API
-    subprocess.run([sys.executable, os.path.abspath(__file__), "rip", rpt], check=True)
-    ripped = set(json.load(open(RIPPED, encoding="utf-8")))
+    ripped = set()
+    if RIP_REACH > 0:
+        subprocess.run([sys.executable, os.path.abspath(__file__), "rip", rpt], check=True)
+        ripped = set(json.load(open(RIPPED, encoding="utf-8")))
     board = pcbnew.LoadBoard(PCB)
     project.apply_netclasses(board)
     nets = (unconnected_nets(rpt) & (signal_nets(board) | {"CHASSIS"})) | ripped

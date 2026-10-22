@@ -41,8 +41,9 @@ RULES = {"min_track_width": 0.1, "min_clearance": 0.1, "min_via_diameter": 0.4, 
 PATTERNS = {
     "Input": ["/Power/VIN_RAW", "/Power/VIN_F"],
     "Rail": ["+VIN", "+5V", "+3V3"],
-    "Buck": ["/Power/V3IN", "/Power/SW5", "/Power/SW3", "/Power/VBUS"],
-    "Limited": ["+VIN_OUT", "*/VSD", "*/VENC", "*/VSEL", "/Local bus/+3V3_BUS", "/Modbus/VISO"],
+    "Buck": ["/Power/V3IN", "/Power/SW5", "/Power/SW3"],
+    # VBUS: 0.5 A at most from a USB host
+    "Limited": ["/Power/VBUS", "+VIN_OUT", "*/VSD", "*/VENC", "*/VSEL", "/Local bus/+3V3_BUS", "/Modbus/VISO"],
     "Ground": ["GND", "GNDISO"],
     "Chassis": ["CHASSIS"],
     "Ethernet": [f"/ESC/{d}{p}{port}" for d in ("TX", "RX") for p in "PN" for port in "AB"],
