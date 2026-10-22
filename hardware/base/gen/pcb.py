@@ -389,6 +389,7 @@ for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
 # Nets that do not locate a part: a capacitor on them goes to a power pin of an IC of its sheet.
 ETH_LINE = r"/ESC/(TX|RX)[PN][AB]"     # the four Ethernet pairs, PHY to magjack
 PAIR_LINE = ETH_LINE + r"|USB_D[PM]"     # all the differential pairs
+OCTO_LINE = r"ESC_S(CK|CS|IO[0-3])"       # the OCTOSPI to the ESC: its series resistors stand at the MCU pins
 # Lanes of the differential pairs, (x0, y0, x1, y1): no part but those on the pairs (LAN9253 checklist: no other
 # component in or near the TX and RX lanes), with room on their outer sides for the terminations. Port A:
 # down from the PHY pins, west through its ESD to J3; port B: down through its ESD to J4; USB: east from the
@@ -396,7 +397,8 @@ PAIR_LINE = ETH_LINE + r"|USB_D[PM]"     # all the differential pairs
 LANES = [(30.0, 78.9, 33.0, 86.0), (12.5, 80.4, 33.0, 89.0),
          (32.5, 78.9, 40.5, 89.0),
          (64.2, 56.8, 76.8, 58.7), (75.0, 56.8, 76.8, 65.5)]
-POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "GNDISO", "/Modbus/VISO", "/Local bus/+3V3_BUS"}
+POWER_NETS = {"GND", "+3V3", "+5V", "+VIN", "+VIN_OUT", "CHASSIS", "GNDISO", "/Modbus/VISO", "/Local bus/+3V3_BUS",
+              "/MCU/VCAP"}
 # Protection parts go against the connector, not against the circuit they protect.
 PROTECT = {"TPD4E05U06DQAR", "SMBJ33CA", "SMF15A", "PSM712-LF-T7"}
 RANK = {"U": 0, "Q": 1, "D": 2, "L": 2, "F": 2, "R": 3, "C": 3, "J": 4, "S": 5}
@@ -524,8 +526,9 @@ def auto_place(fps, placed, iso):
         return r.startswith("C") and nets_of(fps[r]) <= POWER_NETS
 
     def termination(r):
-        """A resistor on an Ethernet line: it belongs on the way of its pair, at the PHY pins."""
-        return r.startswith("R") and any(re.fullmatch(ETH_LINE, n) for n in nets_of(fps[r]))
+        """A resistor on an Ethernet line: it belongs on the way of its pair, at the PHY pins; a series
+        resistor of the OCTOSPI, at its MCU pin (placed later, it landed up to 15 mm away)."""
+        return r.startswith("R") and any(re.fullmatch(ETH_LINE, n) or re.fullmatch(OCTO_LINE, n) for n in nets_of(fps[r]))
 
     def first(r):
         """Placed in the first phase: ICs, oscillators, and the passives that must stand against their pins."""
@@ -551,6 +554,10 @@ def auto_place(fps, placed, iso):
                 if phase == 0 and not first(ref):
                     continue
                 if decoupling(ref) and waits(ref):
+                    continue
+                # an OCTOSPI resistor after the decoupling capacitors of its sheet: VCAP keeps its pin
+                if any(re.fullmatch(OCTO_LINE, n) for n in nets_of(fp)) and any(
+                        decoupling(q) and fps[q].GetSheetname() == fp.GetSheetname() for q in todo):
                     continue
                 a = anchor_of(ref, fp, placed, used)
                 if a is None or a[0][0] > rk:

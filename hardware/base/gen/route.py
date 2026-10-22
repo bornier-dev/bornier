@@ -20,8 +20,9 @@ power entry), L4 signals and a chassis band along the edges.
 Pass "trunk": the planes, and the wide tracks of TRUNKS. Pass "pairs": the differential pairs (pairs.py).
 Pass "gnd": a stub and a via of its own from every surface pad of GND and GNDISO down to layer 2. Passes
 "vin", "5v", "3v3", "phy": the same for each supply, one at a time, down to its plane of layer 3, the pads off
-their plane linked on layer 4. Pass "short": pads up to SHORT_MAX apart joined on layer 1. Passes "fast" and
-"signals": Freerouting on the clock and OCTOSPI, then on every net left but the chassis.
+their plane linked on layer 4 up to RAIL_LINK_MAX, the farther ones left to the signals pass. Pass "short": pads
+up to SHORT_MAX apart joined on layer 1. Passes "fast" and "signals": Freerouting on the clock and OCTOSPI, then
+on every net left but the ground and the chassis.
 """
 import collections
 import glob
@@ -80,6 +81,9 @@ FANOUT_EDGE = CHASSIS_BAND + 1.0    # vias stay off the chassis band and its cle
 VIA_GROW = 100              # um added to the vias in the DSN (Freerouting keeps no hole clearance)
 HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
+# longest layer 4 link of a supply pass: a longer one, laid straight before the signals, walls them off (the
+# +5V of the laser buffer U37 ran 35 mm across the MCU); its via is left to Freerouting with the signals
+RAIL_LINK_MAX = 5.0
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
 PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, left out of the short pass
@@ -87,6 +91,8 @@ PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, 
 FAST = r"(/Clock/)?CLK25(_ESC|_MCU)?|ESC_S(CK|CS|IO[0-3])|Net-\(U9-P(B2|B10|B1|B0|A7|A6)\)"
 SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined on layer 1 without a via
 ESCAPE_PAD = 0.5           # pass complete: IC pads narrower than this get a way out (fine pitch)
+RIP_REACH = 3.0            # pass complete: signal copper this close to an end of a missing connection ripped up
+RIPPED = PCB.replace(".kicad_pcb", "-ripped.json")
 COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
 # Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
 # +VIN to the supply jumpers of the four encoders: 4 x 0.6 A at most; 1 mm outer copper, 2.4 A at 10 degC
@@ -236,7 +242,8 @@ def keep_nets(dsn, keep):
 def freerouting(board, keep, passes, band_keepout=True):
     """Freerouting on the nets of `keep`, everything already on the board fixed; the new tracks and vias of
     these nets added to the board, locked. Not ImportSpecctraSES: it clears every track of the board first,
-    and the nets left out of the DSN would lose theirs. Returns (tracks, vias) added."""
+    and the nets left out of the DSN would lose theirs. Returns (tracks, vias) added, less the copper of
+    nets that clash."""
     dsn, ses = PCB.replace(".kicad_pcb", ".dsn"), PCB.replace(".kicad_pcb", ".ses")
     if not pcbnew.ExportSpecctraDSN(board, dsn):
         raise SystemExit("DSN export failed")
@@ -272,7 +279,59 @@ def freerouting(board, keep, passes, band_keepout=True):
     print("\n".join(log[-3:]), flush=True)
     if not os.path.exists(ses):
         raise SystemExit("Freerouting gave no result")
-    return import_ses(board, ses, keep)
+    tracks, vias, new = import_ses(board, ses, keep)
+    # a pass that fails midway can leave two nets crossing: the new copper of one of them taken back
+    bad = clashes(board, new)
+    for t in new:
+        if t.GetNetname() in bad:
+            board.Remove(t)
+            if t.GetClass() == "PCB_VIA":
+                vias -= 1
+            else:
+                tracks -= 1
+    if bad:
+        print("   clashing new copper taken back, net(s) left unrouted: " + " ".join(sorted(bad)), flush=True)
+    return tracks, vias
+
+
+def seg_seg(a, b, c, d):
+    """Distance between the segments ab and cd."""
+    def cross(o, p, q):
+        return (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0])
+    d1, d2, d3, d4 = cross(c, d, a), cross(c, d, b), cross(a, b, c), cross(a, b, d)
+    if (d1 > 0) != (d2 > 0) and (d3 > 0) != (d4 > 0) and d1 and d2 and d3 and d4:
+        return 0.0
+    return min(seg_dist(a, c, d), seg_dist(b, c, d), seg_dist(c, a, b), seg_dist(d, a, b))
+
+
+def clashes(board, new):
+    """The nets of `new` (tracks and vias just added) closer than their clearance to a track or via of
+    another net: of two clashing nets, the one with less new copper."""
+    gap = gap_of(set(pcb.iso_nets({fp.GetReference(): fp for fp in board.GetFootprints()})))
+    ids = {t.m_Uuid.AsString() for t in new}
+    items, grid = [], collections.defaultdict(list)     # grid: 1 mm cells
+    for t in board.GetTracks():
+        if t.GetClass() == "PCB_VIA":
+            a = b = xy(t.GetPosition())
+            layers, r = {pcbnew.F_Cu, pcbnew.B_Cu}, mm(t.GetWidth(pcbnew.F_Cu)) / 2
+        else:
+            a, b = xy(t.GetStart()), xy(t.GetEnd())
+            layers, r = {t.GetLayer()}, mm(t.GetWidth()) / 2
+        k = len(items)
+        items.append((t.GetNetname(), layers, a, b, r, t.m_Uuid.AsString() in ids))
+        for i in range(math.floor(min(a[0], b[0]) - r), math.floor(max(a[0], b[0]) + r) + 1):
+            for j in range(math.floor(min(a[1], b[1]) - r), math.floor(max(a[1], b[1]) + r) + 1):
+                grid[i, j].append(k)
+    count = collections.Counter(n for n, *_, fresh in items if fresh)
+    bad = set()
+    for cell in grid.values():
+        for x in range(len(cell)):
+            n1, l1, a1, b1, r1, f1 = items[cell[x]]
+            for y in range(x + 1, len(cell)):
+                n2, l2, a2, b2, r2, f2 = items[cell[y]]
+                if n1 != n2 and (f1 or f2) and l1 & l2 and seg_seg(a1, b1, a2, b2) - r1 - r2 < gap(n1, n2) - 0.005:
+                    bad.add(n1 if f1 and (not f2 or count[n1] <= count[n2]) else n2)
+    return bad
 
 
 def widen_pads(text, board):
@@ -338,14 +397,14 @@ def isolate(text, board):
 
 def import_ses(board, ses, keep):
     """The wires and vias of a Freerouting session for the nets of `keep` that the board does not have yet,
-    added locked. Returns (tracks, vias) added."""
+    added locked. Returns (tracks, vias, the items) added."""
     text = open(ses, encoding="utf-8").read()
     have = set()
     for t in board.GetTracks():
         a, b = (round(mm(t.GetStart().x), 3), round(mm(t.GetStart().y), 3)), (round(mm(t.GetEnd().x), 3), round(mm(t.GetEnd().y), 3))
         have |= {(t.GetNetname(), a, b), (t.GetNetname(), b, a)}
     k = 1e-4                        # session units: (resolution um 10), y up
-    added = [0, 0]
+    added, new = [0, 0], []
     i = text.index("(network_out")
     for m in re.finditer(r'\(net\s+("([^"]*)"|([^\s()]+))', text[i:]):
         net = m.group(2) if m.group(2) is not None else m.group(3)
@@ -372,6 +431,7 @@ def import_ses(board, ses, keep):
                 t.SetNet(ni)
                 t.SetLocked(True)
                 board.Add(t)
+                new.append(t)
                 added[0] += 1
         for v in re.finditer(r'\(via\s+"Via\[0-3\]_(\d+):(\d+)_um"\s+(-?\d+)\s+(-?\d+)', body):
             p = (int(v.group(3)) * k, -int(v.group(4)) * k)
@@ -385,8 +445,9 @@ def import_ses(board, ses, keep):
             via.SetNet(ni)
             via.SetLocked(True)
             board.Add(via)
+            new.append(via)
             added[1] += 1
-    return added
+    return added[0], added[1], new
 
 
 def refill():
@@ -585,13 +646,17 @@ def fanout(cu, nets, only=lambda fp, p: True):
 
 def complete():
     """The nets the passes before left incomplete: the fine-pitch pads of their ICs get a way out (a stub
-    and a via, the fanout), then Freerouting on them alone, everything else fixed; the ways out it leaves
-    unused are taken back."""
+    and a via, the fanout); the copper of the other signals around both ends of each missing connection is
+    ripped up (RIP_REACH); then Freerouting on all these nets, everything else fixed. The ways out it leaves
+    unused and the ends of ripped tracks that lead nowhere are taken back."""
     start("complete")
-    names = unconnected_nets(refill())
+    rpt = refill()
+    # the rip-up in a process of its own: a board that has lost items breaks the next calls of the API
+    subprocess.run([sys.executable, os.path.abspath(__file__), "rip", rpt], check=True)
+    ripped = set(json.load(open(RIPPED, encoding="utf-8")))
     board = pcbnew.LoadBoard(PCB)
     project.apply_netclasses(board)
-    nets = names & (signal_nets(board) | {"CHASSIS"})
+    nets = (unconnected_nets(rpt) & (signal_nets(board) | {"CHASSIS"})) | ripped
     cu = Copper(board)
     before = {t.m_Uuid.AsString() for t in board.GetTracks()}
     left, _ = fanout(cu, nets - {"CHASSIS"}, lambda fp, p: fp.GetReference().startswith("U")
@@ -610,18 +675,75 @@ def complete():
             unused += 1
     for t in drop:
         board.Remove(t)
-    print(f"complete pass: {len(nets)} nets, {len(ways) // 2} way(s) out ({len(left)} without room), "
-          f"{unused} unused taken back; {tracks} track(s) and {vias} via(s) added", flush=True)
+    pruned = prune(board, ripped)
+    print(f"complete pass: {len(nets)} nets ({len(ripped)} ripped), {len(ways) // 2} "
+          f"way(s) out ({len(left)} without room), {unused} unused taken back; {tracks} track(s) and {vias} via(s) "
+          f"added, {pruned} dead end(s) taken back", flush=True)
     project.save(board, PCB)
 
 
-def link(cu, net, off, inside=None, top=False):
+def rip(rpt):
+    """The working board without the copper of the signals around both ends of each missing connection of
+    the DRC report `rpt`; the nets ripped written to RIPPED."""
+    board = pcbnew.LoadBoard(PCB)
+    project.apply_netclasses(board)
+    nets = unconnected_nets(rpt) & signal_nets(board)
+    # the windows: both ends of each missing connection but the chassis (its band is the pass islands)
+    windows = [(i["pos"]["x"] - RIP_REACH, i["pos"]["y"] - RIP_REACH, i["pos"]["x"] + RIP_REACH, i["pos"]["y"] + RIP_REACH)
+               for u in json.load(open(rpt, encoding="utf-8"))["unconnected_items"]
+               if net_of(u["items"][0]["description"]) in nets for i in u["items"]]
+    # ripped: the signals routed by Freerouting or the short pass, not the supplies, the clock and the OCTOSPI
+    rippable = {n for n in signal_nets(board) - set(RAILS.values()) - set(PHY_ISLANDS) if not re.fullmatch(FAST, n)} | nets
+    ripped = set()
+    for t in list(board.GetTracks()):
+        a, b = (xy(t.GetPosition()),) * 2 if t.GetClass() == "PCB_VIA" else (xy(t.GetStart()), xy(t.GetEnd()))
+        if t.GetNetname() in rippable and any(
+                max(a[0], b[0]) >= w[0] and min(a[0], b[0]) <= w[2] and max(a[1], b[1]) >= w[1] and min(a[1], b[1]) <= w[3]
+                for w in windows):
+            ripped.add(t.GetNetname())
+            board.Remove(t)
+    print(f"   rip-up: {len(ripped)} net(s) around {len(windows)} end(s)", flush=True)
+    json.dump(sorted(ripped), open(RIPPED, "w", encoding="utf-8"))
+    project.save(board, PCB)
+
+
+def prune(board, nets):
+    """Tracks of `nets` with an end that meets nothing of their net (track, via, pad), and vias that meet
+    fewer than two tracks, taken back until none is left. Returns how many."""
+    removed = 0
+    while True:
+        tracks = [t for t in board.GetTracks() if t.GetNetname() in nets]
+        segs = [t for t in tracks if t.GetClass() != "PCB_VIA"]
+        vias = [t for t in tracks if t.GetClass() == "PCB_VIA"]
+        pads = [p for fp in board.GetFootprints() for p in fp.Pads() if p.GetNetname() in nets]
+
+        def met(t, e):
+            layer, net = t.GetLayer(), t.GetNetname()
+            if any(v.GetNetname() == net and math.dist(xy(v.GetPosition()), e) < mm(v.GetWidth(pcbnew.F_Cu)) / 2
+                   for v in vias):
+                return True
+            if any(p.GetNetname() == net and p.IsOnLayer(layer) and p.HitTest(vec(e)) for p in pads):
+                return True
+            return any(o is not t and o.GetNetname() == net and o.GetLayer() == layer
+                       and seg_dist(e, xy(o.GetStart()), xy(o.GetEnd())) < mm(o.GetWidth()) / 2 for o in segs)
+        dead = [t for t in segs if not (met(t, xy(t.GetStart())) and met(t, xy(t.GetEnd())))]
+        dead += [v for v in vias if sum(1 for t in segs if t.GetNetname() == v.GetNetname()
+                                        and min(math.dist(xy(t.GetStart()), xy(v.GetPosition())),
+                                                math.dist(xy(t.GetEnd()), xy(v.GetPosition()))) < mm(v.GetWidth(pcbnew.F_Cu)) / 2) < 2]
+        if not dead:
+            return removed
+        for t in dead:
+            board.Remove(t)
+        removed += len(dead)
+
+
+def link(cu, net, off, inside=None, top=False, reach=LINK_REACH):
     """Tracks on layer 4 from each via off its plane to a via of the net in the plane, an existing one or a
     new one, in an L or straight; the vias linked serve the next ones. Returns the vias left unlinked.
-    inside(point, radius): where a via is in the plane, its outline by default; top: on layer 1 instead."""
+    inside(point, radius): where a via is in the plane, its outline by default; top: on layer 1 instead;
+    reach: the longest link."""
     inside = inside or (lambda p, r: cu.in_plane(net, p, r))
     width, _, via_d, via_drill = project.CLASSES[project.class_of(net)]
-    reach = LINK_REACH
     targets = [o.centre for o in cu.items if o.net == net and o.drill and not o.pad and inside(o.centre, o.reach)]
     r = via_d / 2
 
@@ -649,7 +771,7 @@ def link(cu, net, off, inside=None, top=False):
             for t in sorted(targets, key=lambda t: math.dist(a, t))[:LINK_TRIES]:
                 if math.dist(a, t) > reach:
                     break
-                p = next((p for p in paths(a, t) if path_ok(p)), None)
+                p = next((p for p in paths(a, t) if length(p) <= reach and path_ok(p)), None)
                 if p:
                     best = (length(p), p, None)
                     break
@@ -712,13 +834,20 @@ def start(name):
     return board
 
 
-def fanout_pass(board, name, nets):
-    """Fanout of `nets`, then the vias off their plane linked on layer 4. Returns the copper."""
+def fanout_pass(board, name, nets, reach=LINK_REACH):
+    """Fanout of `nets`, then the vias off their plane linked on layer 4, up to `reach`. Returns the copper."""
     cu = Copper(board)
     left, off = fanout(cu, nets)
-    unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net])]
+    unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net], reach=reach)]
+    # an unlinked via and its stub taken back: Freerouting starts from the pad, the planes keep their copper
+    for net, n, v in off:
+        if n in unlinked:
+            for t in list(board.GetTracks()):
+                if t.GetNetname() == net and (math.dist(xy(t.GetPosition()), v) < 1e-3 if t.GetClass() == "PCB_VIA"
+                                              else min(math.dist(xy(t.GetStart()), v), math.dist(xy(t.GetEnd()), v)) < 1e-3):
+                    board.Remove(t)
     print(f"{name} pass: {len(left)} pad(s) without a via, {len(off)} via(s) off the plane linked on layer 4, "
-          f"{len(unlinked)} left unlinked", flush=True)
+          f"{len(unlinked)} left unlinked, for the signals pass", flush=True)
     for s in left + unlinked:
         print("  ", s)
     return cu
@@ -959,8 +1088,10 @@ def track_groups(board, net):
 
 
 def signal_nets(board):
-    """All the nets but the planes, the pairs and the chassis (its band is a zone of layer 4)."""
-    done = {"GND", "GNDISO", "CHASSIS", *SUPPLY_PLANES, *PHY_ISLANDS}
+    """All the nets but the ground planes, the pairs and the chassis (its band is a zone of layer 4); the
+    supplies are in, for the vias their passes left off the plane: Freerouting routes only what is unconnected,
+    a pad or via in a plane counts as connected."""
+    done = {"GND", "GNDISO", "CHASSIS"}
     return {n for n in (str(k) for k in board.GetNetsByName().keys())
             if n and n not in done and not n.startswith("unconnected-") and not re.fullmatch(PAIRS, n)}
 
@@ -968,7 +1099,7 @@ def signal_nets(board):
 def rail(name):
     board = start(name)
     net = RAILS[name]
-    fanout_pass(board, name, {net})
+    fanout_pass(board, name, {net}, RAIL_LINK_MAX)
     project.save(board, PCB)
 
 
@@ -1009,7 +1140,7 @@ def main():
         rail(step)
     elif step == "phy":
         board = start("phy")
-        fanout_pass(board, "phy", set(PHY_ISLANDS))
+        fanout_pass(board, "phy", set(PHY_ISLANDS), RAIL_LINK_MAX)
         project.save(board, PCB)
     elif step == "short":
         short()
@@ -1017,6 +1148,8 @@ def main():
         islands()
     elif step == "complete":
         complete()
+    elif step == "rip":
+        return rip(sys.argv[2])
     elif step == "pairs":
         import pairs
         board = start("pairs")

@@ -31,3 +31,4 @@ hardware/base/kicad/stages/
 *.dsn
 *.ses
 *-drc.json
+*-ripped.json
