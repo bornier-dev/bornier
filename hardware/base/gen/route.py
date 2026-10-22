@@ -267,6 +267,7 @@ def freerouting(board, keep, passes, band_keepout=True):
                                    m.group(1)), text, flags=re.S)
     text = widen_pads(text, board)
     text = isolate(text, board)
+    text = pad_contacts(text, board)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
     if os.path.exists(ses):
         os.remove(ses)
@@ -332,6 +333,53 @@ def clashes(board, new):
                 if n1 != n2 and (f1 or f2) and l1 & l2 and seg_seg(a1, b1, a2, b2) - r1 - r2 < gap(n1, n2) - 0.005:
                     bad.add(n1 if f1 and (not f2 or count[n1] <= count[n2]) else n2)
     return bad
+
+
+def pad_contacts(text, board):
+    """Freerouting joins a wire to a pad only by an end of the wire at the pad: the pairs run straight
+    across the pads of their ESD arrays and terminations, which it then takes for unrouted and routes again
+    at every pass, in the way of the others. In the DSN only, the wires of the pairs are split at the point
+    nearest each pad centre, with a stub from there to the centre."""
+    u = 1000.0                      # DSN units: um, y up
+    pads = collections.defaultdict(list)
+    for fp in board.GetFootprints():
+        for p in fp.Pads():
+            if re.fullmatch(PAIRS, p.GetNetname()) and p.IsOnLayer(pcbnew.F_Cu):
+                pads[p.GetNetname()].append(p)
+    names = {}
+
+    def drop(m):
+        net = m.group(2) if m.group(2) is not None else m.group(3)
+        if not re.fullmatch(PAIRS, net):
+            return m.group(0)
+        names[net] = m.group(1)
+        return ""
+    text = re.sub(r'\s*\(wire \(path [^()]*\)\(net ("([^"]*)"|([^\s()]+))\)\(type \w+\)\)', drop, text)
+    wires = []
+    for t in board.GetTracks():
+        net = t.GetNetname()
+        if t.GetClass() == "PCB_VIA" or net not in pads:
+            continue
+        a, b = xy(t.GetStart()), xy(t.GetEnd())
+        cuts = [a, b]
+        for pad in pads[net]:
+            c = xy(pad.GetPosition())
+            if t.GetLayer() != pcbnew.F_Cu or min(math.dist(c, a), math.dist(c, b)) < 1e-3:
+                continue
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            k = min(max(((c[0] - a[0]) * dx + (c[1] - a[1]) * dy) / ((dx * dx + dy * dy) or 1.0), 0.0), 1.0)
+            q = (a[0] + k * dx, a[1] + k * dy)
+            if not pad.HitTest(vec(q), MM(mm(t.GetWidth()) / 2)):     # the track does not run over the pad
+                continue
+            cuts.append(q)
+            wires.append((t.GetLayer(), t.GetWidth(), net, q, c))
+        cuts.sort(key=lambda p: math.dist(a, p))
+        wires += [(t.GetLayer(), t.GetWidth(), net, p, q) for p, q in zip(cuts, cuts[1:])]
+    k = text.index("  (wiring") + len("  (wiring")
+    return text[:k] + "".join(
+        f"\n    (wire (path {board.GetLayerName(layer)} {round(mm(w) * u)}  {p[0] * u:.1f} {-p[1] * u:.1f}  "
+        f"{q[0] * u:.1f} {-q[1] * u:.1f})(net {names.get(net, net)})(type fix))"
+        for layer, w, net, p, q in wires if math.dist(p, q) > 1e-4) + text[k:]
 
 
 def widen_pads(text, board):
@@ -693,7 +741,8 @@ def rip(rpt):
                for u in json.load(open(rpt, encoding="utf-8"))["unconnected_items"]
                if net_of(u["items"][0]["description"]) in nets for i in u["items"]]
     # ripped: the signals routed by Freerouting or the short pass, not the supplies, the clock and the OCTOSPI
-    rippable = {n for n in signal_nets(board) - set(RAILS.values()) - set(PHY_ISLANDS) if not re.fullmatch(FAST, n)} | nets
+    supplies = set(RAILS.values()) | set(PHY_ISLANDS)     # their vias into the planes meet a single track
+    rippable = {n for n in signal_nets(board) - supplies if not re.fullmatch(FAST, n)} | (nets - supplies)
     ripped = set()
     for t in list(board.GetTracks()):
         a, b = (xy(t.GetPosition()),) * 2 if t.GetClass() == "PCB_VIA" else (xy(t.GetStart()), xy(t.GetEnd()))
