@@ -82,7 +82,8 @@ VIA_GROW = 100              # um added to the vias in the DSN (Freerouting keeps
 # Freerouting runs side by side, one per set of costs (its defaults: via 50, first rip-up 100, trace off its
 # preferred direction 2.5): one core and 1 GB each
 VARIANTS = [{}, {"via_costs": 25}, {"via_costs": 100}, {"start_ripup_costs": 50}, {"start_ripup_costs": 200},
-            {"default_undesired_direction_trace_cost": 1.5}]
+            {"default_undesired_direction_trace_cost": 1.5}, {"default_undesired_direction_trace_cost": 4.0},
+            {"via_costs": 25, "start_ripup_costs": 50}]
 HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 # longest layer 4 link of a supply pass: a longer one, laid straight before the signals, walls them off (the
