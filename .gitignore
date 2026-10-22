@@ -32,3 +32,4 @@ hardware/base/kicad/stages/
 *.ses
 *-drc.json
 *-ripped.json
+hardware/base/kicad/base-*.log

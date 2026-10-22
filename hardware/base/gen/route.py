@@ -79,6 +79,10 @@ PLANE_INSET = 0.3           # a via stays this far inside the outline of its pla
 FANOUT_REACH = 2.5          # longest stub from a pad centre to its via
 FANOUT_EDGE = CHASSIS_BAND + 1.0    # vias stay off the chassis band and its clearance
 VIA_GROW = 100              # um added to the vias in the DSN (Freerouting keeps no hole clearance)
+# Freerouting runs side by side, one per set of costs (its defaults: via 50, first rip-up 100, trace off its
+# preferred direction 2.5): one core and 1 GB each
+VARIANTS = [{}, {"via_costs": 25}, {"via_costs": 100}, {"start_ripup_costs": 50}, {"start_ripup_costs": 200},
+            {"default_undesired_direction_trace_cost": 1.5}]
 HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 # longest layer 4 link of a supply pass: a longer one, laid straight before the signals, walls them off (the
@@ -269,17 +273,37 @@ def freerouting(board, keep, passes, band_keepout=True):
     text = isolate(text, board)
     text = pad_contacts(text, board)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
-    if os.path.exists(ses):
-        os.remove(ses)
+    # Freerouting gives the same result for the same input: the variants run side by side with other costs,
+    # each into a session of its own; the one that leaves the fewest connections unrouted is taken
     # -Xmx1g and SerialGC: one core and 1 GB per JVM; low priority, the machine stays usable
     flags = subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
-    r = subprocess.run([JAVA, "-Xmx1g", "-XX:+UseSerialGC", "-jar", JAR, "-de", dsn, "-do", ses, "-mp", str(passes),
-                        "--router.fanout.enabled=false", "--router.optimizer.enabled=false", "--gui.enabled=false"],
-                       capture_output=True, text=True, timeout=4 * 3600, creationflags=flags)
-    log = (r.stdout + r.stderr).strip().splitlines()
-    print("\n".join(log[-3:]), flush=True)
-    if not os.path.exists(ses):
+    runs = []
+    for k, costs in enumerate(VARIANTS):
+        out = ses.replace(".ses", f"-{k}.ses")
+        if os.path.exists(out):
+            os.remove(out)
+        log = open(out.replace(".ses", ".log"), "w", encoding="utf-8")
+        runs.append((k, out, log, subprocess.Popen(
+            [JAVA, "-Xmx1g", "-XX:+UseSerialGC", "-jar", JAR, "-de", dsn, "-do", out, "-mp", str(passes),
+             "--router.fanout.enabled=false", "--router.optimizer.enabled=false", "--gui.enabled=false"]
+            + [f"--router.scoring.{name}={value}" for name, value in costs.items()],
+            stdout=log, stderr=subprocess.STDOUT, creationflags=flags)))
+    results = []
+    for k, out, log, p in runs:
+        p.wait(timeout=6 * 3600)
+        log.close()
+        text = open(log.name, encoding="utf-8", errors="replace").read()
+        # "... final score: 859.46 (61 unrouted and 607 violations)"
+        score = re.findall(r"final score: [\d.]+ \((\d+) unrouted and (\d+) violations\)", text)
+        unrouted, violations = map(int, score[-1]) if score else (math.inf, math.inf)
+        print(f"   variant {k} {VARIANTS[k]}: {unrouted} unrouted, {violations} violations", flush=True)
+        if os.path.exists(out):
+            results.append((unrouted, violations, k, out))
+    if not results:
         raise SystemExit("Freerouting gave no result")
+    best = min(results)
+    print(f"   variant {best[2]} taken", flush=True)
+    shutil.copyfile(best[3], ses)
     tracks, vias, new = import_ses(board, ses, keep)
     # a pass that fails midway can leave two nets crossing: the new copper of one of them taken back
     bad = clashes(board, new)
