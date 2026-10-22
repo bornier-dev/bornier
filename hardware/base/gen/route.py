@@ -91,6 +91,10 @@ LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 # Shorter ones stay: at 5 mm, Freerouting failed to finish a few of them (the input of U10, the +3V3 of the
 # encoder receivers)
 RAIL_LINK_MAX = 12.0
+# Supplies whose links left to Freerouting carry little current, routed thinner than their class, mm. +5V:
+# the laser buffer U37 and the feedback divider R4, under 10 mA (0.15 mm: above 0.45 A); at 0.25 mm the
+# 35 mm link of U37 found no way
+THIN = {"+5V": 0.15}
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
 PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, left out of the short pass
@@ -277,6 +281,7 @@ def freerouting(board, keep, passes, band_keepout=True):
                                    m.group(1)), text, flags=re.S)
     text = widen_pads(text, board)
     text = isolate(text, board)
+    text = thin(text)
     text = pad_contacts(text, board)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
     # Freerouting gives the same result for the same input: the variants run side by side with other costs,
@@ -444,6 +449,25 @@ def widen_pads(text, board):
         k = text.index("    (padstack ")
         text = text[:k] + "".join(extra) + text[k:]
     return text
+
+
+def thin(text):
+    """The nets of THIN in a class of their own, with its width: the tracks Freerouting lays for them."""
+    found = []
+
+    def strip(m):
+        names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s"]+)', m.group(2))]
+        found.extend(n for n in names if n in THIN)
+        return f"(class {m.group(1)} " + " ".join(f'"{n}"' for n in names if n not in THIN)
+
+    text = re.sub(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', strip, text)
+    rules = "".join(f'    (class Thin{k} "{n}"\n      (circuit\n        (use_via "Via[0-3]_400:200_um")\n      )\n'
+                    f'      (rule\n        (width {round(THIN[n] * 1000)})\n'
+                    f'        (clearance {round(project.CLASSES[project.class_of(n)][1] * 1000)})\n      )\n    )\n'
+                    for k, n in enumerate(sorted(set(found))))
+    k = text.index("\n  (wiring")
+    end = text.rindex("  )", 0, k)
+    return text[:end] + rules + text[end:]
 
 
 def isolate(text, board):

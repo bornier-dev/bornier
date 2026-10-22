@@ -382,6 +382,10 @@ KEY = {
     "U3": (135.5, 83.6, 0), "L2": (132.1, 83.6, 180), "C9": (135.5, 86.05, 180),
     "C10": (129.0, 83.6, 90), "C300": (131.6, 86.4, 0), "R10": (137.7, 83.6, 90), "R9": (139.0, 83.6, 270),
     "D4": (130.4, 78.3, 180), "TP7": (125.3, 78.25, 0),
+    # power entry, on the line of the fuse output: the TVS to its left, the reverse diode to its right with its
+    # cathode over the +VIN plane (placed by the rules, the diode landed 25 mm away and VIN_F, 1.5 mm wide,
+    # crossed both bucks)
+    "F1": (127.09, 93.1, 90), "D1": (122.0, 91.7, 180), "D2": (132.0, 91.7, 180),
     "U11": (AXIS_X[1] - 5.5, 36.0, 90), "U16": (AXIS_X[3] - 5.5, 36.0, 90),   # step/dir drivers, two axes each
 }
 for k, ref in enumerate(["U22", "U24", "U26", "U28"]):  # encoder receivers
