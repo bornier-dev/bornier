@@ -704,8 +704,8 @@
         "pattern": "/Power/SW3"
       },
       {
-        "netclass": "Buck",
-        "pattern": "/Power/VBUS"
+        "netclass": "Limited",
+        "pattern": "VBUS"
       },
       {
         "netclass": "Limited",
