@@ -37,7 +37,7 @@ def hpart(s, ref, x, y, rot=90):
 
 
 def power(prj):
-    s = prj.sheet("Power", "power.kicad_sch", "12 or 24 V input, 5 V and 3.3 V bucks, USB")
+    s = prj.sheet("Power", "power.kicad_sch", "12 or 24 V input, 5 V and 3.3 V bucks, USB VBUS")
     s.text("POWER", 20.32, 17.78, 2.54, True)
     y0 = 76.2                       # protected supply line (+VIN)
     y5 = y0 + 5.08                  # 5 V line
@@ -149,32 +149,13 @@ def power(prj):
     s.power("PWR_FLAG", 276.86, y5 - 5.08)
     s.w("+5V", (276.86, y5 - 5.08), (279.4, y5 - 5.08))
 
-    # --- USB micro-B ---------------------------------------------------------------------------
+    # --- USB VBUS into the 5 V rail (the jack, its ESD and VBUS_SENSE are on the MCU sheet) ---------------
     yu = y0 + 63.5
-    s.text("USB micro-B: bench power (logic only) and DFU programming.\n"
-           "TPD4E05U06 next to the connector, lines flow through.", 20.32, yu - 17.78)
-    s.place("J2", 30.48, yu + 5.08, ref_at=(22.86, yu - 5.08), val_at=(22.86, yu - 2.54))
-    # ESD array under the lines, flow-through on the board
-    xe, ye = 60.96, yu + 25.4
-    s.place("U2", xe, ye, ref_at=(xe + 3.81, ye - 8.89), val_at=(xe + 3.81, ye - 11.43))
-    for net, jpin, epin, xv in (("USB_DP", 3, 1, xe - 15.24), ("USB_DM", 2, 2, xe - 17.78)):
-        jx_, jy_ = s.P("J2", jpin)
-        s.w(net, (jx_, jy_), (xe + 7.62, jy_))
-        s.glabel(net, xe + 7.62, jy_, 0, "bidirectional")
-        ex, ey = s.P("U2", epin)
-        s.w(net, (xv, jy_), (xv, ey), (ex, ey))
-    ex, ey = s.P("U2", 5)
-    s.w("VBUS", (xe + 15.24, s.P("J2", 1)[1]), (xe + 15.24, ey), (ex, ey))
-    x, y = s.P("J2", "SH")
-    s.w("GND", (x, y), (x, y + 2.54), (s.P("J2", 5)[0], y + 2.54))
-    s.rail("GND", *s.P("J2", 5), drop=5.08)
-    s.rail("GND", *s.P("U2", 3))
-    for pin_e, net in ((10, "USB_DP"), (9, "USB_DM")):      # flow-through
-        s.glabel(net, *s.P("U2", pin_e), 0, "bidirectional", tag=f"U2.{pin_e}")
-    s.label("VBUS", *s.P("U2", 6), tag="U2.6")
-    vb = s.P("J2", 1)
+    vb = (246.38, yu)
+    s.text("VBUS from the USB jack (MCU sheet):\nbench power, logic only.", 228.6, yu + 5.08)
     hpart(s, "D5", 271.78, vb[1], rot=180)
-    s.w("VBUS", vb, (101.6, vb[1]), s.P("D5", 2))
+    s.w("VBUS", vb, s.P("D5", 2))
+    s.glabel("VBUS", *vb, 180, "input")
     # USB path switch: Q11 off while +5V is present (gate pulled to +5V), on with USB alone
     qx, qy = 284.48, vb[1] + 2.54
     s.place("Q11", qx, qy, rot=90, mirror="y", ref_at=(qx - 2.54, qy - 7.62), val_at=(qx + 2.54, qy - 7.62))
@@ -187,16 +168,6 @@ def power(prj):
     s.w("+5V", s.P("R310", 1), (s.P("R310", 1)[0], s.P("R310", 1)[1] + 2.54))
     s.power("+5V", s.P("R310", 1)[0], s.P("R310", 1)[1] + 2.54, 180)
     s.quiet.update({"VUSB_D", "QU_G"})
-    s.label("VBUS", 40.64, vb[1])
-    vpart(s, "R7", 101.6, vb[1] + 2.54)
-    vpart(s, "R8", 101.6, vb[1] + 12.7)
-    s.w("VBUS", (101.6, vb[1]), s.P("R7", 1))
-    s.w("VBUS_SENSE", s.P("R7", 2), s.P("R8", 1))
-    vs = s.P("R7", 2)
-    s.w("VBUS_SENSE", vs, (109.22, vs[1]))
-    s.glabel("VBUS_SENSE", 109.22, vs[1], 0, "output")
-    s.rail("GND", *s.P("R8", 2))
-    s.text("VBUS_SENSE on PD9: 3.4 V, 5 V tolerant pin;\nan input (USART3_RX) in the bootloader.", 104.14, vb[1] + 25.4)
 
     # --- 3.3 V buck ----------------------------------------------------------------------------
     xn = 298.45                     # V3IN node
@@ -554,7 +525,7 @@ MCU_BIDIR = {"ESC_RST", "USB_DM", "USB_DP", "BUS_SDA"}
 
 
 def mcu(prj):
-    s = prj.sheet("MCU", "mcu.kicad_sch", "MCU STM32H523VET6, decoupling, debug")
+    s = prj.sheet("MCU", "mcu.kicad_sch", "MCU STM32H523VET6, decoupling, debug, USB")
     s.text("MCU", 20.32, 17.78, 2.54, True)
     cx, cy = 210.82, 154.94
     s.place("U9", cx, cy, ref_at=(cx + 2.54, cy - 2.54), val_at=(cx + 2.54, cy))
@@ -692,6 +663,43 @@ def mcu(prj):
             s.glabel(net, x + 5.08, y, 0, "bidirectional")
         else:
             s.label(net, x + 5.08, y)
+
+    # --- USB micro-B -------------------------------------------------------------------------------
+    xu, yu = 259.08, 45.72
+    s.text("USB micro-B: bench power (logic only) and DFU programming.\n"
+           "TPD4E05U06 next to the connector, lines flow through.", xu - 10.16, yu - 17.78)
+    s.place("J2", xu, yu + 5.08, ref_at=(xu - 7.62, yu - 5.08), val_at=(xu - 7.62, yu - 2.54))
+    # ESD array under the lines, flow-through on the board
+    xe, ye = xu + 30.48, yu + 25.4
+    s.place("U2", xe, ye, ref_at=(xe + 3.81, ye - 8.89), val_at=(xe + 3.81, ye - 11.43))
+    for net, jpin, epin, xv in (("USB_DP", 3, 1, xe - 15.24), ("USB_DM", 2, 2, xe - 17.78)):
+        jx_, jy_ = s.P("J2", jpin)
+        s.w(net, (jx_, jy_), (xe + 7.62, jy_))
+        s.glabel(net, xe + 7.62, jy_, 0, "bidirectional")
+        ex, ey = s.P("U2", epin)
+        s.w(net, (xv, jy_), (xv, ey), (ex, ey))
+    ex, ey = s.P("U2", 5)
+    s.w("VBUS", (xe + 15.24, s.P("J2", 1)[1]), (xe + 15.24, ey), (ex, ey))
+    x, y = s.P("J2", "SH")
+    s.w("GND", (x, y), (x, y + 2.54), (s.P("J2", 5)[0], y + 2.54))
+    s.rail("GND", *s.P("J2", 5), drop=5.08)
+    s.rail("GND", *s.P("U2", 3))
+    for pin_e, net in ((10, "USB_DP"), (9, "USB_DM")):      # flow-through
+        s.glabel(net, *s.P("U2", pin_e), 0, "bidirectional", tag=f"U2.{pin_e}")
+    s.glabel("VBUS", *s.P("U2", 6), 0, "passive", tag="U2.6")
+    vb = s.P("J2", 1)
+    xr = xu + 71.12
+    s.w("VBUS", vb, (xr, vb[1]), (xr + 15.24, vb[1]))
+    s.glabel("VBUS", xr + 15.24, vb[1], 0, "output")
+    vpart(s, "R7", xr, vb[1] + 2.54)
+    vpart(s, "R8", xr, vb[1] + 12.7)
+    s.w("VBUS", (xr, vb[1]), s.P("R7", 1))
+    s.w("VBUS_SENSE", s.P("R7", 2), s.P("R8", 1))
+    vs = s.P("R7", 2)
+    s.w("VBUS_SENSE", vs, (xr + 7.62, vs[1]))
+    s.glabel("VBUS_SENSE", xr + 7.62, vs[1], 0, "output")
+    s.rail("GND", *s.P("R8", 2))
+    s.text("VBUS_SENSE on PD9: 3.4 V, 5 V tolerant pin;\nan input (USART3_RX) in the bootloader.", xr + 2.54, vb[1] + 25.4)
 
 def main():
     # Project symbol library, so that KiCad finds the LAN9253 when the schematic is edited.

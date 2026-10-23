@@ -1235,8 +1235,119 @@ def report(rpt):
             print(f"   zone {z.GetZoneName():16} {board.GetLayerName(layer):6} {n} island(s)")
 
 
+def plane_at(board, net, v):
+    """A zone of `net` on an inner layer under the point v (mm)."""
+    return any(z.GetNetname() == net and not z.GetIsRuleArea() and z.GetLayer() in (pcbnew.In1_Cu, pcbnew.In2_Cu)
+               and z.Outline().Contains(vec(v)) for z in board.Zones())
+
+
+def connection(board, pads):
+    """The copper of the connections of `pads`: from each pad, the tracks and vias that lead away from it,
+    up to the next pad, a junction, or a via in its plane (taken too when nothing else meets it)."""
+    def key(v):
+        return round(mm(v.x), 3), round(mm(v.y), 3)
+    segs, vias = collections.defaultdict(list), {}
+    for t in board.GetTracks():
+        if t.GetClass() == "PCB_VIA":
+            vias[t.GetNetname(), key(t.GetPosition())] = t
+        else:
+            segs[t.GetNetname()].append(t)
+    net_pads = collections.defaultdict(list)
+    for fp in board.GetFootprints():
+        for p in fp.Pads():
+            net_pads[p.GetNetname()].append(p)
+
+    def on_pad(net, e, layer):
+        return any(p.IsOnLayer(layer) and p.HitTest(vec(e)) for p in net_pads[net])
+
+    gone = {}
+    for pad in pads:
+        net = pad.GetNetname()
+        if not net or net.startswith("unconnected-"):
+            continue
+        todo = [(t, k) for t in segs[net] for k, e in enumerate((xy(t.GetStart()), xy(t.GetEnd())))
+                if pad.IsOnLayer(t.GetLayer()) and pad.HitTest(vec(e))]
+        while todo:
+            t, k = todo.pop()
+            uid = t.m_Uuid.AsString()
+            if uid in gone:
+                continue
+            gone[uid] = t
+            e = key(t.GetEnd() if k == 0 else t.GetStart())         # the far end
+            if on_pad(net, e, t.GetLayer()):
+                continue
+            via = vias.get((net, e))
+            meet = [o for o in segs[net] if o.m_Uuid.AsString() not in gone
+                    and (via or o.GetLayer() == t.GetLayer()) and e in (key(o.GetStart()), key(o.GetEnd()))]
+            if via and plane_at(board, net, e):
+                if not meet:
+                    gone[via.m_Uuid.AsString()] = via
+                continue
+            if len(meet) == 1:
+                if via:
+                    gone[via.m_Uuid.AsString()] = via
+                o = meet[0]
+                todo.append((o, 0 if key(o.GetStart()) == e else 1))
+            elif not meet and via:
+                gone[via.m_Uuid.AsString()] = via
+    return list(gone.values())
+
+
+def renet():
+    """The pin nets of the schematic on the working board: the copper of every pad whose net changes is
+    taken back (its connections only), then the pad takes its new net."""
+    comps, pinnets = pcb.load_netlist()
+    board = pcbnew.LoadBoard(PCB)
+    project.apply_netclasses(board)
+    changed = []
+    for fp in board.GetFootprints():
+        c = comps.get(fp.GetReference())
+        if c and c["description"] and fp.GetFieldText("Description") != c["description"]:
+            fp.SetField("Description", c["description"])
+        for p in fp.Pads():
+            new = pinnets.get(fp.GetReference(), {}).get(p.GetNumber())
+            if new and new != p.GetNetname():
+                changed.append((fp.GetReference(), p, new))
+    gone = connection(board, [p for _, p, _ in changed])
+    for ref, p, new in changed:
+        print(f"   {ref}.{p.GetNumber()}: {p.GetNetname()} -> {new}")
+        n = board.FindNet(new)
+        if n is None:
+            n = pcbnew.NETINFO_ITEM(board, new)
+            board.Add(n)
+        p.SetNet(n)
+    for t in gone:
+        board.Remove(t)
+    print(f"renet: {len(changed)} pad(s) on a new net, {len(gone)} track(s) and via(s) taken back", flush=True)
+    project.save(board, PCB)
+
+
+def unroute(refs):
+    """The connections of parts (REF) or pads (REF.PIN) taken back."""
+    board = pcbnew.LoadBoard(PCB)
+    project.apply_netclasses(board)
+    pads = []
+    for r in refs:
+        ref, _, pin = r.partition(".")
+        fp = board.FindFootprintByReference(ref)
+        if fp is None:
+            raise SystemExit(f"no part {ref}")
+        pads += [p for p in fp.Pads() if not pin or p.GetNumber() == pin]
+    gone = connection(board, pads)
+    for t in gone:
+        board.Remove(t)
+    print(f"unroute: {len(gone)} track(s) and via(s) taken back from {' '.join(refs)}", flush=True)
+    project.save(board, PCB)
+
+
 def main():
     step = sys.argv[1] if len(sys.argv) > 1 else "gnd"
+    if step == "renet":
+        renet()
+        return subprocess.run([sys.executable, os.path.abspath(__file__), "report"], check=True)
+    if step == "unroute":
+        unroute(sys.argv[2:])
+        return subprocess.run([sys.executable, os.path.abspath(__file__), "report"], check=True)
     if step == "report":
         return report(refill())
     if step == "back":

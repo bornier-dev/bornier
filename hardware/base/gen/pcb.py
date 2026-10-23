@@ -364,7 +364,7 @@ KEY = {
     "U4": (33.0, 74.0, 180),                        # ESC: PHY pins toward the EtherCAT jacks, port A left
     "J10": (END_KEEP + 5.0, HE10_Y, 0),               # local bus header, centred across the board
     "J2": (78.5, 67.0, 0),                          # micro-B, next to the USB pins of the MCU
-    "J5": (72.5, 52.5, 0),                          # Tag-Connect, at the SWD corner: PA13 (72), PA14 (76), PB3 (89)
+    "J5": (65.0, 47.5, 0),                          # Tag-Connect, north of the SWD corner, clear of the C-LOCK: PA13 (72), PA14 (76), PB3 (89)
     "SW1": (41.5, 51.5, 90),                        # BOOT
     "U38": (55.5, BARRIER_Y, 270),                  # Modbus: bus side toward J13
     "JP5": (55.0, 93.3, 90),                        # Modbus termination, between U38 and J13
