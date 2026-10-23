@@ -157,7 +157,7 @@ def power(prj):
     # ESD array under the lines, flow-through on the board
     xe, ye = 60.96, yu + 25.4
     s.place("U2", xe, ye, ref_at=(xe + 3.81, ye - 8.89), val_at=(xe + 3.81, ye - 11.43))
-    for net, jpin, epin, xv in (("USB_DP", 3, 2, xe - 15.24), ("USB_DM", 2, 1, xe - 17.78)):
+    for net, jpin, epin, xv in (("USB_DP", 3, 1, xe - 15.24), ("USB_DM", 2, 2, xe - 17.78)):
         jx_, jy_ = s.P("J2", jpin)
         s.w(net, (jx_, jy_), (xe + 7.62, jy_))
         s.glabel(net, xe + 7.62, jy_, 0, "bidirectional")
@@ -169,7 +169,7 @@ def power(prj):
     s.w("GND", (x, y), (x, y + 2.54), (s.P("J2", 5)[0], y + 2.54))
     s.rail("GND", *s.P("J2", 5), drop=5.08)
     s.rail("GND", *s.P("U2", 3))
-    for pin_e, net in ((10, "USB_DM"), (9, "USB_DP")):      # flow-through
+    for pin_e, net in ((10, "USB_DP"), (9, "USB_DM")):      # flow-through
         s.glabel(net, *s.P("U2", pin_e), 0, "bidirectional", tag=f"U2.{pin_e}")
     s.label("VBUS", *s.P("U2", 6), tag="U2.6")
     vb = s.P("J2", 1)

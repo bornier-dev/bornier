@@ -22035,7 +22035,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines. VBUS on the outer channel (5, through 6), which faces R7: on the inner one (4, through 7) the USB pair and the ground via boxed it in"
+		(property "Description" "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines. DP on the channel nearer the MCU pin of DP, so the pair flows through without crossing. VBUS on the outer channel (5, through 6), which faces R7: on the inner one (4, through 7) the USB pair and the ground via boxed it in"
 			(at 60.96 165.1 0)
 			(effects
 				(font
@@ -22230,7 +22230,7 @@
 			)
 		)
 	)
-	(global_label "USB_DM"
+	(global_label "USB_DP"
 		(shape bidirectional)
 		(at 48.26 157.48 0)
 		(fields_autoplaced yes)
@@ -22240,7 +22240,7 @@
 			)
 			(justify left)
 		)
-		(uuid "5611ee72-8071-5076-8d7a-313cd160c0ea")
+		(uuid "5e632a2f-4aee-5913-9340-f7f141c7ada9")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 48.26 157.48 0)
 			(effects
@@ -22251,7 +22251,7 @@
 			)
 		)
 	)
-	(global_label "USB_DP"
+	(global_label "USB_DM"
 		(shape bidirectional)
 		(at 48.26 172.72 0)
 		(fields_autoplaced yes)
@@ -22261,7 +22261,7 @@
 			)
 			(justify left)
 		)
-		(uuid "6f11de04-f08c-5a24-b4d8-fd5c6f9718ea")
+		(uuid "8e95e15e-894f-5680-b965-f4b2d3e82e11")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 48.26 172.72 0)
 			(effects
@@ -26443,24 +26443,24 @@
 	(wire
 		(pts
 			(xy 45.72 144.78)
-			(xy 45.72 167.64)
+			(xy 45.72 162.56)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "90ef3614-1886-55af-a0ae-cf796f5cd971")
+		(uuid "93541ae0-2127-5442-81b7-6b26d91dff53")
 	)
 	(wire
 		(pts
-			(xy 45.72 167.64)
-			(xy 48.26 167.64)
+			(xy 45.72 162.56)
+			(xy 48.26 162.56)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "85a0a66e-3d33-55ce-bc3f-048264c878c6")
+		(uuid "0910077f-05d5-5497-a4df-2143c18e9370")
 	)
 	(wire
 		(pts
@@ -26487,24 +26487,24 @@
 	(wire
 		(pts
 			(xy 43.18 147.32)
-			(xy 43.18 162.56)
+			(xy 43.18 167.64)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "a1dd29d6-8e4d-50c7-a633-c94b9135331a")
+		(uuid "4e09303e-a0e7-55b5-b641-530f3e17218d")
 	)
 	(wire
 		(pts
-			(xy 43.18 162.56)
-			(xy 48.26 162.56)
+			(xy 43.18 167.64)
+			(xy 48.26 167.64)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "300f73a4-e6e2-5cfb-be3f-c99cbf167907")
+		(uuid "05ef9bc9-d0f6-51f6-ae8e-b8be908953e1")
 	)
 	(wire
 		(pts
