@@ -22035,7 +22035,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines"
+		(property "Description" "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines. VBUS on the outer channel (5, through 6), which faces R7: on the inner one (4, through 7) the USB pair and the ground via boxed it in"
 			(at 60.96 165.1 0)
 			(effects
 				(font
@@ -22273,14 +22273,14 @@
 		)
 	)
 	(label "VBUS"
-		(at 73.66 157.48 0)
+		(at 73.66 172.72 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left bottom)
 		)
-		(uuid "75278319-5e52-5de8-bac0-128b24d9ce50")
+		(uuid "8b39de31-1a75-58c3-aad8-864436406ba3")
 	)
 	(symbol
 		(lib_id "Device:D_Schottky")
@@ -25651,12 +25651,12 @@
 		(uuid "06c2b22c-5df8-5c69-bf25-04aa1554a65b")
 	)
 	(no_connect
-		(at 73.66 167.64)
-		(uuid "b5ac86e1-d5e6-59e1-9bef-737c12f577e6")
+		(at 73.66 162.56)
+		(uuid "c37e64ff-0e87-5d7d-b6c7-cf5d05eda43e")
 	)
 	(no_connect
-		(at 73.66 172.72)
-		(uuid "d55c4f08-80eb-5edd-8265-6dcc88ff77eb")
+		(at 73.66 157.48)
+		(uuid "3215ec76-20be-526f-b7e9-a20167051096")
 	)
 	(no_connect
 		(at 335.28 86.36)
@@ -26509,24 +26509,24 @@
 	(wire
 		(pts
 			(xy 76.2 139.7)
-			(xy 76.2 162.56)
+			(xy 76.2 167.64)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "ecc04e8b-787a-506e-9e58-1aa65986b283")
+		(uuid "e8801284-f82b-5401-8b29-55dd34743d51")
 	)
 	(wire
 		(pts
-			(xy 76.2 162.56)
-			(xy 73.66 162.56)
+			(xy 76.2 167.64)
+			(xy 73.66 167.64)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "6af71307-45d1-536a-b410-b4e990971a6c")
+		(uuid "3c9c29b8-2515-5a8c-bc2e-1029f7be9cd9")
 	)
 	(wire
 		(pts

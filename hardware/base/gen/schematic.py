@@ -163,7 +163,7 @@ def power(prj):
         s.glabel(net, xe + 7.62, jy_, 0, "bidirectional")
         ex, ey = s.P("U2", epin)
         s.w(net, (xv, jy_), (xv, ey), (ex, ey))
-    ex, ey = s.P("U2", 4)
+    ex, ey = s.P("U2", 5)
     s.w("VBUS", (xe + 15.24, s.P("J2", 1)[1]), (xe + 15.24, ey), (ex, ey))
     x, y = s.P("J2", "SH")
     s.w("GND", (x, y), (x, y + 2.54), (s.P("J2", 5)[0], y + 2.54))
@@ -171,7 +171,7 @@ def power(prj):
     s.rail("GND", *s.P("U2", 3))
     for pin_e, net in ((10, "USB_DM"), (9, "USB_DP")):      # flow-through
         s.glabel(net, *s.P("U2", pin_e), 0, "bidirectional", tag=f"U2.{pin_e}")
-    s.label("VBUS", *s.P("U2", 7), tag="U2.7")
+    s.label("VBUS", *s.P("U2", 6), tag="U2.6")
     vb = s.P("J2", 1)
     hpart(s, "D5", 271.78, vb[1], rot=180)
     s.w("VBUS", vb, (101.6, vb[1]), s.P("D5", 2))

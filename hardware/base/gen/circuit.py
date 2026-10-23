@@ -102,8 +102,10 @@ c.part("J2", "Connector:USB_B_Micro", "USB micro-B",
        "Molex 105133-0001, vertical: the plug comes from above, so the jack sits next to the MCU, away from the "
        "edges that the DIN rail profile holds")
 c.part("U2", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
-       {1: "USB_DM", 2: "USB_DP", 4: "VBUS", 10: "USB_DM", 9: "USB_DP", 7: "VBUS", 3: "GND", 8: "GND"},     # channels in the order of the lines
-       "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines")
+       {1: "USB_DM", 2: "USB_DP", 5: "VBUS", 10: "USB_DM", 9: "USB_DP", 6: "VBUS", 3: "GND", 8: "GND"},
+       "ESD of the USB lines and VBUS (5.5 V working voltage); same part as on the PHY lines. VBUS on the "
+       "outer channel (5, through 6), which faces R7: on the inner one (4, through 7) the USB pair and the ground "
+       "via boxed it in")
 c.R("R7", "1k", "VBUS", "VBUS_SENSE", note="VBUS_SENSE on PD9 (USART3_RX input in the bootloader)")
 c.R("R8", "2.2k", "VBUS_SENSE", "GND", note="3.44 V at 5 V (PD9 is 5 V tolerant); low impedance: a leakage of D5 cannot fake VBUS")
 

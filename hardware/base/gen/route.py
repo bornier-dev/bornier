@@ -95,6 +95,10 @@ RAIL_LINK_MAX = 12.0
 # the laser buffer U37 and the feedback divider R4, under 10 mA (0.15 mm: above 0.45 A); at 0.25 mm the
 # 35 mm link of U37 found no way
 THIN = {"+5V": 0.15}
+# The same in the pass complete, once the main paths are routed at the width of their class: V3IN, the
+# cathode of D4 (the +5V into the 3.3 V buck, 0.75 A at most) to the input of U3, which the inductor and
+# the feedback divider close in at 0.4 mm (0.3 mm: 1 A)
+COMPLETE_THIN = {"/Power/V3IN": 0.3}
 LINK_TRIES = 30            # vias of the plane tried per link, nearest first
 LINK_SPOTS = pcb.spiral(0.5, LINK_REACH)     # offsets for a new via in the plane, nearest first
 PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, left out of the short pass
@@ -253,7 +257,7 @@ def keep_nets(dsn, keep):
     return "".join(out)
 
 
-def freerouting(board, keep, passes, band_keepout=True):
+def freerouting(board, keep, passes, band_keepout=True, widths=None):
     """Freerouting on the nets of `keep`, everything already on the board fixed; the new tracks and vias of
     these nets added to the board, locked. Not ImportSpecctraSES: it clears every track of the board first,
     and the nets left out of the DSN would lose theirs. Returns (tracks, vias) added, less the copper of
@@ -281,7 +285,7 @@ def freerouting(board, keep, passes, band_keepout=True):
                                    m.group(1)), text, flags=re.S)
     text = widen_pads(text, board)
     text = isolate(text, board)
-    text = thin(text)
+    text = thin(text, THIN if widths is None else widths)
     text = pad_contacts(text, board)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
     # Freerouting gives the same result for the same input: the variants run side by side with other costs,
@@ -451,18 +455,18 @@ def widen_pads(text, board):
     return text
 
 
-def thin(text):
-    """The nets of THIN in a class of their own, with its width: the tracks Freerouting lays for them."""
+def thin(text, widths):
+    """The nets of `widths` in a class of their own, with its width: the tracks Freerouting lays for them."""
     found = []
 
     def strip(m):
         names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s"]+)', m.group(2))]
-        found.extend(n for n in names if n in THIN)
-        return f"(class {m.group(1)} " + " ".join(f'"{n}"' for n in names if n not in THIN)
+        found.extend(n for n in names if n in widths)
+        return f"(class {m.group(1)} " + " ".join(f'"{n}"' for n in names if n not in widths)
 
     text = re.sub(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', strip, text)
     rules = "".join(f'    (class Thin{k} "{n}"\n      (circuit\n        (use_via "Via[0-3]_400:200_um")\n      )\n'
-                    f'      (rule\n        (width {round(THIN[n] * 1000)})\n'
+                    f'      (rule\n        (width {round(widths[n] * 1000)})\n'
                     f'        (clearance {round(project.CLASSES[project.class_of(n)][1] * 1000)})\n      )\n    )\n'
                     for k, n in enumerate(sorted(set(found))))
     k = text.index("\n  (wiring")
@@ -766,7 +770,8 @@ def complete():
     left, _ = fanout(cu, nets - {"CHASSIS"}, lambda fp, p: fp.GetReference().startswith("U")
                      and mm(min(p.GetSize(pcbnew.F_Cu).x, p.GetSize(pcbnew.F_Cu).y)) < ESCAPE_PAD)
     ways = {t.m_Uuid.AsString() for t in board.GetTracks()} - before
-    tracks, vias = freerouting(board, nets, int(sys.argv[2]) if len(sys.argv) > 2 else 4)
+    tracks, vias = freerouting(board, nets, int(sys.argv[2]) if len(sys.argv) > 2 else 4,
+                               widths={**THIN, **COMPLETE_THIN})
     # a way out stays when some copper other than its own stub meets its via
     unused, drop = 0, []
     items = list(board.GetTracks())
