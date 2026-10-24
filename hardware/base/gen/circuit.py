@@ -230,17 +230,21 @@ c.R("R36", "1k", "LINK1", "LINK1_A")
 # --------------------------------------------------------------------------------------------
 c.block("EtherCAT ports: IN = port 0 (PHY A), OUT = port 1 (PHY B)")
 RJ = "Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal"
-# The lines on jack pins 1, 2, 3, 6 and on ESD channels 1, 2, 4, 5, in the order that routes without a crossing
-# (pairs.py): port A with P and N swapped on both pairs, port B with its TX and RX pairs swapped. The PHYs
+# The lines on jack pins 1, 2, 3, 6, and on ESD channels 1, 2, 4, 5, in the orders the block layout found
+# for the pairs to route through their arrays (blocks.py, pair_lanes): port A with P and N swapped on both
+# pairs and its TX and RX pairs swapped at the jack, port B with its TX and RX pairs swapped. The PHYs
 # correct the polarity and have HP Auto-MDIX (data sheet, key benefits; 100FD straps low).
-for j, port, lines, rail, led, rs, ccap, esd in (
-        ("J3", "IN", ("TXNA", "TXPA", "RXNA", "RXPA"), "VDD33TXRX1", "LINK0_A", ("R37", "R38", "R39", "R40"), "C35", "U7"),
-        ("J4", "OUT", ("RXPB", "RXNB", "TXPB", "TXNB"), "VDD33TXRX2", "LINK1_A", ("R41", "R42", "R43", "R44"), "C36", "U8")):
-    tp, tn, rp, rn = lines
+for j, port, jack, chans, rail, led, rs, ccap, esd in (
+        ("J3", "IN", ("RXNA", "RXPA", "TXNA", "TXPA"), ("TXNA", "TXPA", "RXNA", "RXPA"), "VDD33TXRX1", "LINK0_A",
+         ("R37", "R38", "R39", "R40"), "C35", "U7"),
+        ("J4", "OUT", ("RXPB", "RXNB", "TXPB", "TXNB"), ("RXPB", "RXNB", "TXPB", "TXNB"), "VDD33TXRX2", "LINK1_A",
+         ("R41", "R42", "R43", "R44"), "C36", "U8")):
+    j1, j2, j3, j6 = jack
+    tp, tn, rp, rn = chans
     c.part(j, "Connector:RJ45_Hanrun_HR911105A_Horizontal", f"HY911105AE {port}", RJ, "C69427",
-           {1: tp, 2: tn, 3: rp, 6: rn, 4: rail, 5: rail, 8: "CHASSIS", "SH": "CHASSIS", 9: led, 10: "GND"},
+           {1: j1, 2: j2, 3: j3, 6: j6, 4: rail, 5: rail, 8: "CHASSIS", "SH": "CHASSIS", 9: led, 10: "GND"},
            "HanRun HY911105AE, -40/+85 °C; same footprint as HR911105A. Yellow LED unused")
-    for r, n in zip(rs, lines):
+    for r, n in zip(rs, chans):
         c.R(r, "49.9", n, rail, fp=R0603, note="1 %, at the ESC")
     c.C(ccap, "100nF", rail, "GND", note="Centre taps, at the magjack (checklist: 22 nF; any value from 22 nF up)")
     c.part(esd, "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",

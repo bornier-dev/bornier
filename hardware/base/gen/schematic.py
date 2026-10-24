@@ -447,11 +447,15 @@ def esc(prj):
         xr0 = tp[0]
         y0 = tp[1]
         xj = 345.44
-        s.place(j, xj, y0 + 7.62, ref_at=(xj - 7.62, y0 - 6.35), val_at=(xj - 7.62, y0 - 3.81))
+        # half a step off the rows of the PHY pins: a line to a jack pin never runs along another line
+        s.place(j, xj, y0 + 7.62 + 1.27, ref_at=(xj - 7.62, y0 - 6.35), val_at=(xj - 7.62, y0 - 3.81))
         jp = {k: s.P(j, k) for k in (1, 2, 3, 4, 5, 6, 8, 9, 10, "SH")}
         turns = (320.04, 317.5, 314.96, 312.42)     # one column per line: the lines may cross, never touch
-        for k, (pin, jpin) in enumerate(((tp, jp[1]), (tn, jp[2]), (rp, jp[3]), (rn, jp[6]))):
+        on_jack = {c.by_ref()[j]["pins"][str(k)]: jp[k] for k in (1, 2, 3, 6)}
+        for k, pin in enumerate((tp, tn, rp, rn)):       # each line to the jack pin of its net
+            jpin = on_jack[nets[k]]
             s.w(nets[k], pin, (turns[k], pin[1]), (turns[k], jpin[1]), jpin)
+        src_of = dict(zip(nets, (tp, tn, rp, rn)))
         yrail = y0 - 15.24
         xs_r = [xr0 + 7.62 + 7.62 * k for k in range(4)]
         s.w(rail, (xs_r[0] - 5.08, yrail), (xs_r[-1], yrail))
@@ -478,14 +482,10 @@ def esc(prj):
         # ESD array below the lines, flow-through on the board
         xe, ye = 284.48, rn[1] + 20.32
         s.place(esd, xe, ye, ref_at=(xe + 3.81, ye - 8.89), val_at=(xe + 3.81, ye - 11.43))
-        for pin_e, src, xv_ in ((1, tp, xe - 17.78), (2, tn, xe - 15.24)):
-            ex, ey = s.P(esd, pin_e)
-            s.w(c.by_ref()[esd]["pins"][str(pin_e)], (xv_, src[1]), (xv_, ey), (ex, ey))
-        for pin_e, xv_ in ((4, xe + 15.24), (5, xe + 17.78)):
+        for pin_e, xv_ in ((1, xe - 17.78), (2, xe - 15.24), (4, xe + 15.24), (5, xe + 17.78)):
             ex, ey = s.P(esd, pin_e)
             net = c.by_ref()[esd]["pins"][str(pin_e)]
-            src_y = rp[1] if pin_e == 4 else rn[1]
-            s.w(net, (xv_, src_y), (xv_, ey), (ex, ey))
+            s.w(net, (xv_, src_of[net][1]), (xv_, ey), (ex, ey))
         gx, gy = s.P(esd, 3)
         s.rail("GND", gx, gy)
         for pin_e in (10, 9, 7, 6):     # flow-through: the NC pin opposite each line carries it

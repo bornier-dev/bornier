@@ -354,8 +354,12 @@ def route_pair(board, cu, pnet, nnet, keep, reserved=()):
                   blocker(cu, bad[0], bad[1], bad[2], width) if not cu.track_ok(bad[0], bad[1], bad[2], width, cu.near(bad[1], bad[2], width + 1.0), True) else
                   min((seg_gap((bad[1], bad[2]), (c, d)), c, d) for m, c, d in tracks if m != bad[0]))
         if bad:
-            why = (f"blocked at ({bad[1][0]:.2f}, {bad[1][1]:.2f})-({bad[2][0]:.2f}, {bad[2][1]:.2f}) [{bad[0]}] by "
-                   + blocker(cu, bad[0], bad[1], bad[2], width))
+            where = f"({bad[1][0]:.2f}, {bad[1][1]:.2f})-({bad[2][0]:.2f}, {bad[2][1]:.2f}) [{bad[0]}]"
+            if cu.track_ok(bad[0], bad[1], bad[2], width, cu.near(bad[1], bad[2], width + 1.0), True):
+                g, c, d = min((seg_gap((bad[1], bad[2]), (c, d)), c, d) for m, c, d in tracks if m != bad[0])
+                why = f"blocked at {where} by the other line of the pair, {g:.3f} mm from it at ({c[0]:.2f}, {c[1]:.2f})"
+            else:
+                why = f"blocked at {where} by " + blocker(cu, bad[0], bad[1], bad[2], width)
             continue
         for net, a, b in tracks:
             if math.dist(a, b) > 1e-3:
@@ -577,3 +581,50 @@ def run(board):
         fp.SetPosition(home[r][0])
     print(f"pairs pass: {len(terms) - len(back)} termination(s) against their line"
           + (f", {len(back)} back where they were: {' '.join(back)} (spots refused: {WHY})" if back else ""), flush=True)
+
+
+def block_pairs(board):
+    """The pairs whose IC and connector are both on this board (a block laid out alone)."""
+    names = {str(n) for n in board.GetNetsByName().keys()}
+    mine = []
+    for p, n in PAIRS:
+        if p in names and n in names:
+            refs = {fp.GetReference() for fp in board.GetFootprints() for q in fp.Pads() if q.GetNetname() == p}
+            if any(r[0] == "J" for r in refs) and any(r[0] == "U" for r in refs):
+                mine.append((p, n))
+    return mine
+
+
+def check(board, only=None, keep=False):
+    """The gate of a block laid out alone (blocks.py): its pairs (or those of only) routed as the pass would,
+    then taken off again (left on the board with keep). The C-LOCK is not there yet. Returns the reports of the
+    pairs that fail."""
+    mine = [pn for pn in block_pairs(board) if only is None or pn in only]
+    if not mine:
+        return []
+    terms = terminations(board)
+    home = {r: fp.GetPosition() for r, (fp, _) in terms.items()}
+    for k, (fp, _) in enumerate(terms.values()):
+        fp.SetPosition(route.vec((pcb.W + 20 + 3 * k, 10.0)))
+    clock, pcb.CLOCK = pcb.CLOCK, (-1000.0, -1000.0)
+    before = {t.m_Uuid.AsString() for t in board.GetTracks()}
+    failed = []
+    try:
+        cu = route.Copper(board)
+        for p, n in mine:
+            reserved = []
+            for q, m in mine:
+                if (q, m) != (p, n):
+                    width = project.CLASSES[project.class_of(q)][0]
+                    reserved += [(a, b, (width + project.PAIR_GAP) / 2 + width / 2) for a, b in esd_runs(board, q, m).values()]
+            report, lines = route_pair(board, cu, p, n, project.PAIR_KEEP, reserved)
+            if not lines:
+                failed.append(report)
+    finally:
+        pcb.CLOCK = clock
+        for t in list(board.GetTracks()):
+            if t.m_Uuid.AsString() not in before and not (keep and not failed):
+                board.Remove(t)
+        for r, (fp, _) in terms.items():
+            fp.SetPosition(home[r])
+    return failed

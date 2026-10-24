@@ -25,6 +25,7 @@ import sys
 import numpy as np
 import pcbnew
 
+import channels
 import pcb
 
 SPREAD = {"/Safety/"}
@@ -37,6 +38,15 @@ WEIGHTS = [
     (r"NRST|.*BOOT0|.*LED.*|.*_LA$|VBUS_SENSE|VIN_SENSE", 0.25),
 ]
 CROSSING = 5.0      # mm of weighted ratsnest a crossing is worth
+ISOLATED = "isolated side"     # the rule area of a block that holds the bus side of an isolated part
+ISO_ROOM = 2.5      # the region of the bus side holds this many times the courtyards of its parts
+PAIR_TRIES = int(os.environ.get("PAIR_TRIES", 12))    # spots of an array on a pair tried by routing, cheapest first, each with every line order
+PAIR_PINS = (1, 2, 3, 6)    # the pins of the two pairs of an Ethernet jack (circuit.py: the lines in this order)
+BACK_STEP = 2.0     # mm an IC of a pair steps back from its connectors when its arrays find no spot...
+BACK_MAX = 12.0     # ...up to this
+LANE_PIECE = 0.5    # a lane is a run of rectangles this long along the tracks of a pair
+# Flow-through parts: (line pin, the NC pin opposite it that carries the line), channels.CHANNELS
+FLOW = {v: chans for v, chans in channels.CHANNELS.items() if all(len(ch) == 2 for ch in chans)}
 SHORT = 3.0         # mm: a link this short, straight out of the side of the larger of its two parts...
 SHORT_FACE = 0.8    # ...within this cosine of the side's normal...
 SHORT_COST = 0.1    # ...costs this part of its length, and no crossing
@@ -159,8 +169,11 @@ def pad_points(fps, tag=None):
         cy = fp.GetCourtyard(pcbnew.F_CrtYd)
         x0, y0, x1, y1 = pcb.mm_rect(cy.BBox() if cy.OutlineCount() else fp.GetBoundingBox(False))
         cx, cy, hx, hy = (x0 + x1) / 2, (y0 + y1) / 2, max((x1 - x0) / 2, 1e-3), max((y1 - y0) / 2, 1e-3)
+        # a flow-through part: the NC pin opposite a line carries it, so it counts in the net of the line
+        flow = {str(b): str(a) for a, b in FLOW.get(fp.GetValue(), ())}
+        nets = {p.GetNumber(): p.GetNetname() for p in fp.Pads()}
         for p in fp.Pads():
-            n = p.GetNetname()
+            n = nets.get(flow[p.GetNumber()], "") if p.GetNumber() in flow else p.GetNetname()
             if not n or n in POWER or n.startswith("unconnected-"):
                 continue
             x, y = pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)
@@ -488,11 +501,244 @@ def arrange(fps, anchors, refs, walls=(), wide=1.0):
     # the walls are the lanes of auto_place: no part but those of the pairs (none in these blocks) in them
     pcb.ZONES, pcb.LANES, pcb.CLOCK = {"/Modbus/ bus side": [(0, 0, 0, 0)]}, list(walls), (-1000.0, -1000.0)
     try:
-        placed = place_satellites(fps, list(anchors), satellites, occ, list(walls), wide)
+        # the pairs first: their ends, their arrays on the way, their lanes; then the other satellites
+        import pairs
+        board = fps[satellites[0] if satellites else anchors[0]].GetBoard()
+        pair_nets = {n for pn in pairs.block_pairs(board) for n in pn}
+        on_pair = [r for r in satellites if {p.GetNetname() for p in fps[r].Pads()} & pair_nets]
+        ends = [r for r in on_pair if fps[r].GetValue() not in FLOW]
+        placed = place_satellites(fps, list(anchors), ends, occ, list(walls), wide)
+        placed = place_satellites(fps, placed, [r for r in on_pair if r not in ends], occ, list(walls), wide)
+        lanes = pair_lanes(fps, placed, walls)
+        occ[:] = [o for r in placed for o in pcb.occupied(fps[r])]
+        placed = place_satellites(fps, placed, [r for r in satellites if r not in on_pair], occ,
+                                  list(walls) + lanes, wide)
+        pcb.LANES = list(walls) + lanes
+        iso = set()
+        if pcb.ISO_BARRIER in refs:
+            # the bus side of the isolated transceiver: a region of its own, its parts in it, the others out
+            iso = set(pcb.iso_nets({r: fps[r] for r in refs}))
+            region = iso_region(fps, refs, placed, iso)
+            pcb.ZONES = {"/Modbus/ bus side": [region]}
+            pcb.rule_area(board, [(region[0], region[1]), (region[2], region[1]), (region[2], region[3]),
+                                  (region[0], region[3])], [pcbnew.F_Cu], ISOLATED, footprints=False)
         mine = dict.fromkeys(list(anchors) + list(refs))
-        return pcb.auto_place({r: fps[r] for r in mine}, {r: fps[r] for r in placed}, set())
+        return pcb.auto_place({r: fps[r] for r in mine}, {r: fps[r] for r in placed}, iso)
     finally:
         pcb.ZONES, pcb.LANES, pcb.CLOCK = zones, lanes, clock
+
+
+def iso_region(fps, refs, placed, iso):
+    """The bus side of the isolated transceiver (pcb.ISO_BARRIER): the box of the pads of the isolated nets
+    of the parts placed, grown until it holds ISO_ROOM times the courtyards of the isolated parts, never
+    past the axis of the transceiver toward its logic side."""
+    u = fps[pcb.ISO_BARRIER]
+    pads = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y), p.GetNetname() in iso)
+            for q in placed for p in fps[q].Pads() if p.GetNetname() in iso or q == pcb.ISO_BARRIER]
+    bus = np.array([(x, y) for x, y, b in pads if b])
+    logic = np.array([(x, y) for x, y, b in pads if not b])
+    d = bus.mean(0) - logic.mean(0)
+    cx, cy = pcbnew.ToMM(u.GetPosition().x), pcbnew.ToMM(u.GetPosition().y)
+    need = ISO_ROOM * sum((lambda e: (e[2] - e[0]) * (e[3] - e[1]))(pcb.occupied(fps[r])[0]) for r in refs
+                          if r != pcb.ISO_BARRIER and {p.GetNetname() for p in fps[r].Pads()} - {"", "CHASSIS"} <= iso)
+    x0, y0 = bus.min(0)
+    x1, y1 = bus.max(0)
+    g = 0.0
+    while True:
+        box = [x0 - g, y0 - g, x1 + g, y1 + g]
+        if abs(d[0]) >= abs(d[1]):
+            box[0 if d[0] > 0 else 2] = max(box[0], cx) if d[0] > 0 else min(box[2], cx)
+        else:
+            box[1 if d[1] > 0 else 3] = max(box[1], cy) if d[1] > 0 else min(box[3], cy)
+        box = [max(box[0], pcb.END_KEEP), max(box[1], 0.3), min(box[2], pcb.W - pcb.END_KEEP), min(box[3], pcb.H - 0.3)]
+        if (box[2] - box[0]) * (box[3] - box[1]) >= need or g > 20:
+            return tuple(float(v) for v in box)
+        g += 0.5
+
+
+def regions_of(board):
+    """The isolated regions of a block board (rule areas named ISOLATED): rectangles."""
+    out = []
+    for z in board.Zones():
+        if z.GetIsRuleArea() and z.GetZoneName() == ISOLATED:
+            bb = z.Outline().BBox()
+            out.append(pcb.mm_rect(bb))
+    return out
+
+
+def lanes_of(board):
+    """The lanes of the pairs laid on a block board: rectangles around their tracks, PAIR_KEEP clear (no part
+    but those on the pairs in them)."""
+    import project
+    out = []
+    for t in board.GetTracks():
+        a, b = t.GetStart(), t.GetEnd()
+        ax, ay, bx, by = (pcbnew.ToMM(v) for v in (a.x, a.y, b.x, b.y))
+        g = pcbnew.ToMM(t.GetWidth()) / 2 + project.PAIR_KEEP
+        n = max(1, int(math.ceil(math.hypot(bx - ax, by - ay) / LANE_PIECE)))
+        for k in range(n):
+            x0, y0 = ax + (bx - ax) * k / n, ay + (by - ay) * k / n
+            x1, y1 = ax + (bx - ax) * (k + 1) / n, ay + (by - ay) * (k + 1) / n
+            out.append((min(x0, x1) - g, min(y0, y1) - g, max(x0, x1) + g, max(y0, y1) + g))
+    return out
+
+
+def wiring(fps, esd, own):
+    """The connector of the pairs through esd; the pairs in the order of their pins on it; the couples of pins
+    they take on the connector and on the channels of esd, as wired now."""
+    nets = {n for pn in own for n in pn}
+    conn = next(r for r, f in fps.items() if r[0] == "J" and {p.GetNetname() for p in f.Pads()} & nets)
+    on_conn = {p.GetNetname(): p.GetNumber() for p in fps[conn].Pads()}
+    lines = dict(FLOW[fps[esd].GetValue()])
+    on_esd = {p.GetNetname(): p.GetNumber() for p in fps[esd].Pads() if int(p.GetNumber()) in lines}
+    pairs_ = sorted(own, key=lambda pn: min(int(on_conn[n]) for n in pn))
+    return conn, pairs_, [[on_conn[n] for n in pn] for pn in pairs_], [[on_esd[n] for n in pn] for pn in pairs_]
+
+
+def set_pins(fps, ref, pins, lines):
+    """The nets of lines on the pins of ref (numbers); for a flow-through part, its opposite pins too."""
+    board = fps[ref].GetBoard()
+    flow = {str(a): str(b) for a, b in FLOW.get(fps[ref].GetValue(), ())}
+    for k, n in zip(pins, lines):
+        for p in fps[ref].Pads():
+            if p.GetNumber() and p.GetNumber() in (str(k), flow.get(str(k))):
+                p.SetNet(board.FindNet(n))
+
+
+def wire(fps, esd, conn, w, esd_first, conn_first, esd_flip, conn_flip):
+    """One wiring of the pairs w (wiring): on the couples of channels of esd (the pair esd_first on the first
+    couple, each pair turned round where esd_flip says) and on the couples of pins of the connector
+    (likewise). An array channel carries either line; the Ethernet PHYs correct the polarity and swap the
+    pairs (Auto-MDIX): any wiring is right for them."""
+    conn_, pairs_, conn_pins, esd_pins = w
+
+    def place(couples, first, flip):
+        order = list(range(len(pairs_)))
+        if first:
+            order = order[::-1]
+        pins, lines = [], []
+        for couple, k in zip(couples, order):
+            pins += couple
+            lines += list(pairs_[k][::-1] if flip[k] else pairs_[k])
+        return pins, lines
+    set_pins(fps, esd, *place(esd_pins, esd_first, esd_flip))
+    set_pins(fps, conn, *place(conn_pins, conn_first, conn_flip))
+
+
+def place_arrays(fps, placed, walls, board, mine):
+    """Each flow-through array on a pair at the cheapest spot, on the way from the IC to the connector, where
+    its pairs route, with a wiring of wire (reported, to be carried to circuit.py). Returns None, or why it
+    fails."""
+    import pairs
+    for r in [q for q in placed if fps[q].GetValue() in FLOW]:
+        nets = {p.GetNetname() for p in fps[r].Pads()}
+        own = [pn for pn in mine if set(pn) & nets]
+        if not own:
+            continue
+        ends = collections.defaultdict(list)
+        for q in placed:
+            for p in fps[q].Pads():
+                if p.GetNetname() in {n for pn in own for n in pn} and q != r:
+                    ends[q[0]].append((pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)))
+        ic, conn = np.mean(ends["U"], axis=0), np.mean(ends["J"], axis=0)
+        d = conn - ic
+        perp = np.array([-d[1], d[0]]) / max(np.hypot(*d), 1e-6)
+        others = [o for q in placed if q != r for o in pcb.occupied(fps[q])] + list(walls)
+        cands = []
+        for t in np.linspace(0.1, 0.9, 17):
+            for off in range(-5, 6):
+                x, y = ic + t * d + off * perp
+                for rot in (0, 90, 180, 270):
+                    pcb.place_centred(fps[r], float(x), float(y), rot)
+                    if pcb.free(pcb.occupied(fps[r]), others):
+                        cands.append((ratsnest_cost(fps, placed), float(x), float(y), rot))
+        w = wiring(fps, r, own)
+        conn, pairs_ = w[0], w[1]
+        free = all(re.fullmatch(pcb.ETH_LINE, n) for pn in pairs_ for n in pn)   # the connector side may change
+        firsts = (0, 1) if len(pairs_) > 1 else (0,)
+        none = tuple(False for _ in pairs_)
+        start = (0, 0, none, none)
+        why = collections.Counter()
+        failed = ["no spot"]
+        for c, x, y, rot in sorted(cands)[:PAIR_TRIES]:
+            pcb.place_centred(fps[r], x, y, rot)
+            for esd_first in firsts:
+                for conn_first in (firsts if free else (0,)):
+                    # each pair alone: the turn at the array and at the connector that routes it
+                    flips = [list(none), list(none)]
+                    ok = True
+                    for k, pair in enumerate(pairs_):
+                        for ef in (False, True):
+                            for cf in ((False, True) if free else (False,)):
+                                flips[0][k], flips[1][k] = ef, cf
+                                wire(fps, r, conn, w, esd_first, conn_first, tuple(flips[0]), tuple(flips[1]))
+                                bad = pairs.check(board, [pair])
+                                if not bad:
+                                    break
+                                why.update(re.sub(r"\(.*", "", f.split(": ", 1)[1]) for f in bad)
+                            if not bad:
+                                break
+                        if bad:
+                            ok = False
+                            break
+                    if not ok:
+                        continue
+                    wire(fps, r, conn, w, esd_first, conn_first, tuple(flips[0]), tuple(flips[1]))
+                    failed = pairs.check(board, own)
+                    if not failed:
+                        break
+                if not failed:
+                    break
+            if not failed:
+                chans = {p.GetNumber(): p.GetNetname() for p in fps[r].Pads() if p.GetNetname() in
+                         {n for pn in own for n in pn}}
+                pins = {p.GetNumber(): p.GetNetname() for p in fps[conn].Pads() if p.GetNetname() in
+                        {n for pn in own for n in pn}}
+                print(f"  pairs: carry to circuit.py: {r} {chans}, {conn} {pins}", flush=True)
+                break
+        if failed:
+            wire(fps, r, conn, w, *start)
+            if cands:
+                pcb.place_centred(fps[r], *sorted(cands)[0][1:])
+            return f"no spot of {r} where {own} route ({len(cands)} spots, {dict(why)})"
+    return None
+
+
+def pair_lanes(fps, placed, walls):
+    """The differential pairs of a block, before its other satellites and its passives: each flow-through
+    array on a pair placed by place_arrays; while one finds no spot, the ICs of the pairs step back from their
+    connectors (BACK_STEP, up to BACK_MAX): an IC against its connector leaves no room for the array and the
+    bends. Then the pairs laid, and their lanes returned. The block fails when a pair does not route."""
+    import pairs
+    board = fps[placed[0]].GetBoard()
+    mine = pairs.block_pairs(board)
+    if not mine:
+        return []
+    nets = {n for pn in mine for n in pn}
+    ics = [q for q in placed if q[0] == "U" and fps[q].GetValue() not in FLOW
+           and {p.GetNetname() for p in fps[q].Pads()} & nets]
+    conns = [q for q in placed if q[0] == "J" and {p.GetNetname() for p in fps[q].Pads()} & nets]
+    home = {q: fps[q].GetPosition() for q in ics}
+    cx = np.mean([[pcbnew.ToMM(fps[q].GetPosition().x), pcbnew.ToMM(fps[q].GetPosition().y)] for q in conns], axis=0)
+    back = 0.0
+    while True:
+        why = place_arrays(fps, placed, walls, board, mine)
+        if why is None:
+            break
+        print(f"  pairs, ICs {back:.0f} mm back: {why}", flush=True)
+        back += BACK_STEP
+        if back > BACK_MAX:
+            if os.environ.get("BLOCKS_DEBUG"):
+                pcbnew.SaveBoard(os.environ["BLOCKS_DEBUG"], board)
+            raise SystemExit(f"pairs: {why}")
+        for q in ics:
+            h = np.array([pcbnew.ToMM(home[q].x), pcbnew.ToMM(home[q].y)])
+            u = (h - cx) / max(np.hypot(*(h - cx)), 1e-6)
+            fps[q].SetPosition(pcb.vec(*(float(v) for v in h + back * u)))
+    failed = pairs.check(board, mine, keep=True)
+    if failed:
+        raise SystemExit(f"pairs: {failed}")
+    return lanes_of(board)
 
 
 def layout(name, main, members, comps, pins, walls=()):
@@ -514,11 +760,17 @@ def layout(name, main, members, comps, pins, walls=()):
         pcb.place_centred(fps[main], *(pcb.KEY[main] if main in END else (pcb.W / 2, pcb.H / 2, 0)))
         anchors = [main]
     failed = arrange(fps, anchors, refs, walls, EDGE_WIDE if edge == "B" else 1.0)
-    # parts of a data sheet layout move as one: they stay
-    fixed = set(anchors) | set(failed) | {r for t in TEMPLATES for r in t}
+    # parts of a data sheet layout move as one, the chips and connectors of the pairs laid hold them: they stay
+    laid = {t.GetNetname() for t in board.GetTracks()}
+    # the parts of an isolated region stay in it, the others out of it
+    iso = set(pcb.iso_nets({r: fps[r] for r in refs})) if regions_of(board) else set()
+    fixed = set(anchors) | set(failed) | {r for t in TEMPLATES for r in t} | {
+        r for r in refs if r[0] in "UJ" and {p.GetNetname() for p in fps[r].Pads()} & laid} | {
+        r for r in refs if iso and ({p.GetNetname() for p in fps[r].Pads()} - {"", "CHASSIS"}) <= iso}
     clock, pcb.CLOCK = pcb.CLOCK, (-1000.0, -1000.0)
     try:
-        before, after = refine(fps, [r for r in refs if r not in fixed], [r for r in refs if r in fixed], walls)
+        before, after = refine(fps, [r for r in refs if r not in fixed], [r for r in refs if r in fixed],
+                               list(walls) + lanes_of(board) + regions_of(board))
     finally:
         pcb.CLOCK = clock
     print(f"  {name}: refined {before:.0f} -> {after:.0f}", flush=True)

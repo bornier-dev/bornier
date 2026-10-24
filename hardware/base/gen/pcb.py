@@ -3,8 +3,8 @@
 """Base board PCB: outline, mechanical features of the DIN rail profile, connectors, then the other parts.
 
 Run with the Python shipped with KiCad:
-    "C:/Program Files/KiCad/10.0/bin/python.exe" pcb.py
-Reads the netlist of ../kicad/base.kicad_sch (run schematic.py first), writes ../kicad/base.kicad_pcb and
+    "C:/Program Files/KiCad/10.0/bin/python.exe" pcb.py [placed.kicad_pcb]
+With a board placed by floorplan.py, its places; without, the hand places of KEY and the zones. Reads the netlist of ../kicad/base.kicad_sch (run schematic.py first), writes ../kicad/base.kicad_pcb and
 the DRC rules of the profile, ../kicad/base.kicad_dru.
 
 Mechanics: Phoenix UM-BASIC 108 profile, board 107.5 x 150 mm at the top level L1 (housing kit
@@ -339,6 +339,7 @@ def connectors(fps, comps):
 HE10_Y = H / 2
 AXIS_X = [21.5, 55.0, 88.5, 118.0, 146.5]           # column boundaries, axes 0 to 3: the first two are shallower
 BARRIER_Y = 84.0            # Modbus isolation: the axis of U38, bus side below toward J13, 1 mm each side
+ISO_GAP = 1.0               # the parts off the bus side stay this far from its zone
 AXIS = [[(AXIS_X[k], 15.0, AXIS_X[k + 1], 58.0 if k > 1 else 47.0)] for k in range(4)]
 AXIS[0].append((END_KEEP, 15.0, AXIS_X[0], HE10_Y - 26.0))   # above the header
 AXIS[1].append((80.5, 47.0, AXIS_X[2], 59.5))                # right of the C-LOCK
@@ -572,7 +573,7 @@ def auto_place(fps, placed, iso):
                 mine = nets_of(fp) - {"CHASSIS"}
                 on_bus = fp.GetSheetname() == "/Modbus/" and mine and mine <= iso
                 sheet = "/Modbus/ bus side" if on_bus else fp.GetSheetname()
-                barred = [] if on_bus else [(bus[0], BARRIER_Y, bus[2], bus[3])]
+                barred = [] if on_bus else [(bus[0] - ISO_GAP, bus[1] - ISO_GAP, bus[2] + ISO_GAP, bus[3] + ISO_GAP)]
                 if not any(re.fullmatch(PAIR_LINE, n) for n in mine) and ref not in ANCHOR_TO:
                     barred = barred + LANES     # the centre tap capacitors stand at the jack, among the lines
 
@@ -661,9 +662,21 @@ def main():
     for ref, (x, y) in HOLES.items():
         place(fps[ref], x, y, 0)
         fps[ref].Reference().SetVisible(False)          # no silkscreen: it would fall off the board edge
-    for ref, (x, y, rot) in KEY.items():
-        place_centred(fps[ref], x, y, rot)
-    failed = auto_place(fps, {ref: fps[ref] for ref in fixed | set(KEY)}, set(iso_nets(fps)))
+    if len(sys.argv) > 1:
+        # the placement of floorplan.py (blocks laid out, placed, refined, checked)
+        placed = pcbnew.LoadBoard(sys.argv[1])
+        failed = []
+        for ref, fp in fps.items():
+            there = placed.FindFootprintByReference(ref)
+            if there is None:
+                failed.append(f"{ref} (not in {sys.argv[1]})")
+            elif ref not in HOLES:
+                fp.SetOrientation(there.GetOrientation())
+                fp.SetPosition(there.GetPosition())
+    else:
+        for ref, (x, y, rot) in KEY.items():
+            place_centred(fps[ref], x, y, rot)
+        failed = auto_place(fps, {ref: fps[ref] for ref in fixed | set(KEY)}, set(iso_nets(fps)))
 
     out = os.path.join(KICAD, "base.kicad_pcb")
     board.SetFileName(out)

@@ -39,6 +39,7 @@ import pcbnew
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import pcb  # noqa: E402
+import planes as planes_mod  # noqa: E402
 import project  # noqa: E402
 from kicadgen.kicad import cli  # noqa: E402
 
@@ -49,18 +50,8 @@ MM = pcbnew.FromMM
 mm = pcbnew.ToMM
 W, H, EDGE = pcb.W, pcb.H, pcb.END_KEEP
 
-# Layer 3 supply planes, (x0, y0, x1, y1): 0.5 mm between planes of different nets.
-# Each plane reaches the output of its regulator: +5V from L1 and C5 up the right edge to the axes, +3V3
-# from just under the axes over the 3.3 V buck and the logic of the safety and drive supply blocks, +VIN
-# around the 5 V buck input and down to the power entry.
-SUPPLY_PLANES = {
-    "+5V": [(EDGE, 14.0, W - EDGE, 47.0), (131.5, 47.0, W - EDGE, 70.0)],
-    # the last +3V3 rectangle: under the 3.3 V buck, a notch in the +VIN plane, which goes around it
-    "+3V3": [(EDGE, 47.5, 131.0, 58.0), (EDGE, 58.0, 112.0, 71.0), (EDGE, 71.0, 123.0, H - EDGE),
-             (123.0, 81.0, 137.5, 87.8)],
-    "+VIN": [(112.5, 58.5, 131.0, 70.5), (123.5, 70.5, W - EDGE, 80.5), (138.0, 80.5, W - EDGE, H - EDGE),
-             (123.5, 88.3, 138.0, H - EDGE)],
-}
+# Layer 3 supply planes: drawn from the placement (planes.py), each in one piece from its regulator
+SUPPLY_NETS = planes_mod.SUPPLIES
 CHASSIS_BAND = 3.0          # layer 4, along the edges: the part-free rim where the board rests on the profile
 ISO_MARGIN = 1.0            # around the bus side of the Modbus port: the isolation barrier
 POWER_CLASSES = {"Input", "Rail", "Buck", "Limited", "Ground", "Chassis"}
@@ -175,9 +166,9 @@ def planes(board):
     gnd.BooleanSubtract(rect_poly(*grow(iso_island(board), ISO_MARGIN)))
     add_zone(board, "GND", pcbnew.In1_Cu, gnd, 0, "ground plane")
     add_zone(board, "GNDISO", pcbnew.In1_Cu, island, 1, "isolated ground")
-    for net, rects in SUPPLY_PLANES.items():
-        p = union(rects)
-        p.BooleanSubtract(rect_poly(*grow(iso_island(board), ISO_MARGIN)))
+    supply, _, _ = planes_mod.supply_planes(board, (EDGE, EDGE, W - EDGE, H - EDGE),
+                                            [grow(iso_island(board), ISO_MARGIN)])
+    for net, p in supply.items():
         add_zone(board, net, pcbnew.In2_Cu, p, 0, f"{net} plane")
     band = rect_poly(0, 0, W, H)
     band.BooleanSubtract(rect_poly(CHASSIS_BAND, CHASSIS_BAND, W - CHASSIS_BAND, H - CHASSIS_BAND))
@@ -1056,7 +1047,7 @@ def short():
     long, as a track on layer 1 (straight, else with one bend) when it clears everything else."""
     board = start("short")
     cu = Copper(board)
-    planed = {"GND", "GNDISO", *SUPPLY_PLANES, *PHY_ISLANDS}
+    planed = {"GND", "GNDISO", *SUPPLY_NETS, *PHY_ISLANDS}
     pads = collections.defaultdict(list)
     narrow = {}
     for fp in board.GetFootprints():
@@ -1098,7 +1089,7 @@ def islands():
     board = pcbnew.LoadBoard(PCB)
     project.apply_netclasses(board)
     cu = Copper(board)
-    planed = {"GND", "GNDISO", *SUPPLY_PLANES, *PHY_ISLANDS} & cut
+    planed = {"GND", "GNDISO", *SUPPLY_NETS, *PHY_ISLANDS} & cut
     linked, left = 0, []
     for z in board.Zones():
         net = z.GetNetname()
