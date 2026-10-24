@@ -16,6 +16,12 @@
 (rule "thermal vias in exposed pads"
 	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 0.3mm")
 	(constraint hole_size (min 0.2mm)))
+(rule "pads of one package: R39"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('R39') && B.memberOfFootprint('R39')")
+	(constraint clearance (min 0.09mm)))
+(rule "pads of one package: R44"
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('R44') && B.memberOfFootprint('R44')")
+	(constraint clearance (min 0.09mm)))
 (rule "pads of one package: U10"
 	(condition "A.Type == 'Pad' && B.Type == 'Pad' && A.memberOfFootprint('U10') && B.memberOfFootprint('U10')")
 	(constraint clearance (min 0.15mm)))

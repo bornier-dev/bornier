@@ -108,7 +108,6 @@ COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band 
 # rise (IPC-2221), into the plane by two 0.8/0.4 mm vias.
 TRUNKS = {"+VIN": (1.0, 0.8, 0.4)}
 TRUNK_Y = (11.5, 16.0)     # layer 4 corridor of the trunks, the first clear line: under the jack leads, above the axes
-TRUNK_X = (135.0, W - FANOUT_EDGE)  # its way down to the plane, the first clear line from the right edge
 NEW_VIA_COST = 1.0         # mm of track a new via is worth: an existing one is preferred at equal length
 VIA_PITCH = 1.0            # between vias of different nets: plane copper left between them, or a via cut off
 
@@ -980,7 +979,7 @@ def gnd():
 
 def trunk(cu, net, pads, width, via_d, via_drill):
     """A wide track on layer 4 for through-hole pads off their plane: along the first clear corridor of
-    TRUNK_Y, a drop to each pad, down the first clear line of TRUNK_X to two vias in the plane. All or
+    TRUNK_Y, a drop to each pad, down the clear line of the shortest trunk to two vias in the plane. All or
     nothing; returns the blocked segments."""
     r = via_d / 2
 
@@ -991,18 +990,27 @@ def trunk(cu, net, pads, width, via_d, via_drill):
         return [lo + 0.25 * i for i in range(int((hi - lo) / 0.25) + 1)]
 
     xs = [a[0] for _, a in pads]
-    y = next((y for y in steps(*TRUNK_Y) if clear((min(xs), y), (TRUNK_X[1] - r, y))), None)
+    y = next((y for y in steps(*TRUNK_Y) if clear((min(xs), y), (max(xs), y))), None)
     if y is None:
         return [f"no clear corridor between y = {TRUNK_Y[0]} and {TRUNK_Y[1]}"]
-    for x in reversed(steps(TRUNK_X[0], TRUNK_X[1] - r)):
+    # the drop to the plane: any line across the board where two vias fit in the plane, the shortest trunk
+    # (along the corridor beyond the pads, then down) first; the plane is drawn from the placement (planes.py)
+    best = None
+    for x in steps(FANOUT_EDGE + r, W - FANOUT_EDGE - r):
+        along = max(0.0, min(xs) - x, x - max(xs))
+        if best and along >= best[0]:
+            continue
         foot = next(((x, v) for v in steps(y, H) if cu.in_plane(net, (x, v), r)
                      and cu.via_ok(net, (x, v), r, cu.near((x, v), (x, v), r + 1.0))), None)
-        twin = foot and (x, foot[1] + max(VIA_PITCH, via_d + HOLE_GAP))
-        if (foot and clear((x, y), twin) and cu.in_plane(net, twin, r)
+        if not foot or (best and along + foot[1] - y >= best[0]):
+            continue
+        twin = (x, foot[1] + max(VIA_PITCH, via_d + HOLE_GAP))
+        if (clear((x, y), twin) and cu.in_plane(net, twin, r)
                 and cu.via_ok(net, twin, r, cu.near(twin, twin, r + 1.0))):
-            break
-    else:
+            best = (along + foot[1] - y, x, foot, twin)
+    if best is None:
         return ["no clear way down to the plane"]
+    _, x, foot, twin = best
     xs = sorted(set(xs) | {x})
     segs = list(zip([(u, y) for u in xs], [(u, y) for u in xs[1:]]))     # cut at every drop
     segs += [((x, y), foot), (foot, twin)] + [((a[0], y), a) for _, a in pads]

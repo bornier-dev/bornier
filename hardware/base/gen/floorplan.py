@@ -20,6 +20,7 @@ import glob
 import itertools
 import math
 import os
+import re
 import sys
 
 import numpy as np
@@ -330,14 +331,15 @@ def main():
     bl, spread, comps, pins = blocks.blocks()
     seed = {}
     loaded = load(blockdir)
-    # the wiring chosen by the block layouts (pairs through their arrays) must be on the schematic
+    # the wiring chosen by the block layouts (pairs through their arrays) must be on the schematic (the other
+    # pins may change after the placement: channels.py)
     differ = []
     for b in loaded.values():
         for f in b.board.GetFootprints():
             r = f.GetReference()
             for p in f.Pads():
                 n = p.GetNetname()
-                if p.GetNumber() and n and not n.startswith("unconnected-") and n != pins.get(r, {}).get(p.GetNumber(), ""):
+                if p.GetNumber() and re.fullmatch(pcb.PAIR_LINE, n) and n != pins.get(r, {}).get(p.GetNumber(), ""):
                     differ.append(f"{r}.{p.GetNumber()}: {n} in block {b.name}, {pins.get(r, {}).get(p.GetNumber(), '')} on the schematic")
     if differ:
         raise SystemExit("FAILED: carry the wiring of the block layouts to circuit.py:\n  " + "\n  ".join(differ))
@@ -587,7 +589,7 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
         return ({p.GetNetname() for p in fps[r].Pads()} - {"", "CHASSIS"}) <= iso
     pcb.outline(board)
     pcb.keepouts(board)
-    zones, lanes = pcb.ZONES, pcb.LANES
+    saved = pcb.ZONES, pcb.LANES
     pcb.ZONES, pcb.LANES = {"/Modbus/ bus side": regions or [(0, 0, 0, 0)]}, lanes
     pcb.COPPER = blocks.copper_of(board)
 
@@ -595,7 +597,7 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
         for r in os.environ.get("FLOOR_TRACE", "").split(","):
             if r in fps:
                 x, y = pcbnew.ToMM(fps[r].GetPosition().x), pcbnew.ToMM(fps[r].GetPosition().y)
-                print(f"  trace {stage}: {r} ({x:.1f}, {y:.1f})" + (" IN LANES" if not pcb.free(pcb.occupied(fps[r]), lanes) else ""), flush=True)
+                print(f"  trace {stage}: {r} ({x:.1f}, {y:.1f}) [{len(lanes)} lanes]" + (" IN LANES" if not pcb.free(pcb.occupied(fps[r]), lanes) else ""), flush=True)
     short, kept = [], 0
     try:
         for name, mine in groups:
@@ -627,7 +629,7 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
             short.append("spread")
             print(f"  spread parts: no room for {failed}", flush=True)
     finally:
-        pcb.ZONES, pcb.LANES, pcb.COPPER = zones, lanes, []
+        pcb.ZONES, pcb.LANES, pcb.COPPER = *saved, []
     print(f"{kept} passives kept at their places in their blocks")
     if short:
         return short, []

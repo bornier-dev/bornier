@@ -688,7 +688,7 @@ def main():
                 # the schematic must carry it, or the board would not be the one the layout checked
                 laid = {p.GetNumber(): p.GetNetname() for p in there.Pads() if p.GetNumber()}
                 differ = [f"{n}: {laid[n]} on the placement, {pinnets.get(ref, {}).get(n, '')} on the schematic"
-                          for n in sorted(laid) if laid[n] and not laid[n].startswith("unconnected-")
+                          for n in sorted(laid) if re.fullmatch(PAIR_LINE, laid[n])
                           and laid[n] != pinnets.get(ref, {}).get(n, "")]
                 if differ:
                     failed.append(f"{ref} wired otherwise: " + "; ".join(differ))

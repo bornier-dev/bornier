@@ -499,7 +499,7 @@ def arrange(fps, anchors, refs, walls=(), wide=1.0):
     occ = [o for r in anchors for o in pcb.occupied(fps[r])]
     satellites = [r for r in refs if r not in anchors and (r[0] in "UJX" or r.startswith("SW")
                                                             or any(r in t for t in TEMPLATES))]
-    zones, lanes, clock = pcb.ZONES, pcb.LANES, pcb.CLOCK
+    saved = pcb.ZONES, pcb.LANES, pcb.CLOCK
     # the walls are the lanes of auto_place: no part but those of the pairs (none in these blocks) in them
     pcb.ZONES, pcb.LANES, pcb.CLOCK = {"/Modbus/ bus side": [(0, 0, 0, 0)]}, list(walls), (-1000.0, -1000.0)
     try:
@@ -528,7 +528,7 @@ def arrange(fps, anchors, refs, walls=(), wide=1.0):
         mine = dict.fromkeys(list(anchors) + list(refs))
         return pcb.auto_place({r: fps[r] for r in mine}, {r: fps[r] for r in placed}, iso)
     finally:
-        pcb.ZONES, pcb.LANES, pcb.CLOCK, pcb.COPPER = zones, lanes, clock, []
+        pcb.ZONES, pcb.LANES, pcb.CLOCK, pcb.COPPER = *saved, []
 
 
 def copper_of(board):
@@ -771,6 +771,10 @@ def pair_lanes(fps, placed, walls):
     back = 0.0
     while True:
         why = place_arrays(fps, placed, walls, board, mine)
+        if why is None:
+            # every pair and termination together: one port may take the room the other needed
+            both = pairs.check(board, mine, terms_too=True)
+            why = f"together: {both}" if both else None
         if why is None:
             break
         print(f"  pairs, ICs {back:.0f} mm back: {why}", flush=True)

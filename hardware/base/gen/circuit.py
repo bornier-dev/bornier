@@ -453,10 +453,11 @@ for n in range(4):
     u = ref("U")
     rx = {}
     pins = {16: "+3V3", 8: "GND", 4: "+3V3", 12: "GND"}
-    for ch, (p, m, y) in zip("ABZ", ((2, 1, 3), (6, 7, 5), (10, 9, 11))):
+    # channels as channels.py found them for this placement: A on 1, Z on 2, B on 4, channel 3 unused
+    for ch, (p, m, y) in zip("ABZ", ((2, 1, 3), (14, 15, 13), (6, 7, 5))):
         pins.update({p: f"ENC{n}_{ch}P_R", m: f"ENC{n}_{ch}N_R", y: f"ENC{n}_{ch}"})
     c.part(u, "Interface:AM26LV32xD", "AM26LV32EIDR", "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm", "C527448", pins,
-           "Pin for pin AM26LV32 with +-15 kV IEC ESD; 3.3 V supply, 5 V tolerant inputs, common mode -0.3 to 5.5 V; channel 4 unused")
+           "Pin for pin AM26LV32 with +-15 kV IEC ESD; 3.3 V supply, 5 V tolerant inputs, common mode -0.3 to 5.5 V; channel 3 unused")
     c.C(ref("C"), "100nF", "+3V3", "GND")
     for ch in "ABZ":
         for pol in "PN":
@@ -522,8 +523,9 @@ c.R(ref("R"), "100k", "BUS_MOSI", "GND", note="MOSI defined while the MCU pin is
 c.R(ref("R"), "2.2k", "BUS_SDA", "+3V3", note="I2C at 100 kHz, ribbon and 12 modules: rise < 1 us")
 c.R(ref("R"), "2.2k", "BUS_SCL", "+3V3")
 # ESD of every ribbon signal, at the header: the board has no enclosure and the ribbon is plugged by hand
-for group in (("RB_SCK", "RB_MOSI", "BUS_MISO", "RB_LATCH"), ("RB_OE", "BUS_IRQ", "BUS_SDA", "BUS_SCL"),
-              ("RB_CS0", "RB_CS1", "RB_CS2", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
+# (the order of the lines on the channels as channels.py found it for this placement)
+for group in (("RB_SCK", "RB_MOSI", "BUS_MISO", "RB_LATCH"), ("BUS_IRQ", "RB_OE", "BUS_SCL", "BUS_SDA"),
+              ("RB_CS0", "RB_CS2", "RB_CS1", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
               ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11")):
     c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
            dict(zip((1, 2, 4, 5), group)) | {3: "GND", 8: "GND"}, "ESD of the ribbon lines, at the HE10, flow-through")

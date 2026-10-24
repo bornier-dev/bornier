@@ -364,7 +364,11 @@ def encoder(prj):
     s.power("+3V3", *s.P(cd, 1))
     s.rail("GND", *s.P(cd, 2))
     pins = c.by_ref()[rx]["pins"]
-    for k in ("3", "5", "11"):
+    # the channels of each line as wired in circuit.py (channels.py may reorder them)
+    chan = {ch: next((a, b, y) for a, b, y in (("2", "1", "3"), ("6", "7", "5"), ("10", "9", "11"), ("14", "15", "13"))
+                     if pins.get(a) == f"ENC{n}_{ch}P_R") for ch in "ABZ"}
+    for ch in "ABZ":
+        k = chan[ch][2]
         stub(s, s.P(rx, k), pins[k], 7.62, "output")
 
     # channel networks: + line at y, - line at y + 25.4, channels 50.8 apart
@@ -418,7 +422,7 @@ def encoder(prj):
     s.text("Spare", x0 + 21.59, 104.14 + 50.8 * 3 + 1.27)
     # fan the six lines into the receiver without crossing: among the lines going down, the
     # lowest turns first; among those going up, the highest turns first.
-    targets = {f"ENC{n}_{ch}{pol}_R": s.P(rx, k) for ch, ks in zip("ABZ", (("2", "1"), ("6", "7"), ("10", "9")))
+    targets = {f"ENC{n}_{ch}{pol}_R": s.P(rx, k) for ch, ks in ((c_, chan[c_][:2]) for c_ in "ABZ")
                for pol, k in zip("PN", ks)}
     down = [(nd, y) for nd, y in lines if targets[nd][1] > y]
     up = [(nd, y) for nd, y in lines if targets[nd][1] <= y]
@@ -428,7 +432,7 @@ def encoder(prj):
         tx, ty = targets[nd]
         s.w(nd, (x0 + 78.74, y), (xt, y), (xt, ty), (tx, ty))
     for rank, (nd, y) in enumerate(up):
-        xt = xt0 + 2.54 * rank
+        xt = xt0 + 2.54 * (len(down) + rank)     # columns of their own: the lines may cross, never touch
         tx, ty = targets[nd]
         s.w(nd, (x0 + 78.74, y), (xt, y), (xt, ty), (tx, ty))
 
