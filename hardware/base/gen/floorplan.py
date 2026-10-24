@@ -33,8 +33,9 @@ COARSE = 4          # cells between two candidate spots while scanning (1 mm)
 BEST = 12           # candidates per block evaluated with MST and crossings
 TIE = 50.0          # per mm between an edge B body and its connectors
 WIDE = 40          # candidates per quarter turn while improving
-RESERVE = 2.0      # room kept around each part of a block skeleton for its passives
 EDGE_VALUES = set(pcb.EDGE_B) | {pcb.AXIS_JACK}
+RESERVE = 2.0      # room first kept around each part of a block skeleton for its passives
+REGROW = 1.0       # more room for a block whose passives did not all find a place around it
 
 
 class Block:
@@ -43,7 +44,7 @@ class Block:
     def __init__(self, name, board, refs=None, reserve=0.0, pad_refs=None):
         """refs: the parts that move with the block (None: all); pad_refs: those whose pads count in the cost
         (None: all the parts of the board, the passives at their places in the block layout)."""
-        self.name, self.board = name, board
+        self.name, self.board, self.grow, self.pad_refs = name, board, reserve, pad_refs
         every = list(board.GetFootprints())
         self.fps = [f for f in board.GetFootprints() if refs is None or f.GetReference() in refs]
         self.refs = [f.GetReference() for f in self.fps]
@@ -220,8 +221,32 @@ def total(plan):
     return full_cost(plan.pads) + ties
 
 
+def area(rects):
+    """Area covered by the rectangles (union), on the raster."""
+    r = np.asarray(rects, float).reshape(-1, 4)
+    x0, y0 = r[:, 0].min(), r[:, 1].min()
+    nx, ny = int(math.ceil((r[:, 2].max() - x0) / CELL)), int(math.ceil((r[:, 3].max() - y0) / CELL))
+    occ = np.zeros((ny, nx), bool)
+    for a, b, c, d in r:
+        occ[int((b - y0) / CELL):int(math.ceil((d - y0) / CELL)), int((a - x0) / CELL):int(math.ceil((c - x0) / CELL))] = True
+    return occ.sum() * CELL * CELL
+
+
+def reserve(board, refs):
+    """The room kept around each part of a skeleton (refs): the least growth that makes the skeleton cover as
+    much as the whole block, so that its passives find room around it once the blocks are placed."""
+    fps = list(board.GetFootprints())
+    whole = area([o for f in fps for o in pcb.occupied(f)])
+    core_rects = [o for f in fps if f.GetReference() in refs and f.GetValue() not in EDGE_VALUES for o in pcb.occupied(f)]
+    edge_rects = [o for f in fps if f.GetReference() in refs and f.GetValue() in EDGE_VALUES for o in pcb.occupied(f)]
+    g = 0.0
+    while g < 8.0 and area(edge_rects + [(a - g, b - g, c + g, d + g) for a, b, c, d in core_rects]) < whole:
+        g += CELL
+    return g
+
+
 def load(blockdir):
-    """The axes and the local bus whole; the other blocks as their skeleton, each part grown by RESERVE for the
+    """The axes and the local bus whole; the other blocks as their skeleton, each part grown (reserve) for the
     passives that go back against their pins once the blocks are placed."""
     out = {}
     for f in sorted(glob.glob(os.path.join(blockdir, "*.kicad_pcb"))):
@@ -231,7 +256,8 @@ def load(blockdir):
         if whole.edge in ("A", "end"):
             out[name] = whole
         else:
-            out[name] = Block(name, board, {fp.GetReference() for fp in board.GetFootprints() if core(fp)}, RESERVE)
+            refs = {fp.GetReference() for fp in board.GetFootprints() if core(fp)}
+            out[name] = Block(name, board, refs, RESERVE)
     return out
 
 
@@ -287,7 +313,7 @@ def main():
         row_b.append(Block(b.name, b.board, conn, pad_refs=conn))
         if len(conn) < len(b.fps):
             rest = {f.GetReference() for f in b.board.GetFootprints()} - set(conn)
-            interior.append(Block(b.name + " body", b.board, set(b.refs) - set(conn), RESERVE, rest))
+            interior.append(Block(b.name + " body", b.board, set(b.refs) - set(conn), b.grow, rest))
     power = [b for b in row_b if any(r.GetValue() == "POWER" for r in b.fps)]
     others = [b for b in row_b if b not in power]
 
@@ -427,12 +453,40 @@ def main():
     print(f"best: {names}  {cost:.0f}")
     for name, (b, rot, dx, dy) in plan.placed.items():
         print(f"  {name:24} rot {rot:3}  dx {dx:7.2f}  dy {dy:7.2f}")
-    assemble(plan, comps, pins, spread, out, cost)
+    # each block laid out at its place; a block short of room grows and is placed again, alone
+    for _ in range(8):
+        short, clash = assemble(plan, comps, pins, spread, out, cost)
+        if not short or "spread" in short:
+            break
+        for name in short:
+            b, rot, dx, dy = plan.placed[name]
+            grown = Block(b.name, b.board, set(b.refs), b.grow + REGROW, b.pad_refs)
+            rest = Plan([])
+            for other, r, x, y in plan.placed.values():
+                if other is not b:
+                    rest.put(other, r, x, y)
+            rots = (0,) if name.endswith(" body") else (rot,) + tuple(r for r in (0, 90, 180, 270) if r != rot)
+            span = np.arange(-40, 41, COARSE)
+            pick = rest.best(grown, rest.scan(grown, rots, xs=round(dx / CELL) + span, ys=round(dy / CELL) + span,
+                                              best=WIDE))
+            if pick is None:
+                pick = rest.best(grown, rest.scan(grown, rots, best=WIDE))
+            if pick is None:
+                raise SystemExit(f"FAILED: no room for {name} grown by {grown.grow:.1f} mm")
+            rest.put(grown, *pick[1:])
+            plan = rest
+            print(f"  {name}: grown by {grown.grow:.1f} mm, rot {pick[1]}, dx {pick[2]:.2f}, dy {pick[3]:.2f}",
+                  flush=True)
+        cost = total(plan)
+    if short or clash:
+        raise SystemExit(f"FAILED: blocks short of room: {short}" if short else f"FAILED: courtyards over one another: {clash}")
 
 
 def assemble(plan, comps, pins, spread, out, plan_cost):
-    """The board: every block at its place; the passives of a block at their places in its layout where they
-    are free, the others and the parts of the spread sheets next to the pin they serve."""
+    """The board: every block skeleton at its place, then each block laid out there, in the order of the plan:
+    its passives at their places in its layout where they are free, the others next to the pin they serve,
+    then refined among all the parts already placed; the parts of the spread sheets last.
+    Returns the blocks short of room and the courtyards over one another (the gate)."""
     refs = [r for b, *_ in plan.placed.values() for r in b.refs]
     rest = [r for r in comps if r not in refs]
     board, fps = blocks.make_board(refs + rest, comps, pins)
@@ -446,39 +500,66 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
             g.Rotate(pcb.vec(cx, cy), pcbnew.EDA_ANGLE(rot, pcbnew.DEGREES_T))
         g.Move(pcb.vec(dx, dy))
         return g
-    followers = []
+    groups = []
     for b, rot, dx, dy in plan.placed.values():
         t = (rot, float(b.centre[0]), float(b.centre[1]), float(dx), float(dy))
         for f in b.fps:
             move(f, *t)
         if b.name + " body" in names:       # the passives follow the body
             continue
-        followers += [(f, t) for f in b.board.GetFootprints() if f.GetReference() not in refs]
+        mine = [(f, t) for f in b.board.GetFootprints() if f.GetReference() not in refs]
+        if mine:
+            groups.append((b.name, mine))
     placed = {r: fps[r] for r in refs}
-    occ = [o for g in placed.values() for o in pcb.occupied(g)]
-    for f, t in followers:
-        g = move(f, *t)
-        rects = pcb.occupied(g)
-        if pcb.free(rects, occ):
-            occ += rects
-            placed[g.GetReference()] = g
-    print(f"{len(placed) - len(refs)} of {len(followers)} passives kept at their places in their blocks")
     pcb.outline(board)
     pcb.keepouts(board)
     zones, lanes = pcb.ZONES, pcb.LANES
     pcb.ZONES, pcb.LANES = {"/Modbus/ bus side": [(0, 0, 0, 0)]}, []
+    short, kept = [], 0
     try:
-        failed = pcb.auto_place(fps, placed, set())
+        for name, mine in groups:
+            occ = [o for g in placed.values() for o in pcb.occupied(g)]
+            group = []
+            for f, t in mine:
+                g = move(f, *t)
+                rects = pcb.occupied(g)
+                group.append(g.GetReference())
+                if pcb.free(rects, occ):
+                    occ += rects
+                    placed[g.GetReference()] = g
+                    kept += 1
+            failed = pcb.auto_place({r: fps[r] for r in list(placed) + group}, dict(placed), set())
+            for r in group:
+                if r not in failed:
+                    placed[r] = fps[r]
+            if failed:
+                short.append(name)
+                print(f"  {name}: no room for {failed}", flush=True)
+                continue
+            blocks.refine(fps, group, [r for r in placed if r not in group], rounds=2)
+        failed = pcb.auto_place(fps, dict(placed), set())
+        if failed:
+            short.append("spread")
+            print(f"  spread parts: no room for {failed}", flush=True)
     finally:
         pcb.ZONES, pcb.LANES = zones, lanes
-    # the passives moved by the assembly, and their neighbours, refined on the whole board
-    on_board = [r for r in fps if r not in failed and not r.startswith("H")]
+    print(f"{kept} passives kept at their places in their blocks")
+    if short:
+        return short, []
+    on_board = [r for r in fps if not r.startswith("H")]
     movable = [r for r in on_board if not core(fps[r]) and fps[r].GetValue() not in EDGE_VALUES]
-    before, after = blocks.refine(fps, movable, [r for r in on_board if r not in movable], rounds=2)
+    before, after = blocks.refine(fps, movable, [r for r in on_board if r not in movable], rounds=1)
     print(f"plan {plan_cost:.0f}, assembled {before:.0f}, refined {after:.0f}")
+    # the gate: no courtyards over one another, but those of a data sheet layout (drawn so on purpose)
+    together = {r: t for t in blocks.TEMPLATES for r in t}
+    rects = [(r, pcb.occupied(fps[r])[0]) for r in on_board]
+    clash = [f"{r1}/{r2}" for (r1, (x0, y0, x1, y1)), (r2, (a0, b0, a1, b1)) in itertools.combinations(rects, 2)
+             if x0 < a1 - 0.25 and a0 < x1 - 0.25 and y0 < b1 - 0.25 and b0 < y1 - 0.25
+             and not (r1 in together and together[r1] == together.get(r2))]
     board.SetFileName(out)
     pcbnew.SaveBoard(out, board)
-    print(f"-> {out}" + (f"; not placed: {failed}" if failed else ""))
+    print(f"-> {out}")
+    return [], clash
 
 
 if __name__ == "__main__":

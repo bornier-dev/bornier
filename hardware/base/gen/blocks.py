@@ -563,6 +563,11 @@ def main():
             needs = END & ({bl[sys.argv[2]][0]} | set(bl[sys.argv[2]][1]))
             names = [n for n in names if (n == "Axis 0" and needs) or n == sys.argv[2]]
         first, axis0 = None, []
+        # the parts with a fixed place (the local bus header) are walls for every other block
+        board, fps = make_board(sorted(END), comps, pins)
+        for r in END:
+            pcb.place_centred(fps[r], *pcb.KEY[r])
+        fixed = {r: pcb.occupied(fps[r]) for r in END}
         for name in names:
             main_ref, members = bl[name]
             out = sys.argv[3] if sys.argv[1] == "show" else os.path.join(sys.argv[2], name.replace(" ", "_") + ".kicad_pcb")
@@ -571,7 +576,8 @@ def main():
                 board, _ = copy_layout(first[1], [main_ref] + members, comps, pins, dx)
                 failed = []
             else:
-                walls = axis0 if END & ({main_ref} | set(members)) else []
+                mine = END & ({main_ref} | set(members))
+                walls = axis0 if mine else [o for r, rects in fixed.items() for o in rects]
                 board, fps, failed = layout(name, main_ref, members, comps, pins, walls)
                 if name.startswith("Axis"):
                     first = (name, board)
