@@ -31,6 +31,11 @@ CELL = 0.5          # grid, mm
 NECK = 6.0
 FOREIGN = 4.0       # cost of a cell of another supply taken by a corridor, against 1 for a cell of its own
 GAP = 0.5           # between planes of different supplies (route.ZONE_GAP)
+# A pad farther than REACH from its plane gets a finger of it FINGER wide: the supply passes of route.py link a
+# via to its plane on layer 4 only up to RAIL_LINK_MAX (12 mm, in an L), a longer link walls the signals off.
+# IPC-2221, inner layer, 0.5 oz, 10 degC rise: 2.5 mm carries 1.4 A
+REACH = 8.0
+FINGER = 2.5
 
 
 def seeds(board):
@@ -150,44 +155,138 @@ def supply_planes(board, inside, keep_out=(), strict=True):
         owner[take] = n
     owner[blocked] = ""
     fps = {fp.GetReference(): fp for fp in board.GetFootprints()}
-    half = int(round(NECK / 2 / CELL))
-    locked = np.zeros(X.shape, bool)     # the corridors laid: no later corridor of another supply cuts them
-    for _ in range(4 * len(nets)):
-        done = True
+    locked = np.zeros(X.shape, bool)     # corridors, fingers and sources: no later corridor of another supply cuts them
+
+    def pads_of(n):
+        return [(f"{fp.GetReference()}.{p.GetNumber()}", pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y))
+                for fp in fps.values() for p in fp.Pads() if p.GetNetname() == n]
+    src = {n: [(x, y) for name, x, y in pads_of(n) if name.split(".")[0] == SOURCES[n]] for n in nets}
+    bridges = []        # (supply, (x, y) in a piece, (x, y) in its main body): joined by a track, not by the plane
+
+    def pieces(n):
+        """Labels of the pieces of n, and the label of each piece's group (pieces joined by bridges): the group
+        of the source is 0."""
+        lab, k = components(owner == n)
+        group = list(range(k + 1))
+
+        def root(p):
+            while group[p] != p:
+                p = group[p]
+            return p
+        for m, a, b in bridges:
+            if m == n and lab[cell(*a)] and lab[cell(*b)]:
+                group[root(lab[cell(*a)])] = root(lab[cell(*b)])
+        main = root(lab[cell(*src[n][0])]) if lab[cell(*src[n][0])] else None
+        return lab, {p: (0 if root(p) == main else root(p)) for p in range(1, k + 1)}
+
+    def groups(n):
+        return len(set(pieces(n)[1].values()))
+
+    def paint(n, path, width):
+        """The cells of the path, width wide, to n, unless that splits another supply: then nothing changes and
+        False is returned."""
+        keep = owner.copy(), locked.copy()
+        before = {m: groups(m) for m in nets if m != n}
+        half = int(round(width / 2 / CELL))
+        for a, b in path:
+            win = (slice(max(a - half, 0), a + half + 1), slice(max(b - half, 0), b + half + 1))
+            free = ~locked[win] | (owner[win] == n)
+            owner[win] = np.where(free, n, owner[win])
+            locked[win] |= free
+        owner[blocked] = ""
+        if any(groups(m) > before[m] for m in before):
+            owner[...], locked[...] = keep
+            return False
+        return True
+
+    def where(mask):
+        ii, jj = np.nonzero(mask)
+        return float(xs[jj].mean()), float(ys[ii].mean())
+
+    # the source on its plane, first: every supply is fed from where it is made
+    for n in nets:
+        paint(n, [cell(x, y) for x, y in src[n]], NECK)
+
+    def join():
+        for _ in range(4 * len(nets)):
+            done = True
+            for n in nets:
+                for _ in range(64):
+                    lab, grp = pieces(n)
+                    apart = [p for p, g in grp.items() if g != 0]
+                    if not apart:
+                        break
+                    done = False
+                    piece = min(apart, key=lambda p: (lab == p).sum())
+                    main = np.isin(lab, [p for p, g in grp.items() if g == 0])
+                    held = sum(1 for x, y in seed[n] if lab[cell(x, y)] == piece)
+                    mask = lab == piece
+                    if held < SEED_MIN and not locked[mask].any():
+                        # a piece with few pads of its supply goes to the supply around it: its pads get a finger
+                        around = [owner[a, b] for a, b in border(mask) if owner[a, b] not in ("", n)]
+                        owner[mask] = collections.Counter(around).most_common(1)[0][0] if around else ""
+                        continue
+                    path = corridor(owner, n, mask, main, blocked | (locked & (owner != n)))
+                    if path is None or not paint(n, path, NECK):
+                        # no way on this layer without cutting another supply: a track joins it (route.py)
+                        a, b = shortest(mask, main)
+                        bridges.append((n, a, b))
+            if done:
+                return True
+        return False
+
+    def shortest(frm, to):
+        """The nearest pair of cells of two masks, as points (mm)."""
+        fi, fj = np.nonzero(frm)
+        ti, tj = np.nonzero(to)
+        step = max(1, len(ti) // 4000)
+        ti, tj = ti[::step], tj[::step]
+        best = None
+        for k in range(0, len(fi), 256):
+            d = np.hypot(xs[fj[k:k + 256], None] - xs[tj], ys[fi[k:k + 256], None] - ys[ti])
+            a, b = np.unravel_index(d.argmin(), d.shape)
+            if best is None or d[a, b] < best[0]:
+                best = (d[a, b], (float(xs[fj[k + a]]), float(ys[fi[k + a]])), (float(xs[tj[b]]), float(ys[ti[b]])))
+        return best[1], best[2]
+
+    def far(skip=()):
+        """[(distance, supply, pad, x, y)] of the pads farther than REACH from their plane."""
+        out = []
         for n in nets:
-            lab, k = components(owner == n)
-            if k <= 1:
-                continue
-            done = False
-            src = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y))
-                   for p in fps[SOURCES[n]].Pads() if p.GetNetname() == n]
-            i, j = cell(*src[0])
-            while k > 1:
-                main = lab[i, j] or np.bincount(lab.ravel())[1:].argmax() + 1
-                piece = next(p for p in range(1, k + 1) if p != main)
-                held = sum(1 for x, y in seed[n] if lab[cell(x, y)] == piece)
-                if held < SEED_MIN:
-                    # a piece with few pads of its supply goes to the supply around it: its pads are linked
-                    around = [owner[a, b] for a, b in border(lab == piece) if owner[a, b] not in ("", n)]
-                    owner[lab == piece] = collections.Counter(around).most_common(1)[0][0] if around else ""
-                    lab, k = components(owner == n)
-                    continue
-                path = corridor(owner, n, lab == piece, lab == main, blocked | (locked & (owner != n)))
-                if path is None:
-                    raise SystemExit(f"planes: no way to join a piece of {n} to its source")
-                for a, b in path:
-                    win = (slice(max(a - half, 0), a + half + 1), slice(max(b - half, 0), b + half + 1))
-                    free = ~locked[win] | (owner[win] == n)
-                    owner[win] = np.where(free, n, owner[win])
-                    locked[win] |= free
-                owner[blocked] = ""
-                lab, k = components(owner == n)
-        if done:
+            ii, jj = np.nonzero(owner == n)
+            px, py = xs[jj], ys[ii]
+            for name, x, y in pads_of(n):
+                d = np.hypot(px - x, py - y).min() if len(px) else math.inf
+                if d > REACH and name not in skip:
+                    out.append((d, n, name, x, y))
+        return sorted(out)
+    settled = join()
+    tried = set()
+    for _ in range(64):
+        left = far(tried)
+        if not left:
             break
-    else:
+        # the nearest first: its finger may serve the next ones
+        _, n, name, x, y = left[0]
+        tried.add(name)
+        frm = np.zeros(X.shape, bool)
+        frm[cell(x, y)] = True
+        path = corridor(owner, n, frm, owner == n, blocked | (locked & (owner != n)))
+        if path is not None and paint(n, path, FINGER):
+            # NECK wide around the pad: a through-hole pad needs room for its thermal spokes
+            paint(n, [cell(x, y)], NECK)
+            settled = join()
+    left = far()
+    if not settled:
         if strict:
             raise SystemExit("planes: the supplies do not settle in one piece each")
         print("planes: the supplies do not settle in one piece each")
+    for n, a, b in bridges:
+        print(f"planes: {n} bridge from ({a[0]:.1f}, {a[1]:.1f}) to ({b[0]:.1f}, {b[1]:.1f}), {math.dist(a, b):.1f} mm")
+    if left:
+        # a finger would cut another supply: the supply pass links them by a track (route.py)
+        print("planes: pads out of reach of their plane, linked by their pass: "
+              + " ".join(f"{name} ({n}, {d:.1f} mm)" for d, n, name, _, _ in left))
     out = {}
     for n in nets:
         poly = pcbnew.SHAPE_POLY_SET()
@@ -212,7 +311,7 @@ def supply_planes(board, inside, keep_out=(), strict=True):
         poly.Deflate(pcbnew.FromMM(GAP / 2), pcbnew.CORNER_STRATEGY_ALLOW_ACUTE_CORNERS, pcbnew.FromMM(0.01))
         poly.Simplify()
         out[n] = poly
-    return out, owner, (xs, ys)
+    return out, owner, (xs, ys), bridges
 
 
 def main():
@@ -221,8 +320,8 @@ def main():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     board = pcbnew.LoadBoard(sys.argv[1])
-    edge = pcb.END_KEEP
-    _, owner, (xs, ys) = supply_planes(board, (edge, edge, pcb.W - edge, pcb.H - edge), strict=False)
+    import route
+    _, owner, (xs, ys), bridges = route.supply_planes(board, strict=False)
     colours = {"": 0, "+5V": 1, "+3V3": 2, "+VIN": 3}
     img = np.vectorize(colours.get)(owner)
     plt.figure(figsize=(15, 11))
@@ -230,7 +329,9 @@ def main():
     for fp in board.GetFootprints():
         p = fp.GetPosition()
         plt.text(pcbnew.ToMM(p.x), pcbnew.ToMM(p.y), fp.GetReference(), fontsize=4, ha="center")
-    plt.title("+5V red / +3V3 blue / +VIN green")
+    for n, a, b in bridges:
+        plt.plot([a[0], b[0]], [a[1], b[1]], "k-", lw=2)
+    plt.title("+5V blue / +3V3 green / +VIN purple, bridges black")
     plt.savefig(sys.argv[2], dpi=120)
     print(sys.argv[2], {n: int((owner == n).sum() * CELL * CELL) for n in SUPPLIES})
 

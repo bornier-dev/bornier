@@ -82,6 +82,11 @@ LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 # Shorter ones stay: at 5 mm, Freerouting failed to finish a few of them (the input of U10, the +3V3 of the
 # encoder receivers)
 RAIL_LINK_MAX = 12.0
+# A bridge between two pieces of a supply plane that layer 3 cannot join (planes.py), mm: track, via, drill.
+# IPC-2221, outer layer 1 oz, 10 degC rise: 0.6 mm carries 1.6 A
+BRIDGE = (0.6, 0.6, 0.3)
+# The nets each pass must leave whole (DRC: no unconnected item): the chain stops otherwise
+WHOLE = {"gnd": {"GND", "GNDISO"}, "vin": {"+VIN"}, "5v": {"+5V"}, "3v3": {"+3V3"}, "phy": set(PHY_ISLANDS)}
 # Supplies whose links left to Freerouting carry little current, routed thinner than their class, mm. +5V:
 # the laser buffer U37 and the feedback divider R4, under 10 mA (0.15 mm: above 0.45 A); at 0.25 mm the
 # 35 mm link of U37 found no way
@@ -165,10 +170,15 @@ def planes(board):
     gnd.BooleanSubtract(rect_poly(*grow(iso_island(board), ISO_MARGIN)))
     add_zone(board, "GND", pcbnew.In1_Cu, gnd, 0, "ground plane")
     add_zone(board, "GNDISO", pcbnew.In1_Cu, island, 1, "isolated ground")
-    supply, _, _ = planes_mod.supply_planes(board, (EDGE, EDGE, W - EDGE, H - EDGE),
-                                            [grow(iso_island(board), ISO_MARGIN)])
+    supply = supply_planes(board)[0]
     for net, p in supply.items():
-        add_zone(board, net, pcbnew.In2_Cu, p, 0, f"{net} plane")
+        # a zone per piece: KiCad saves one outline of a zone (pieces joined by a bridge, planes.py)
+        for i in range(p.OutlineCount()):
+            piece = pcbnew.SHAPE_POLY_SET()
+            piece.AddOutline(p.Outline(i))
+            for h in range(p.HoleCount(i)):
+                piece.AddHole(p.Hole(i, h))
+            add_zone(board, net, pcbnew.In2_Cu, piece, 0, f"{net} plane" + (f" {i + 1}" if i else ""))
     band = rect_poly(0, 0, W, H)
     band.BooleanSubtract(rect_poly(CHASSIS_BAND, CHASSIS_BAND, W - CHASSIS_BAND, H - CHASSIS_BAND))
     # the shields joined solid: their leads are on the rim of the band, where thermal spokes find no room
@@ -186,6 +196,12 @@ def planes(board):
         for x, y in hull(pts):
             poly.Append(MM(x), MM(y))
         add_zone(board, net, pcbnew.In2_Cu, poly, k + 1, f"{net.split('/')[-1]} island")
+
+
+def supply_planes(board, strict=True):
+    """planes.supply_planes on this board: inside the fanout edge, off the isolated island."""
+    return planes_mod.supply_planes(board, (EDGE, EDGE, W - EDGE, H - EDGE), [grow(iso_island(board), ISO_MARGIN)],
+                                    strict)
 
 
 def hull(pts):
@@ -837,13 +853,15 @@ def prune(board, nets):
         removed += len(dead)
 
 
-def link(cu, net, off, inside=None, top=False, reach=LINK_REACH):
+def link(cu, net, off, inside=None, top=False, reach=LINK_REACH, size=None):
     """Tracks on layer 4 from each via off its plane to a via of the net in the plane, an existing one or a
     new one, in an L or straight; the vias linked serve the next ones. Returns the vias left unlinked.
     inside(point, radius): where a via is in the plane, its outline by default; top: on layer 1 instead;
-    reach: the longest link."""
+    reach: the longest link; size: (track width, via diameter, via drill), those of its class by default."""
     inside = inside or (lambda p, r: cu.in_plane(net, p, r))
     width, _, via_d, via_drill = project.CLASSES[project.class_of(net)]
+    if size:
+        width, via_d, via_drill = size
     targets = [o.centre for o in cu.items if o.net == net and o.drill and not o.pad and inside(o.centre, o.reach)]
     r = via_d / 2
 
@@ -934,11 +952,17 @@ def start(name):
     return board
 
 
-def fanout_pass(board, name, nets, reach=LINK_REACH):
-    """Fanout of `nets`, then the vias off their plane linked on layer 4, up to `reach`. Returns the copper."""
+def fanout_pass(board, name, nets, reach=LINK_REACH, far=False):
+    """Fanout of `nets`, then the vias off their plane linked on layer 4, up to `reach`; far: those beyond, by a
+    bridge track. Returns the copper."""
     cu = Copper(board)
     left, off = fanout(cu, nets)
     unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net], reach=reach)]
+    if far:
+        # the pads planes.py leaves out of reach of their plane: a BRIDGE track up to LINK_REACH, layer 4 then 1
+        for top in (False, True):
+            unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net and n in unlinked],
+                                                                  None, top, LINK_REACH, BRIDGE)]
     # an unlinked via and its stub taken back: Freerouting starts from the pad, the planes keep their copper
     for net, n, v in off:
         if n in unlinked:
@@ -950,6 +974,7 @@ def fanout_pass(board, name, nets, reach=LINK_REACH):
           f"{len(unlinked)} left unlinked, for the signals pass", flush=True)
     for s in left + unlinked:
         print("  ", s)
+    cu.unlinked = left + unlinked
     return cu
 
 
@@ -1206,10 +1231,63 @@ def signal_nets(board):
 
 
 def rail(name):
+    """Fanout of the supply, its plane bridges, then Freerouting on it alone for the pads still unlinked: the
+    gate of main wants it whole."""
     board = start(name)
     net = RAILS[name]
-    fanout_pass(board, name, {net}, RAIL_LINK_MAX)
+    cu = fanout_pass(board, name, {net}, RAIL_LINK_MAX, far=True)
+    left = bridge(board, cu, net)
+    if left or cu.unlinked:
+        tracks, vias = freerouting(board, {net}, 4)
+        print(f"{name} pass: Freerouting on {net} alone, {tracks} track(s) and {vias} via(s)", flush=True)
     project.save(board, PCB)
+
+
+def bridge(board, cu, net):
+    """The bridges of planes.supply_planes for net: a via in the piece, a track of BRIDGE on layer 4 (else 1)
+    to a via in the main body of the plane. Returns those left unlaid."""
+    supply, _, _, found = supply_planes(board)
+    w, via_d, via_drill = BRIDGE
+    r = via_d / 2
+    poly, left = supply.get(net), []
+
+    def body_at(p):
+        for i in range(poly.OutlineCount()):
+            if poly.Outline(i).PointInside(vec(p)) or poly.Outline(i).Collide(vec(p), MM(1.0)):
+                b = pcbnew.SHAPE_POLY_SET()
+                b.AddOutline(poly.Outline(i))
+                for h in range(poly.HoleCount(i)):
+                    b.AddHole(poly.Hole(i, h))
+                return b
+        return None
+
+    def within(b):
+        def inside(p, rad):
+            return b.Contains(vec(p)) and all(b.Contains(vec((p[0] + rad * math.cos(k * math.pi / 4),
+                                                                 p[1] + rad * math.sin(k * math.pi / 4)))) for k in range(8))
+        return inside
+    for n, a, b in found:
+        if n != net:
+            continue
+        name = f"{net} bridge ({a[0]:.1f}, {a[1]:.1f})"
+        piece, body = body_at(a), body_at(b)
+        if piece is None or body is None:
+            left.append(name)
+            continue
+        in_piece, in_body = within(piece), within(body)
+        spot = next(((a[0] + ox, a[1] + oy) for ox, oy in LINK_SPOTS
+                     if in_piece((a[0] + ox, a[1] + oy), r + PLANE_GAP)
+                     and cu.via_ok(net, (a[0] + ox, a[1] + oy), r, cu.near((a[0] + ox, a[1] + oy), (a[0] + ox, a[1] + oy), r + 1.0))),
+                    None)
+        if spot is None:
+            left.append(name)
+            continue
+        cu.add_via(net, spot, via_d, via_drill)
+        if all(link(cu, net, [(name, spot)], in_body, top, LINK_REACH, BRIDGE) for top in (False, True)):
+            left.append(name)
+    print(f"{net}: {len([f for f in found if f[0] == net]) - len(left)} plane bridge(s) laid"
+          + (f", left to Freerouting: {' '.join(left)}" if left else ""), flush=True)
+    return left
 
 
 def report(rpt):
@@ -1361,7 +1439,7 @@ def main():
         rail(step)
     elif step == "phy":
         board = start("phy")
-        fanout_pass(board, "phy", set(PHY_ISLANDS), RAIL_LINK_MAX)
+        fanout_pass(board, "phy", set(PHY_ISLANDS), RAIL_LINK_MAX, far=True)
         project.save(board, PCB)
     elif step == "short":
         short()
@@ -1412,6 +1490,16 @@ def main():
         raise SystemExit(f"unknown pass: {step}")
     # a second LoadBoard fails in a process that has removed items: report from a fresh one
     subprocess.run([sys.executable, os.path.abspath(__file__), "report"], check=True)
+    rpt = PCB.replace(".kicad_pcb", "-drc.json")
+    cut = unconnected_nets(rpt) & WHOLE.get(step, set())
+    if cut:
+        raise SystemExit(f"FAILED: {step} pass leaves {' '.join(sorted(cut))} unconnected; stage not saved")
+    # silkscreen aside, no violation: copper cut off a plane waits for the pass of its net, then the islands pass
+    bad = [v["type"] for v in json.load(open(rpt, encoding="utf-8"))["violations"]
+           if not v["type"].startswith("silk") and not (v["type"] == "isolated_copper"
+                                                        and net_of(v["items"][0]["description"]) not in WHOLE.get(step, set()))]
+    if bad:
+        raise SystemExit(f"FAILED: {step} pass leaves violations {' '.join(sorted(set(bad)))}; stage not saved")
     shutil.copyfile(PCB, stage(step))     # zones filled by the report
 
 
