@@ -70,6 +70,15 @@ TPS2553_PINS = [
 ]
 
 
+# TI SN75ALS191 (SLLS032C, table 4-1), SOIC-8: 1 VCC, 2 1A, 3 2A, 4 GND, 5 2Z, 6 2Y, 7 1Z, 8 1Y.
+# Both channels and the supply in one unit; Y non-inverting, Z inverting.
+SN75ALS191_PINS = [
+    ("2", "1A", IN, "L", 0), ("3", "2A", IN, "L", 3),
+    ("8", "1Y", OUT, "R", 0), ("7", "1Z", OUT, "R", 1), ("6", "2Y", OUT, "R", 3), ("5", "2Z", OUT, "R", 4),
+    ("1", "VCC", PI, "T", 2), ("4", "GND", PI, "B", 2),
+]
+
+
 # Dual op amp in one unit (SOIC-8 standard pinout), so that both halves and the supply are drawn.
 # Half B on top, half A below (feedback drawn under the body), V+ on the right, V- bottom left.
 DUAL_OPAMP_PINS = [
@@ -123,6 +132,10 @@ def main():
                        footprint="Package_TO_SOT_SMD:SOT-23-6",
                        datasheet="https://www.ti.com/lit/ds/symlink/tps2553.pdf",
                        description="2.5-6.5 V load switch, adjustable current limit, fault output"))
+    syms.append(symbol("SN75ALS191", SN75ALS191_PINS, width=8, height=5,
+                       footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+                       datasheet="https://www.ti.com/lit/ds/symlink/sn75als191.pdf",
+                       description="Dual differential line driver, EIA/TIA-422-B, 5 V, short-circuit protected"))
     syms.append(symbol("OPAMP_DUAL", DUAL_OPAMP_PINS, width=6, height=6,
                        footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
                        description="Dual op amp, standard SOIC-8 pinout, both halves and supply in one unit"))

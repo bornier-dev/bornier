@@ -379,18 +379,22 @@ def limited_supply(vs, out, rcl, note):
 
 c.block("Drives: STEP/DIR RS-422, ENA open drain, ALM optocoupler, VIN OUT for the drive I/O")
 U_DRV24 = limited_supply("+VIN", "+VIN_OUT", "1k", "VIN OUT: supply of the drive I/O, probe and relay coil, 480 mA limit")
+# One repeated sheet per axis: no part serves two axes (a part shared by two blocks has a place in neither).
+# The references of the quad driver and its capacitor that served two axes before go to the driver of the
+# first axis of each pair; the others take numbers of their own, so that no other reference moves.
+DRIVER_REFS = [("U11", "C56"), ("U300", "C320"), ("U16", "C57"), ("U301", "C321")]
 for k in range(2):
-    # One repeated sheet per pair of axes: a quad driver serves two axes.
-    c.group(f"drv{k}")
-    u = ref("U")
+    ref("U"), ref("C")          # U11/C56, U16/C57: taken by DRIVER_REFS
     a0, a1 = 2 * k, 2 * k + 1
-    c.part(u, "Interface:AM26LS31CD", "ST26C31BDR", "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm", "C94192",
-           {1: f"STEP{a0}", 2: f"STEP{a0}_P", 3: f"STEP{a0}_N", 7: f"DIR{a0}", 6: f"DIR{a0}_P", 5: f"DIR{a0}_N",
-            9: f"STEP{a1}", 10: f"STEP{a1}_P", 11: f"STEP{a1}_N", 15: f"DIR{a1}", 14: f"DIR{a1}_P", 13: f"DIR{a1}_N",
-            4: "+5V", 12: "GND", 16: "+5V", 8: "GND"},
-           "Quad RS-422 driver, 5 V, -40/+85 °C; always enabled")
-    c.C(ref("C"), "100nF", "+5V", "GND")
     for n in (a0, a1):
+        c.group(f"drv{n}")
+        u, cap = DRIVER_REFS[n]
+        c.part(u, "Bornier:SN75ALS191", "SN75ALS191DR", None, "C2871261",
+               {2: f"STEP{n}", 8: f"STEP{n}_P", 7: f"STEP{n}_N", 3: f"DIR{n}", 6: f"DIR{n}_P", 5: f"DIR{n}_N",
+                1: "+5V", 4: "GND"},
+               "Dual RS-422 driver, 5 V, 0/+70 °C (no dual driver for -40/+85 °C in stock): STEP and DIR of "
+               "this axis only")
+        c.C(cap, "100nF", "+5V", "GND")
         for sig in (f"STEP{n}", f"DIR{n}"):
             c.R(ref("R"), "10k", sig, "GND", note="Low while the MCU pin is not configured: no step at reset")
         q = ref("Q")

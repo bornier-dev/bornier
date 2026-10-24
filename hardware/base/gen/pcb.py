@@ -344,7 +344,7 @@ AXIS[0].append((END_KEEP, 15.0, AXIS_X[0], HE10_Y - 26.0))   # above the header
 AXIS[1].append((80.5, 47.0, AXIS_X[2], 59.5))                # right of the C-LOCK
 ZONES = {
     "/Encoder 0/": AXIS[0], "/Encoder 1/": AXIS[1], "/Encoder 2/": AXIS[2], "/Encoder 3/": AXIS[3],
-    "/Drives 0-1/": AXIS[0] + AXIS[1], "/Drives 2-3/": AXIS[2] + AXIS[3],
+    "/Drive 0/": AXIS[0], "/Drive 1/": AXIS[1], "/Drive 2/": AXIS[2], "/Drive 3/": AXIS[3],
     "/Local bus/": [(END_KEEP, HE10_Y - 26.0, 21.0, HE10_Y + 26.0), (21.0, 47.5, 27.0, HE10_Y + 26.0)],
     "/ESC/": [(21.0, 47.5, 44.0, 87.5)],
     "/Clock/": [(21.0, 47.5, 69.0, 87.5)],

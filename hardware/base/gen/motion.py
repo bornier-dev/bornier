@@ -2,9 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
 """Motion sheets of the base board.
 
-Two repeated sheets, drawn once and placed several times (KiCad hierarchical sheets): a pair of
-drive ports (one quad RS-422 driver serves two axes), placed twice, and an encoder port, placed
-four times. A flat sheet holds the supply of the drive ports (VIN OUT) and the probe input.
+Two repeated sheets, drawn once and placed four times (KiCad hierarchical sheets): a drive port
+with its own RS-422 drivers, and an encoder port. A flat sheet holds the supply of the drive ports (VIN OUT) and the probe input.
 Called by schematic.py; the parts and their connections come from circuit.py, where each
 instance is a group of parts created in the same order.
 """
@@ -170,20 +169,20 @@ def opto_input(s, u, a_pin, k_pin, r_net, led_net, in_net):
     return s.P(res, 1), (xn, ky)
 
 
-def drive_pair(prj):
-    """Two drive ports and their quad RS-422 driver; drawn for axes 0-1, placed for 0-1 and 2-3."""
-    s = prj.sheet("Drives 0-1", "drive_pair.kicad_sch", "Pair of drive ports: STEP/DIR, ENA, ALM (2 instances)")
-    s.alias = lambda net: re.sub(r"(STEP|DIR|ENA|ALM)([01])", lambda m: f"{m.group(1)}_{'AB'[int(m.group(2))]}", net)
-    s.text("PAIR OF DRIVE PORTS", 20.32, 17.78, 2.54, True)
-    s.text("Placed twice: axes 0-1 and 2-3 (axis A = even, B = odd).\n"
+def drive_port(prj):
+    """One drive port and its two RS-422 drivers; drawn for axis 0, placed for the four axes."""
+    s = prj.sheet("Drive 0", "drive.kicad_sch", "Drive port: STEP/DIR, ENA, ALM (4 instances)")
+    s.alias = lambda net: re.sub(r"(STEP|DIR|ENA|ALM)0", r"\1", net)
+    s.text("DRIVE PORT", 20.32, 17.78, 2.54, True)
+    s.text("Placed four times: axes 0 to 3.\n"
            "RS-422 STEP/DIR (5 V), ENA open drain to 0 V, ALM through an optocoupler fed by +VIN_OUT.\n"
            "Wiring of a drive: COM+ of its inputs on +VIN_OUT (pin 7), servo-on on ENA (pin 4),\n"
            "its floating alarm output between ALM (pin 5) and 0 V (pin 8).", 20.32, 25.4)
-    u = next(r for r in on("+5V", "U", "drv0"))
+    u = next(r for r in on("STEP0", "U", "drv0") if c.by_ref()[r]["value"] == "SN75ALS191DR")
     cx, cy = 106.68, 104.14
-    s.place(u, cx, cy, ref_at=(cx + 2.54, cy - 27.94), val_at=(cx + 2.54, cy - 30.48))
+    s.place(u, cx, cy, ref_at=(cx + 2.54, cy - 12.7), val_at=(cx + 2.54, cy - 15.24))
     pins = c.by_ref()[u]["pins"]
-    for n in ("1", "7", "9", "15"):           # inputs with their pull-downs
+    for n in ("2", "3"):                        # inputs with their pull-downs
         x, y = s.P(u, n)
         net = pins[n]
         rpd = next(r for r in on(net, "R", "drv0"))
@@ -192,24 +191,19 @@ def drive_pair(prj):
         s.w(net, (x - 7.62, y), (x - 7.62, y + 2.54), (x - 10.16, y + 2.54))
         hr(s, rpd, x - 13.97, y + 2.54, rot=270, ref_at=(x - 33.02, y + 3.81), val_at=(x - 27.94, y + 3.81))
         s.power("GND", *s.P(rpd, 2), 90, show=False)
-    for n in ("2", "3", "6", "5", "10", "11", "14", "13"):
+    for n in ("8", "7", "6", "5"):
         stub(s, s.P(u, n), pins[n], 7.62)
-    gx, gy = s.P(u, "4")
-    s.w("+5V", (gx, gy), (gx - 5.08, gy))
-    s.power("+5V", gx - 5.08, gy, 90)
-    gx, gy = s.P(u, "12")
-    s.w("GND", (gx, gy), (gx - 5.08, gy))
-    s.power("GND", gx - 5.08, gy, 270, show=False)
-    s.rail("+5V", *s.P(u, "16"))
-    s.rail("GND", *s.P(u, "8"))
-    cd = next(r for r in on("+5V", "C", "drv0"))
-    vr(s, cd, cx + 12.7, cy - 33.02)
+    s.rail("+5V", *s.P(u, "1"))
+    s.rail("GND", *s.P(u, "4"))
+    cd = on("+5V", "C", "drv0")[0]
+    vx, vy = s.P(u, "1")
+    vr(s, cd, vx - 10.16, vy - 15.24)
     s.power("+5V", *s.P(cd, 1))
     s.rail("GND", *s.P(cd, 2))
-    s.text("Pull-downs: STEP and DIR stay low\nwhile the MCU pins are not configured.", 40.64, 144.78)
+    s.text("Pull-downs: STEP and DIR stay low\nwhile the MCU pins are not configured.", 40.64, 182.88)
 
-    for n in (0, 1):
-        yc = 76.2 + 101.6 * n
+    for n in (0,):
+        yc = 127.0
         j = next(r for r in on(f"STEP{n}_P", "J"))
         rj45(s, j, 381.0, yc, "A", mirror=True)
         # ESD of STEP and DIR next to the jack (flow-through on the board)
@@ -266,12 +260,9 @@ def drive_pair(prj):
         ex, ey = s.P(uo, 3)
         s.w("GND", (ex, ey), (ex + 2.54, ey))
         s.power("GND", ex + 2.54, ey)
-        s.text(f"DRIVE {'AB'[n]}", 391.16, yc - 17.78, 1.524, True)
 
-    pinmap = lambda k: {f"{sig}_{ab}": f"{sig}{2 * k + i}"  # noqa: E731
-                        for sig in ("STEP", "DIR", "ENA", "ALM") for i, ab in enumerate("AB")}
-    instances(s, "drv", "Drives", [pinmap(0), pinmap(1)])
-    s.instances = [(f"Drives {2 * k}-{2 * k + 1}", rm, pm) for k, (_, rm, pm) in enumerate(s.instances)]
+    pinmap = lambda k: {sig: f"{sig}{k}" for sig in ("STEP", "DIR", "ENA", "ALM")}  # noqa: E731
+    instances(s, "drv", "Drive", [pinmap(k) for k in range(4)])
 
 
 def drive_supply_probe(prj):

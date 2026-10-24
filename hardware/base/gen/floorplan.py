@@ -50,9 +50,7 @@ class Block:
         self.rects = np.array([(x0 - g, y0 - g, x1 + g, y1 + g) for f in self.fps
                                for g in [0.0 if f.GetValue() in EDGE_VALUES else reserve]
                                for x0, y0, x1, y1 in pcb.occupied(f)])
-        self.pads = [(p.GetNetname(), pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y))
-                     for f in every if pad_refs is None or f.GetReference() in pad_refs for p in f.Pads()
-                     if p.GetNetname() and p.GetNetname() not in blocks.POWER and not p.GetNetname().startswith("unconnected-")]
+        self.pads = blocks.pad_points([f for f in every if pad_refs is None or f.GetReference() in pad_refs], name)
         self.centre = ((self.rects[:, 0].min() + self.rects[:, 2].max()) / 2,
                        (self.rects[:, 1].min() + self.rects[:, 3].max()) / 2)
         self.edge = blocks.edge_refs(self.fps)
@@ -78,7 +76,8 @@ class Block:
         for x0, y0, x1, y1 in self.rects:
             (ax, ay), (bx, by) = tp(x0, y0), tp(x1, y1)
             rects.append((min(ax, bx), min(ay, by), max(ax, bx), max(ay, by)))
-        return np.array(rects), [(n, *tp(x, y)) for n, x, y in self.pads]
+        return np.array(rects), [(n, *tp(x, y), nx * c + ny * s, -nx * s + ny * c, a, t)
+                                 for n, x, y, nx, ny, a, t in self.pads]
 
 
 class Raster:
@@ -118,7 +117,7 @@ class Raster:
 def hpwl(pads, fixed, dx, dy):
     """Weighted half perimeter of the nets of the moved pads joined to fixed pads, for arrays of translations."""
     by_net = collections.defaultdict(list)
-    for n, x, y in pads:
+    for n, x, y, *_ in pads:
         by_net[n].append((x, y))
     total = np.zeros(len(dx))
     for n, pts in by_net.items():
@@ -136,45 +135,15 @@ def hpwl(pads, fixed, dx, dy):
 
 
 def full_cost(placed_pads):
-    """Weighted MST length plus crossings of the signal nets of the placed pads [(net, x, y, block)]; only
-    the crossings involving an edge between two blocks count (those within a block are the block's)."""
-    by_net = collections.defaultdict(list)
-    for n, x, y, b in placed_pads:
-        by_net[n].append((x, y, b))
-    segs, inter, ws = [], [], []
-    length = 0.0
-    for n, pts in by_net.items():
-        w = blocks.weight(n)
-        own = {(x, y): b for x, y, b in pts}
-        for a, e in blocks.mst([(x, y) for x, y, _ in pts]):
-            length += w * math.dist(a, e)
-            segs.append((*a, *e))
-            inter.append(own[a] != own[e])
-            ws.append(w)
-    if not segs:
-        return length
-    S = np.array(segs)
-    W = np.array(ws)
-    I = np.array(inter)
-    A, B = S[I], S
-    def side(o, p, q):
-        return (p[..., 0] - o[..., 0]) * (q[..., 1] - o[..., 1]) - (p[..., 1] - o[..., 1]) * (q[..., 0] - o[..., 0])
-    a, b = A[:, None, 0:2], A[:, None, 2:4]
-    c, d = B[None, :, 0:2], B[None, :, 2:4]
-    a, b, c, d = np.broadcast_arrays(a, b, c, d)
-    x = (side(c, d, a) * side(c, d, b) < 0) & (side(a, b, c) * side(a, b, d) < 0)
-    wmax = np.maximum(W[I][:, None], W[None, :])
-    # a pair of edges between blocks is seen twice
-    twice = I[None, :]
-    crossings = (x * wmax * np.where(twice, 0.5, 1.0)).sum()
-    return length + blocks.CROSSING * crossings
+    """The cost of the placed pads (blocks.score): the same measure as every other step of the placement."""
+    return blocks.score(placed_pads)
 
 
 class Plan:
     def __init__(self, fixed_blocks):
         self.raster = Raster()
         self.placed = {}            # name: (block, rot, dx, dy)
-        self.pads = []              # (net, x, y, name)
+        self.pads = []              # blocks.pad_points, tagged with the block name
         self.clashes = []           # (block, rectangles on occupied cells)
         self.extent = {}            # name: (x0, x1)
         for b in fixed_blocks:
@@ -191,11 +160,11 @@ class Plan:
         self.raster.add(rects)
         self.placed[b.name] = (b, rot, dx, dy)
         self.extent[b.name] = (rects[:, 0].min(), rects[:, 2].max())
-        self.pads += [(n, x + dx, y + dy, b.name) for n, x, y in pads]
+        self.pads += [(n, x + dx, y + dy, *rest) for n, x, y, *rest in pads]
 
     def fixed(self):
         f = collections.defaultdict(list)
-        for n, x, y, _ in self.pads:
+        for n, x, y, *_ in self.pads:
             f[n].append((x, y))
         return f
 
@@ -222,7 +191,7 @@ class Plan:
         scored = []
         for _, rot, dx, dy in candidates:
             rects, pads = b.turned(rot)
-            trial = self.pads + [(n, x + dx, y + dy, b.name) for n, x, y in pads]
+            trial = self.pads + [(n, x + dx, y + dy, *rest) for n, x, y, *rest in pads]
             scored.append((full_cost(trial) + float(self.tie(b, rects, np.array([dx]))[0]), rot, dx, dy))
         return min(scored) if scored else None
 
@@ -330,8 +299,8 @@ def main():
 
     def links(b):
         """Weighted signal nets shared with the other blocks: the most connected first."""
-        other = collections.Counter(n for c in loaded.values() if c is not b for n, _, _ in c.pads)
-        return -sum(blocks.weight(n) for n in {n for n, _, _ in b.pads} if other[n])
+        other = collections.Counter(q[0] for c in loaded.values() if c is not b for q in c.pads)
+        return -sum(blocks.weight(n) for n in {q[0] for q in b.pads} if other[n])
     sequence = sorted(interior, key=links)
     if os.environ.get("FLOOR_SEED"):
         # a placed board to start from: each block where its main part stood there
@@ -458,10 +427,10 @@ def main():
     print(f"best: {names}  {cost:.0f}")
     for name, (b, rot, dx, dy) in plan.placed.items():
         print(f"  {name:24} rot {rot:3}  dx {dx:7.2f}  dy {dy:7.2f}")
-    assemble(plan, comps, pins, spread, out)
+    assemble(plan, comps, pins, spread, out, cost)
 
 
-def assemble(plan, comps, pins, spread, out):
+def assemble(plan, comps, pins, spread, out, plan_cost):
     """The board: every block at its place; the passives of a block at their places in its layout where they
     are free, the others and the parts of the spread sheets next to the pin they serve."""
     refs = [r for b, *_ in plan.placed.values() for r in b.refs]
@@ -502,6 +471,11 @@ def assemble(plan, comps, pins, spread, out):
         failed = pcb.auto_place(fps, placed, set())
     finally:
         pcb.ZONES, pcb.LANES = zones, lanes
+    # the passives moved by the assembly, and their neighbours, refined on the whole board
+    on_board = [r for r in fps if r not in failed and not r.startswith("H")]
+    movable = [r for r in on_board if not core(fps[r]) and fps[r].GetValue() not in EDGE_VALUES]
+    before, after = blocks.refine(fps, movable, [r for r in on_board if r not in movable], rounds=2)
+    print(f"plan {plan_cost:.0f}, assembled {before:.0f}, refined {after:.0f}")
     board.SetFileName(out)
     pcbnew.SaveBoard(out, board)
     print(f"-> {out}" + (f"; not placed: {failed}" if failed else ""))

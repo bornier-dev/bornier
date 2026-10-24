@@ -721,7 +721,7 @@ def main():
     esc(prj)
     mcu(prj)
     import motion
-    motion.drive_pair(prj)
+    motion.drive_port(prj)
     motion.drive_supply_probe(prj)
     motion.encoder(prj)
     import bus
