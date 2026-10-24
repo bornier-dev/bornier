@@ -438,6 +438,36 @@ def esd_runs(board, pnet, nnet):
     return out
 
 
+def laid_lines(board, pnet, nnet):
+    """The lines of a pair already laid on layer 1 (carried from the block layout, blocks.pair_lanes): {net:
+    points from the IC pad on}, or None when a line is missing."""
+    out = {}
+    for net in (pnet, nnet):
+        segs = [(route.xy(t.GetStart()), route.xy(t.GetEnd())) for t in board.GetTracks()
+                if t.GetNetname() == net and t.GetClass() == "PCB_TRACK" and t.GetLayer() == pcbnew.F_Cu]
+        if not segs:
+            return None
+        key = lambda q: (round(q[0], 3), round(q[1], 3))     # noqa: E731
+        adj = {}
+        for a, b in segs:
+            adj.setdefault(key(a), []).append(key(b))
+            adj.setdefault(key(b), []).append(key(a))
+        ic = max((fp for fp in board.GetFootprints() if fp.GetReference()[0] == "U"
+                  and fp.GetValue() not in ("TPD4E05U06DQAR",) and any(q.GetNetname() == net for q in fp.Pads())),
+                 key=lambda fp: fp.GetPadCount())
+        pad = next(route.xy(q.GetPosition()) for q in ic.Pads() if q.GetNetname() == net)
+        cur = min(adj, key=lambda q: math.dist(q, pad))
+        line, prev = [cur], None
+        while True:
+            nxt = [q for q in adj[cur] if q != prev and q not in line]
+            if not nxt:
+                break
+            prev, cur = cur, nxt[0]
+            line.append(cur)
+        out[net] = line
+    return out
+
+
 def terminations(board):
     """Parts on one line of a pair only (the Ethernet terminations): {ref: (footprint, net)}."""
     pair = {n for p in PAIRS for n in p}
@@ -533,7 +563,10 @@ def nearest(c, a, b):
 
 
 def run(board):
-    terms = terminations(board)
+    kept = {pn: laid_lines(board, *pn) for pn in PAIRS}
+    kept = {pn: lines for pn, lines in kept.items() if lines}
+    # the terminations of the pairs kept from the block layout stand against their lines already
+    terms = {r: t for r, t in terminations(board).items() if not any(t[1] in pn for pn in kept)}
     home = {r: (fp.GetPosition(), fp.GetOrientationDegrees()) for r, (fp, _) in terms.items()}
     for k, (fp, _) in enumerate(terms.values()):        # lifted off the board while the pairs are routed
         fp.SetPosition(route.vec((pcb.W + 20 + 3 * k, 10.0)))
@@ -552,18 +585,34 @@ def run(board):
             runs.setdefault((p, n), []).append((a, b, (width + project.PAIR_GAP) / 2 + width / 2))
     laid = {}
     for p, n in PAIRS:
+        if (p, n) in kept:
+            print("pairs pass:", f"{p}/{n}: kept as the block layout laid it", flush=True)
+            continue
         reserved = [x for k, v in runs.items() if k != (p, n) for x in v]
         report, lines = route_pair(board, cu, p, n, project.PAIR_KEEP, reserved)
         print("pairs pass:", report, flush=True)
         if lines:
             laid.update({net: lines for net in lines})
+    back = terminate(board, cu, terms, laid)
+    for r in back:
+        fp = terms[r][0]
+        fp.SetOrientationDegrees(home[r][1])
+        fp.SetPosition(home[r][0])
+    print(f"pairs pass: {len(terms) - len(back)} termination(s) against their line"
+          + (f", {len(back)} back where they were: {' '.join(back)} (spots refused: {WHY})" if back else ""), flush=True)
+
+
+def terminate(board, cu, terms, laid):
+    """The terminations (terminations(), lifted off the board) against the lines laid ({net: lines of its
+    pair}): the ones that did not fit go first next time, up to TERM_TRIES times, the first placed taking
+    the spots. Returns those left without a spot."""
     occ = []
     for fp in board.GetFootprints():
         if fp.GetReference() not in terms:
             cy = fp.GetCourtyard(pcbnew.F_CrtYd)
             occ.append((pcb.mm_rect(cy.BBox() if cy.OutlineCount() else fp.GetBoundingBox(False)), fp.GetReference()))
-    # the ones that did not fit go first next time, up to TERM_TRIES times: the first placed take the spots
     order, base_items, base_occ = sorted(terms), len(cu.items), list(occ)
+    back = list(order)
     for _ in range(TERM_TRIES):
         del cu.items[base_items:]
         occ = list(base_occ)
@@ -575,12 +624,7 @@ def run(board):
         if not back:
             break
         order = back + [r for r in order if r not in back]
-    for r in back:
-        fp = terms[r][0]
-        fp.SetOrientationDegrees(home[r][1])
-        fp.SetPosition(home[r][0])
-    print(f"pairs pass: {len(terms) - len(back)} termination(s) against their line"
-          + (f", {len(back)} back where they were: {' '.join(back)} (spots refused: {WHY})" if back else ""), flush=True)
+    return back
 
 
 def block_pairs(board):
@@ -595,10 +639,10 @@ def block_pairs(board):
     return mine
 
 
-def check(board, only=None, keep=False):
+def check(board, only=None, keep=False, terms_too=False):
     """The gate of a block laid out alone (blocks.py): its pairs (or those of only) routed as the pass would,
-    then taken off again (left on the board with keep). The C-LOCK is not there yet. Returns the reports of the
-    pairs that fail."""
+    with terms_too their terminations against their lines, then all taken off again (left on the board with
+    keep). The C-LOCK is not there yet. Returns the reports of what fails."""
     mine = [pn for pn in block_pairs(board) if only is None or pn in only]
     if not mine:
         return []
@@ -609,6 +653,8 @@ def check(board, only=None, keep=False):
     clock, pcb.CLOCK = pcb.CLOCK, (-1000.0, -1000.0)
     before = {t.m_Uuid.AsString() for t in board.GetTracks()}
     failed = []
+    laid = {}
+    placed_terms = False
     try:
         cu = route.Copper(board)
         for p, n in mine:
@@ -620,11 +666,20 @@ def check(board, only=None, keep=False):
             report, lines = route_pair(board, cu, p, n, project.PAIR_KEEP, reserved)
             if not lines:
                 failed.append(report)
+            else:
+                laid.update({net: lines for net in lines})
+        if terms_too and not failed:
+            nets = {n for pn in mine for n in pn}
+            back = terminate(board, cu, {r: t for r, t in terms.items() if t[1] in nets}, laid)
+            if back:
+                failed.append(f"terminations: no spot against their lines for {' '.join(back)}")
+            placed_terms = True
     finally:
         pcb.CLOCK = clock
         for t in list(board.GetTracks()):
             if t.m_Uuid.AsString() not in before and not (keep and not failed):
                 board.Remove(t)
         for r, (fp, _) in terms.items():
-            fp.SetPosition(home[r])
+            if not (keep and not failed and placed_terms and any(terms[r][1] in pn for pn in mine)):
+                fp.SetPosition(home[r])
     return failed

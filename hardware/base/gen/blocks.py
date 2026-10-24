@@ -40,11 +40,13 @@ WEIGHTS = [
 CROSSING = 5.0      # mm of weighted ratsnest a crossing is worth
 ISOLATED = "isolated side"     # the rule area of a block that holds the bus side of an isolated part
 ISO_ROOM = 2.5      # the region of the bus side holds this many times the courtyards of its parts
+ISO_EDGE = 1.0      # the region reaches this far past the outer bus pads
 PAIR_TRIES = int(os.environ.get("PAIR_TRIES", 12))    # spots of an array on a pair tried by routing, cheapest first, each with every line order
 PAIR_PINS = (1, 2, 3, 6)    # the pins of the two pairs of an Ethernet jack (circuit.py: the lines in this order)
 BACK_STEP = 2.0     # mm an IC of a pair steps back from its connectors when its arrays find no spot...
 BACK_MAX = 12.0     # ...up to this
-LANE_PIECE = 0.5    # a lane is a run of rectangles this long along the tracks of a pair
+LANE_PIECE = 0.5
+COPPER_GAP = 0.15   # a pad stays this far from a track laid (clearance 0.1)    # a lane is a run of rectangles this long along the tracks of a pair
 # Flow-through parts: (line pin, the NC pin opposite it that carries the line), channels.CHANNELS
 FLOW = {v: chans for v, chans in channels.CHANNELS.items() if all(len(ch) == 2 for ch in chans)}
 SHORT = 3.0         # mm: a link this short, straight out of the side of the larger of its two parts...
@@ -510,6 +512,7 @@ def arrange(fps, anchors, refs, walls=(), wide=1.0):
         placed = place_satellites(fps, list(anchors), ends, occ, list(walls), wide)
         placed = place_satellites(fps, placed, [r for r in on_pair if r not in ends], occ, list(walls), wide)
         lanes = pair_lanes(fps, placed, walls)
+        pcb.COPPER = copper_of(board)
         occ[:] = [o for r in placed for o in pcb.occupied(fps[r])]
         placed = place_satellites(fps, placed, [r for r in satellites if r not in on_pair], occ,
                                   list(walls) + lanes, wide)
@@ -525,35 +528,80 @@ def arrange(fps, anchors, refs, walls=(), wide=1.0):
         mine = dict.fromkeys(list(anchors) + list(refs))
         return pcb.auto_place({r: fps[r] for r in mine}, {r: fps[r] for r in placed}, iso)
     finally:
-        pcb.ZONES, pcb.LANES, pcb.CLOCK = zones, lanes, clock
+        pcb.ZONES, pcb.LANES, pcb.CLOCK, pcb.COPPER = zones, lanes, clock, []
+
+
+def copper_of(board):
+    """The tracks laid on a board, as rectangles grown by their half width and COPPER_GAP: no part on them."""
+    out = []
+    for t in board.GetTracks():
+        a, b = t.GetStart(), t.GetEnd()
+        ax, ay, bx, by = (pcbnew.ToMM(v) for v in (a.x, a.y, b.x, b.y))
+        g = pcbnew.ToMM(t.GetWidth()) / 2 + COPPER_GAP
+        n = max(1, int(math.ceil(math.hypot(bx - ax, by - ay) / LANE_PIECE)))
+        for k in range(n):
+            x0, y0 = ax + (bx - ax) * k / n, ay + (by - ay) * k / n
+            x1, y1 = ax + (bx - ax) * (k + 1) / n, ay + (by - ay) * (k + 1) / n
+            out.append((min(x0, x1) - g, min(y0, y1) - g, max(x0, x1) + g, max(y0, y1) + g))
+    return out
 
 
 def iso_region(fps, refs, placed, iso):
-    """The bus side of the isolated transceiver (pcb.ISO_BARRIER): the box of the pads of the isolated nets
-    of the parts placed, grown until it holds ISO_ROOM times the courtyards of the isolated parts, never
-    past the axis of the transceiver toward its logic side."""
+    """The bus side of the isolated transceiver (pcb.ISO_BARRIER): from its axis across to the outer pads of
+    the isolated nets (ISO_EDGE past them), as wide as the edge connector (no more: its neighbours stand GAP_B
+    away), the transceiver first centred over it; its free room (the connector left out) holds ISO_ROOM times the courtyards of the other isolated
+    parts. While it does not, the transceiver steps back from the bus side, 1 mm at a time, up to BACK_MAX:
+    a region wider than its connector would stand over the neighbours on the edge."""
     u = fps[pcb.ISO_BARRIER]
-    pads = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y), p.GetNetname() in iso)
-            for q in placed for p in fps[q].Pads() if p.GetNetname() in iso or q == pcb.ISO_BARRIER]
-    bus = np.array([(x, y) for x, y, b in pads if b])
-    logic = np.array([(x, y) for x, y, b in pads if not b])
-    d = bus.mean(0) - logic.mean(0)
-    cx, cy = pcbnew.ToMM(u.GetPosition().x), pcbnew.ToMM(u.GetPosition().y)
     need = ISO_ROOM * sum((lambda e: (e[2] - e[0]) * (e[3] - e[1]))(pcb.occupied(fps[r])[0]) for r in refs
-                          if r != pcb.ISO_BARRIER and {p.GetNetname() for p in fps[r].Pads()} - {"", "CHASSIS"} <= iso)
-    x0, y0 = bus.min(0)
-    x1, y1 = bus.max(0)
-    g = 0.0
+                          if r != pcb.ISO_BARRIER and fps[r].GetValue() not in pcb.EDGE_B
+                          and {p.GetNetname() for p in fps[r].Pads()} - {"", "CHASSIS"} <= iso)
+    edge = [pcb.occupied(fps[q])[0] for q in placed if fps[q].GetValue() in pcb.EDGE_B]   # room they take
+    others = [o for q in placed if q != pcb.ISO_BARRIER for o in pcb.occupied(fps[q])]
+    # the transceiver centred over the isolated pins of the edge connector, along the edge, where it is free:
+    # its bus side then stays within the width of the connector
+    conn = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)) for q in placed
+            if fps[q].GetValue() in pcb.EDGE_B for p in fps[q].Pads() if p.GetNetname() in iso]
+    mine = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)) for p in u.Pads() if p.GetNetname() in iso]
+    if conn and mine:
+        shift = np.mean(conn, 0) - np.mean(mine, 0)
+        was = u.GetPosition()
+        u.SetPosition(was + pcb.vec(float(shift[0]), 0.0))      # edge B: along x
+        if not pcb.free(pcb.occupied(u), others):
+            u.SetPosition(was)
+    home = u.GetPosition()
+    step = 0.0
     while True:
-        box = [x0 - g, y0 - g, x1 + g, y1 + g]
-        if abs(d[0]) >= abs(d[1]):
-            box[0 if d[0] > 0 else 2] = max(box[0], cx) if d[0] > 0 else min(box[2], cx)
+        pads = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y), p.GetNetname() in iso)
+                for q in placed for p in fps[q].Pads() if p.GetNetname() in iso or q == pcb.ISO_BARRIER]
+        bus = np.array([(x, y) for x, y, b in pads if b])
+        logic = np.array([(x, y) for x, y, b in pads if not b])
+        d = bus.mean(0) - logic.mean(0)
+        cx, cy = pcbnew.ToMM(u.GetPosition().x), pcbnew.ToMM(u.GetPosition().y)
+        x0, y0 = bus.min(0)
+        x1, y1 = bus.max(0)
+        across = abs(d[0]) >= abs(d[1])
+        side = [r for e in edge for r in ((e[1], e[3]) if across else (e[0], e[2]))]
+        if across:
+            lo, hi = (cx, x1 + ISO_EDGE) if d[0] > 0 else (x0 - ISO_EDGE, cx)
+            box = [lo, min(side) if side else y0 - ISO_EDGE, hi, max(side) if side else y1 + ISO_EDGE]
         else:
-            box[1 if d[1] > 0 else 3] = max(box[1], cy) if d[1] > 0 else min(box[3], cy)
+            lo, hi = (cy, y1 + ISO_EDGE) if d[1] > 0 else (y0 - ISO_EDGE, cy)
+            box = [min(side) if side else x0 - ISO_EDGE, lo, max(side) if side else x1 + ISO_EDGE, hi]
         box = [max(box[0], pcb.END_KEEP), max(box[1], 0.3), min(box[2], pcb.W - pcb.END_KEEP), min(box[3], pcb.H - 0.3)]
-        if (box[2] - box[0]) * (box[3] - box[1]) >= need or g > 20:
+        taken = sum(max(0.0, min(box[2], c) - max(box[0], a)) * max(0.0, min(box[3], e) - max(box[1], b))
+                    for a, b, c, e in edge)
+        if (box[2] - box[0]) * (box[3] - box[1]) - taken >= need:
             return tuple(float(v) for v in box)
-        g += 0.5
+        # the transceiver one more mm back from the bus side, where it is free
+        while True:
+            step += 1.0
+            if step > BACK_MAX:
+                raise SystemExit(f"isolated region: no room for the bus side of {pcb.ISO_BARRIER}")
+            n = d / max(np.hypot(*d), 1e-6)
+            u.SetPosition(home - pcb.vec(float(n[0] * step), float(n[1] * step)) + pcb.vec(0, 0))
+            if pcb.free(pcb.occupied(u), others):
+                break
 
 
 def regions_of(board):
@@ -684,7 +732,7 @@ def place_arrays(fps, placed, walls, board, mine):
                     if not ok:
                         continue
                     wire(fps, r, conn, w, esd_first, conn_first, tuple(flips[0]), tuple(flips[1]))
-                    failed = pairs.check(board, own)
+                    failed = pairs.check(board, own, terms_too=True)
                     if not failed:
                         break
                 if not failed:
@@ -735,9 +783,12 @@ def pair_lanes(fps, placed, walls):
             h = np.array([pcbnew.ToMM(home[q].x), pcbnew.ToMM(home[q].y)])
             u = (h - cx) / max(np.hypot(*(h - cx)), 1e-6)
             fps[q].SetPosition(pcb.vec(*(float(v) for v in h + back * u)))
-    failed = pairs.check(board, mine, keep=True)
+    # the pairs laid, and their terminations against their lines before the other passives take the room
+    failed = pairs.check(board, mine, keep=True, terms_too=True)
     if failed:
         raise SystemExit(f"pairs: {failed}")
+    nets = {n for pn in mine for n in pn}
+    placed += [r for r, t in pairs.terminations(board).items() if t[1] in nets and r not in placed]
     return lanes_of(board)
 
 
@@ -807,6 +858,7 @@ def copy_layout(src, dst_refs, comps, pins, dx=0.0):
 
 
 def main():
+    pcb.deterministic()
     bl, spread, comps, pins = blocks()
     if len(sys.argv) > 2 and sys.argv[1] in ("show", "all"):
         # the axes first: the local bus header stands in the corner of axis 0, out of its parts

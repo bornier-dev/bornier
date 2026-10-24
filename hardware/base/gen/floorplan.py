@@ -38,6 +38,16 @@ RESERVE = 2.0      # room first kept around each part of a block skeleton for it
 REGROW = 1.0       # more room for a block whose passives did not all find a place around it
 
 
+def subtract(r, o):
+    """The rectangle r less the rectangle o: up to four rectangles."""
+    x0, y0, x1, y1 = r
+    a, b, c, d = o
+    if not (x0 < c and a < x1 and y0 < d and b < y1):
+        return [tuple(r)]
+    out = [(x0, y0, x1, b), (x0, d, x1, y1), (x0, max(y0, b), a, min(y1, d)), (c, max(y0, b), x1, min(y1, d))]
+    return [p for p in out if p[0] < p[2] - 0.5 and p[1] < p[3] - 0.5]
+
+
 class Block:
     """A laid-out block: courtyard and pad rectangles, signal pads, footprints (positions in board coordinates)."""
 
@@ -55,23 +65,17 @@ class Block:
         # the lanes of the pairs laid in the block layout: no part of another block in them
         self.lanes = np.array(blocks.lanes_of(board) if lanes else []).reshape(-1, 4)
         # those over the parts left out (the connectors of an edge B body) belong to them
-        out = np.array([o for f in every if f.GetReference() not in self.refs for o in pcb.occupied(f)]).reshape(-1, 4)
+        out = np.array([o for f in every if f.GetReference() not in self.refs and f.GetValue() in EDGE_VALUES
+                        for o in pcb.occupied(f)]).reshape(-1, 4)
         if len(self.lanes) and len(out):
             L, O = self.lanes, out
             hit = ((L[:, None, 0] < O[None, :, 2]) & (O[None, :, 0] < L[:, None, 2])
                    & (L[:, None, 1] < O[None, :, 3]) & (O[None, :, 1] < L[:, None, 3])).any(1)
             self.lanes = L[~hit]
         # the isolated region of the block: no part of another block in it; cut short of the parts left out
-        self.regions = []
-        for r in (blocks.regions_of(board) if lanes else []):
-            r = list(r)
-            for a, b, c, d in out:
-                if r[0] < c and a < r[2] and r[1] < d and b < r[3]:
-                    cuts = [(c - r[0], 0, c), (r[2] - a, 2, a), (d - r[1], 1, d), (r[3] - b, 3, b)]
-                    _, k, v = min(cuts)
-                    r[k] = v
-            if r[0] < r[2] and r[1] < r[3]:
-                self.regions.append(tuple(r))
+        self.regions = list(blocks.regions_of(board)) if lanes else []
+        for o in out:
+            self.regions = [p for r in self.regions for p in subtract(r, o)]
         self.regions = np.array(self.regions).reshape(-1, 4)
         self.rects = np.concatenate([self.rects, self.regions])
         self.rects = np.concatenate([self.rects, self.lanes])
@@ -321,10 +325,22 @@ def edge_b_rows(plan, row):
 
 
 def main():
+    pcb.deterministic()
     blockdir, out = sys.argv[1], sys.argv[2]
     bl, spread, comps, pins = blocks.blocks()
     seed = {}
     loaded = load(blockdir)
+    # the wiring chosen by the block layouts (pairs through their arrays) must be on the schematic
+    differ = []
+    for b in loaded.values():
+        for f in b.board.GetFootprints():
+            r = f.GetReference()
+            for p in f.Pads():
+                n = p.GetNetname()
+                if p.GetNumber() and n and not n.startswith("unconnected-") and n != pins.get(r, {}).get(p.GetNumber(), ""):
+                    differ.append(f"{r}.{p.GetNumber()}: {n} in block {b.name}, {pins.get(r, {}).get(p.GetNumber(), '')} on the schematic")
+    if differ:
+        raise SystemExit("FAILED: carry the wiring of the block layouts to circuit.py:\n  " + "\n  ".join(differ))
     # the edge connectors of the spread sheets, alone
     for r in spread:
         if comps[r]["value"] in pcb.EDGE_B:
@@ -343,6 +359,10 @@ def main():
     # body above them, placed like an inner block: it may reach over a shallower neighbour.
     row_b = []
     for b in [b for b in loaded.values() if b.edge == "B"]:
+        if len(b.lanes) or len(b.regions):
+            # pairs laid to its connectors, or an isolated region over them: the block stays whole
+            row_b.append(b)
+            continue
         conn = [f.GetReference() for f in b.fps if f.GetValue() in pcb.EDGE_B]
         row_b.append(Block(b.name, b.board, conn, pad_refs=conn, lanes=False))
         if len(conn) < len(b.fps):
@@ -545,6 +565,20 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
         if mine:
             groups.append((b.name, mine))
     placed = {r: fps[r] for r in refs}
+    # the pairs the block layouts laid go with their blocks: the routing keeps them
+    for b, rot, dx, dy in plan.placed.values():
+        if not len(b.lanes):
+            continue
+        for t in b.board.GetTracks():
+            nt = pcbnew.PCB_TRACK(board)
+            for put, v in ((nt.SetStart, t.GetStart()), (nt.SetEnd, t.GetEnd())):
+                x, y = b.point(rot, pcbnew.ToMM(v.x), pcbnew.ToMM(v.y))
+                put(pcb.vec(float(x + dx), float(y + dy)))
+            nt.SetWidth(t.GetWidth())
+            nt.SetLayer(t.GetLayer())
+            nt.SetNet(board.FindNet(t.GetNetname()))
+            nt.SetLocked(True)
+            board.Add(nt)
     lanes = [o for b, rot, dx, dy in plan.placed.values() for o in b.turned_lanes(rot, dx, dy)]
     regions = [o for b, rot, dx, dy in plan.placed.values() for o in b.turned_lanes(rot, dx, dy, b.regions)]
     iso = set(pcb.iso_nets(fps))
@@ -555,6 +589,13 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
     pcb.keepouts(board)
     zones, lanes = pcb.ZONES, pcb.LANES
     pcb.ZONES, pcb.LANES = {"/Modbus/ bus side": regions or [(0, 0, 0, 0)]}, lanes
+    pcb.COPPER = blocks.copper_of(board)
+
+    def trace(stage):
+        for r in os.environ.get("FLOOR_TRACE", "").split(","):
+            if r in fps:
+                x, y = pcbnew.ToMM(fps[r].GetPosition().x), pcbnew.ToMM(fps[r].GetPosition().y)
+                print(f"  trace {stage}: {r} ({x:.1f}, {y:.1f})" + (" IN LANES" if not pcb.free(pcb.occupied(fps[r]), lanes) else ""), flush=True)
     short, kept = [], 0
     try:
         for name, mine in groups:
@@ -568,7 +609,9 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
                     occ += rects
                     placed[g.GetReference()] = g
                     kept += 1
+            trace(f"{name} kept")
             failed = pcb.auto_place({r: fps[r] for r in list(placed) + group}, dict(placed), iso)
+            trace(f"{name} auto_place")
             for r in group:
                 if r not in failed:
                     placed[r] = fps[r]
@@ -578,18 +621,22 @@ def assemble(plan, comps, pins, spread, out, plan_cost):
                 continue
             blocks.refine(fps, [r for r in group if not isolated(r)], [r for r in placed if r not in group or isolated(r)],
                           lanes + regions, rounds=2)
+            trace(f"{name} refine")
         failed = pcb.auto_place(fps, dict(placed), iso)
         if failed:
             short.append("spread")
             print(f"  spread parts: no room for {failed}", flush=True)
     finally:
-        pcb.ZONES, pcb.LANES = zones, lanes
+        pcb.ZONES, pcb.LANES, pcb.COPPER = zones, lanes, []
     print(f"{kept} passives kept at their places in their blocks")
     if short:
         return short, []
-    on_board = [r for r in fps if not r.startswith("H")]
-    movable = [r for r in on_board if not core(fps[r]) and fps[r].GetValue() not in EDGE_VALUES and not isolated(r)]
+    on_board = [r for r in fps if not r.startswith("H") or r in placed]     # the holes at their places count
+    movable = [r for r in on_board if not core(fps[r]) and fps[r].GetValue() not in EDGE_VALUES and not isolated(r)
+               and not r.startswith("H")]
+    trace("spread")
     before, after = blocks.refine(fps, movable, [r for r in on_board if r not in movable], lanes + regions, rounds=1)
+    trace("final refine")
     print(f"plan {plan_cost:.0f}, assembled {before:.0f}, refined {after:.0f}")
     # the gate: no courtyards over one another, but those of a data sheet layout (drawn so on purpose)
     together = {r: t for t in blocks.TEMPLATES for r in t}

@@ -64,6 +64,14 @@ PE_BODY = (W - 9.0, H / 2 + 12.4, W - 3.0, H / 2 + 33.2)
 HOLES["H5"] = PE_HOLE
 
 
+def deterministic():
+    """Python orders the sets of strings at random from one run to the next (hash randomisation): the
+    placement, which walks such sets, would then differ from run to run. Run again with a fixed seed."""
+    if os.environ.get("PYTHONHASHSEED") != "0":
+        env = dict(os.environ, PYTHONHASHSEED="0")
+        sys.exit(subprocess.run([sys.executable] + sys.argv, env=env).returncode)
+
+
 def vec(x, y):
     return pcbnew.VECTOR2I(MM(x), MM(y))
 
@@ -339,6 +347,7 @@ def connectors(fps, comps):
 HE10_Y = H / 2
 AXIS_X = [21.5, 55.0, 88.5, 118.0, 146.5]           # column boundaries, axes 0 to 3: the first two are shallower
 BARRIER_Y = 84.0            # Modbus isolation: the axis of U38, bus side below toward J13, 1 mm each side
+COPPER = []                 # tracks already laid (block layouts: the pairs), as rectangles: no part on them
 ISO_GAP = 1.0               # the parts off the bus side stay this far from its zone
 AXIS = [[(AXIS_X[k], 15.0, AXIS_X[k + 1], 58.0 if k > 1 else 47.0)] for k in range(4)]
 AXIS[0].append((END_KEEP, 15.0, AXIS_X[0], HE10_Y - 26.0))   # above the header
@@ -576,6 +585,7 @@ def auto_place(fps, placed, iso):
                 barred = [] if on_bus else [(bus[0] - ISO_GAP, bus[1] - ISO_GAP, bus[2] + ISO_GAP, bus[3] + ISO_GAP)]
                 if not any(re.fullmatch(PAIR_LINE, n) for n in mine) and ref not in ANCHOR_TO:
                     barred = barred + LANES     # the centre tap capacitors stand at the jack, among the lines
+                barred = barred + COPPER        # the tracks laid, for every part
 
                 def find(offsets, zones, tx, ty, air=0.0, limit=math.inf):
                     """First free spot along the offsets, the part grown by `air` on every side."""
@@ -623,6 +633,7 @@ def auto_place(fps, placed, iso):
 
 
 def main():
+    deterministic()
     comps, pinnets = load_netlist()
     board = pcbnew.CreateEmptyBoard()
     board.SetCopperLayerCount(4)
@@ -673,6 +684,23 @@ def main():
             elif ref not in HOLES:
                 fp.SetOrientation(there.GetOrientation())
                 fp.SetPosition(there.GetPosition())
+                # the block layout may choose the wiring of interchangeable pins (pairs through their arrays):
+                # the schematic must carry it, or the board would not be the one the layout checked
+                laid = {p.GetNumber(): p.GetNetname() for p in there.Pads() if p.GetNumber()}
+                differ = [f"{n}: {laid[n]} on the placement, {pinnets.get(ref, {}).get(n, '')} on the schematic"
+                          for n in sorted(laid) if laid[n] and not laid[n].startswith("unconnected-")
+                          and laid[n] != pinnets.get(ref, {}).get(n, "")]
+                if differ:
+                    failed.append(f"{ref} wired otherwise: " + "; ".join(differ))
+        for t in placed.GetTracks():        # the pairs the block layouts laid
+            nt = pcbnew.PCB_TRACK(board)
+            nt.SetStart(t.GetStart())
+            nt.SetEnd(t.GetEnd())
+            nt.SetWidth(t.GetWidth())
+            nt.SetLayer(t.GetLayer())
+            nt.SetNet(net(t.GetNetname()))
+            nt.SetLocked(True)
+            board.Add(nt)
     else:
         for ref, (x, y, rot) in KEY.items():
             place_centred(fps[ref], x, y, rot)

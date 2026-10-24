@@ -139,7 +139,8 @@ def check(board):
     role = roles()
     groups = {}
     for fp in sorted(board.GetFootprints(), key=lambda f: f.GetReference()):
-        if fp.GetValue() in CHANNELS:
+        # an array on a differential pair: its wiring is chosen with the pairs (blocks.py, pair_lanes)
+        if fp.GetValue() in CHANNELS and not any(re.fullmatch(pcb.PAIR_LINE, p.GetNetname()) for p in fp.Pads()):
             part = Part(fp, net_pads)
             if part.nets:
                 groups.setdefault(role[part.ref], []).append(part)

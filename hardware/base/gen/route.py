@@ -63,7 +63,7 @@ SURFACE = (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN)   # surface pads, with
 # Mini-planes of the PHY supplies (LAN9253 checklist): net: the PHY; on layer 3, under the pads of the net on
 # the jack side of the PHY, cut into the +3V3 plane
 PHY_ISLANDS = {"/ESC/VDD33TXRX1": "U4", "/ESC/VDD33TXRX2": "U4"}
-ISLAND_GROW = 1.0
+ISLAND_GROW = 2.0          # the PHY islands reach this far past their pads: their thermal spokes find copper
 ZONE_GAP = 0.5              # zone to zone clearance (the KiCad default zone clearance is 0.508)
 PLANE_GAP = 0.2             # plane to the copper of the other nets (a hole keeps HOLE_GAP to it all the same)
 PLANE_INSET = 0.3           # a via stays this far inside the outline of its plane
@@ -1332,6 +1332,7 @@ def unroute(refs):
 
 
 def main():
+    pcb.deterministic()
     step = sys.argv[1] if len(sys.argv) > 1 else "gnd"
     if step == "renet":
         renet()
