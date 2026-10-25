@@ -235,9 +235,17 @@ DRC_RULES = """(version 1)
 (rule "profile walls: no through-hole lead at the edges, the board rests there"
 	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 3mm && A.intersectsArea('profile wall')")
 	(constraint disallow pad))
-# JLCPCB multilayer boards: 0.2 mm holes and 0.1 mm spacing at no extra cost. The thermal vias of the ESC
-# exposed pad (LAN9253 data sheet land pattern) are 0.2 mm; packages at a 0.65 mm pitch (TPS1H000 HVSSOP,
-# TPS62A02 SOT-563) leave 0.15 mm between their own pads.
+# JLCPCB multilayer boards (jlcpcb.com/capabilities/pcb-capabilities, and the quote): 0.09 mm spacing, 0.2 mm
+# from a via hole to a track but 0.28 mm from a through-hole lead; a via under a 0.3 mm hole costs extra
+# unless its diameter is 0.45 mm or more. The thermal vias of the ESC exposed pad (LAN9253 data sheet land
+# pattern) are 0.5/0.2 mm pads, at no extra cost; packages at a 0.65 mm pitch (TPS1H000 HVSSOP, TPS62A02
+# SOT-563) leave 0.15 mm between their own pads.
+(rule "through-hole leads: 0.28 mm to other copper"
+	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X >= 0.3mm")
+	(constraint hole_clearance (min 0.28mm)))
+(rule "via cost: under a 0.3 mm hole, 0.45 mm across"
+	(condition "A.Type == 'Via' && A.Hole_Size_X < 0.3mm")
+	(constraint via_diameter (min 0.45mm)))
 (rule "thermal vias in exposed pads"
 	(condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole' && A.Hole_Size_X < 0.3mm")
 	(constraint hole_size (min 0.2mm)))

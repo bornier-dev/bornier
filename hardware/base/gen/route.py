@@ -75,7 +75,8 @@ VIA_GROW = 100              # um added to the vias in the DSN (Freerouting keeps
 VARIANTS = [{}, {"via_costs": 25}, {"via_costs": 100}, {"start_ripup_costs": 50}, {"start_ripup_costs": 200},
             {"default_undesired_direction_trace_cost": 1.5}, {"default_undesired_direction_trace_cost": 4.0},
             {"via_costs": 25, "start_ripup_costs": 50}]
-HOLE_GAP = 0.25             # copper to hole and hole to hole, JLCPCB
+HOLE_GAP = 0.2              # copper to a via hole and hole to hole, JLCPCB
+LEAD_GAP = 0.28             # copper to the hole of a through-hole lead, JLCPCB
 LINK_REACH = 40.0          # longest layer 4 link from a via off its plane
 # longest layer 4 link of a supply pass: a longer one, laid straight before the signals, walls them off (the
 # +5V of the laser buffer U37 ran 35 mm across the MCU); its via is left to Freerouting with the signals.
@@ -102,7 +103,7 @@ ESCAPE_PAD = 0.5           # pass complete: IC pads narrower than this get a way
 # became 43, then 183)
 RIP_REACH = 0.0
 RIPPED = PCB.replace(".kicad_pcb", "-ripped.json")
-COPPER_EDGE = 0.5          # layer 1 copper to the board edge (the chassis band keeps layer 4 farther)
+COPPER_EDGE = 0.2          # layer 1 copper to a routed board edge, JLCPCB (the chassis band keeps layer 4 farther)
 # Through-hole pads off their plane that carry current: (track width, via diameter, via drill), mm.
 # +VIN to the supply jumpers of the four encoders: 4 x 0.6 A at most; 1 mm outer copper, 2.4 A at 10 degC
 # rise (IPC-2221), into the plane by two 0.8/0.4 mm vias.
@@ -624,9 +625,9 @@ class Copper:
         return any(all(o.Contains(q) for q in inner) and not any(c.Contains(q) for c in above for q in outer + [vec(v)])
                    for o, above in self.plane.get(net, []))
 
-    def via_ok(self, net, v, r, near):
-        """A via of radius r at v clear of the board edge, the C-LOCK, the copper of the other nets on every
-        layer, every hole and every pad. Its hole is half its diameter (the via sizes of project.CLASSES)."""
+    def via_ok(self, net, v, r, drill, near):
+        """A via of radius r and hole `drill` at v clear of the board edge, the C-LOCK, the copper of the other
+        nets on every layer, every hole and every pad."""
         if not (FANOUT_EDGE + r <= v[0] <= W - FANOUT_EDGE - r and FANOUT_EDGE + r <= v[1] <= H - FANOUT_EDGE - r):
             return False
         if math.dist(v, pcb.CLOCK) < pcb.CLOCK_CUT + COPPER_EDGE + r:
@@ -634,7 +635,7 @@ class Copper:
         via = pcbnew.SHAPE_CIRCLE(vec(v), MM(r))
         for o in near:
             # copper to hole, which also keeps the holes apart (the via is wider than its hole)
-            if o.drill and math.dist(v, o.centre) < o.drill + r + HOLE_GAP:
+            if o.drill and math.dist(v, o.centre) < o.drill + r + (LEAD_GAP if o.pad else HOLE_GAP):
                 return False
             if o.net == net:
                 if o.pad and o.shape.Collide(via, MM(0.1)):
@@ -644,7 +645,7 @@ class Copper:
                 return False        # the planes would not reach it, or the other one
             if o.shape.Collide(via, MM(self.gap(net, o.net))):
                 return False
-            if o.shape.Collide(pcbnew.SHAPE_CIRCLE(vec(v), MM(r / 2)), MM(HOLE_GAP)):
+            if o.shape.Collide(pcbnew.SHAPE_CIRCLE(vec(v), MM(drill / 2)), MM(HOLE_GAP)):
                 return False        # its hole against the copper of the other nets, pads included
         return True
 
@@ -661,7 +662,7 @@ class Copper:
         for o in near:
             if o.net == net:
                 continue
-            if o.drill and seg_dist(o.centre, a, b) < o.drill + width / 2 + HOLE_GAP:
+            if o.drill and seg_dist(o.centre, a, b) < o.drill + width / 2 + (LEAD_GAP if o.pad else HOLE_GAP):
                 return False
             if (o.top if top else o.bottom) and o.shape.Collide(seg, MM(self.gap(net, o.net))):
                 return False
@@ -721,7 +722,7 @@ def fanout(cu, nets, only=lambda fp, p: True):
                 for step in range(4, int(FANOUT_REACH / 0.05) + 1):
                     d = step * 0.05
                     v = (c[0] + d * u[0], c[1] + d * u[1])
-                    if ((not planed or cu.in_plane(net, v, r)) and cu.via_ok(net, v, r, near)
+                    if ((not planed or cu.in_plane(net, v, r)) and cu.via_ok(net, v, r, via_drill, near)
                             and cu.track_ok(net, c, v, width, near, True)):
                         cost = d - 0.3 * (u[0] * out[0] + u[1] * out[1]) / n
                         if best is None or cost < best[0]:
@@ -880,7 +881,7 @@ def link(cu, net, off, inside=None, top=False, reach=LINK_REACH):
                 if math.hypot(ox, oy) + NEW_VIA_COST >= (best[0] if best else reach):
                     break
                 b = (a[0] + ox, a[1] + oy)
-                if not inside(b, r) or not cu.via_ok(net, b, r, cu.near(b, b, r + 1.0)):
+                if not inside(b, r) or not cu.via_ok(net, b, r, via_drill, cu.near(b, b, r + 1.0)):
                     continue
                 p = next((p for p in paths(a, b) if path_ok(p)), None)
                 if p and length(p) + NEW_VIA_COST < (best[0] if best else math.inf):
@@ -1001,12 +1002,12 @@ def trunk(cu, net, pads, width, via_d, via_drill):
         if best and along >= best[0]:
             continue
         foot = next(((x, v) for v in steps(y, H) if cu.in_plane(net, (x, v), r)
-                     and cu.via_ok(net, (x, v), r, cu.near((x, v), (x, v), r + 1.0))), None)
+                     and cu.via_ok(net, (x, v), r, via_drill, cu.near((x, v), (x, v), r + 1.0))), None)
         if not foot or (best and along + foot[1] - y >= best[0]):
             continue
         twin = (x, foot[1] + max(VIA_PITCH, via_d + HOLE_GAP))
         if (clear((x, y), twin) and cu.in_plane(net, twin, r)
-                and cu.via_ok(net, twin, r, cu.near(twin, twin, r + 1.0))):
+                and cu.via_ok(net, twin, r, via_drill, cu.near(twin, twin, r + 1.0))):
             best = (along + foot[1] - y, x, foot, twin)
     if best is None:
         return ["no clear way down to the plane"]
