@@ -102,6 +102,10 @@ PAIRS = pcb.ETH_LINE + r"|USB_D[PM]"     # differential pairs: routed as pairs, 
 FAST = r"(/Clock/)?CLK25(_ESC|_MCU)?|ESC_S(CK|CS|IO[0-3])|Net-\(U9-P(B2|B10|B1|B0|A7|A6)\)"
 SHORT_MAX = 3.0            # pass short: pads this close, centre to centre, joined on layer 1 without a via
 ESCAPE_PAD = 0.5           # pass complete: IC pads narrower than this get a way out (fine pitch)
+ESCAPE_GROW = 1.0          # the way out of such an IC: its outline grown by this, kept clear of long links
+ESCAPE_STUB = 0.8          # a link may still reach a via that far into it
+MAZE_GRID = 0.2            # a long link with no L way: A* grid, mm
+MAZE_REACH = 20.0          # and search area, from the via linked
 # pass complete: signal copper this close to an end of a missing connection ripped up; 0: none. At 3 mm it
 # took 94 to 131 nets around the MCU, which Freerouting did not all route again (21 connections missing
 # became 43, then 183)
@@ -571,9 +575,32 @@ def refill():
 
 
 def unconnected_nets(rpt):
-    """The nets of the unconnected items of a DRC report."""
+    """The nets of the unconnected items of a DRC report: at most 499 of them are listed."""
     d = json.load(open(rpt, encoding="utf-8"))
     return {net_of(i["description"]) for u in d["unconnected_items"] for i in u["items"]}
+
+
+def cut_nets(board):
+    """{net: connections missing} from the connectivity of the board, zones as filled: all of them, unlike the
+    DRC report."""
+    board.BuildConnectivity()
+    conn = board.GetConnectivity()
+    pads = collections.defaultdict(list)
+    for p in board.GetPads():
+        if p.GetNetname() and not p.GetNetname().startswith("unconnected-"):
+            pads[p.GetNetname()].append(p)
+    cut = {}
+    for n, ps in pads.items():
+        seen, groups = set(), 0
+        for p in ps:
+            if p.m_Uuid.AsString() in seen:
+                continue
+            groups += 1
+            seen.add(p.m_Uuid.AsString())
+            seen.update(i.m_Uuid.AsString() for i in conn.GetConnectedItems(p) if i.GetClass() == "PAD")
+        if groups > 1:
+            cut[n] = groups - 1
+    return cut
 
 
 def net_of(description):
@@ -770,7 +797,7 @@ def complete():
         ripped = set(json.load(open(RIPPED, encoding="utf-8")))
     board = pcbnew.LoadBoard(PCB)
     project.apply_netclasses(board)
-    nets = (unconnected_nets(rpt) & (signal_nets(board) | {"CHASSIS"})) | ripped
+    nets = (set(cut_nets(board)) & (signal_nets(board) | {"CHASSIS"})) | ripped
     cu = Copper(board)
     before = {t.m_Uuid.AsString() for t in board.GetTracks()}
     left, _ = fanout(cu, nets - {"CHASSIS"}, lambda fp, p: fp.GetReference().startswith("U")
@@ -853,11 +880,13 @@ def prune(board, nets):
         removed += len(dead)
 
 
-def link(cu, net, off, inside=None, top=False, reach=LINK_REACH, size=None):
+def link(cu, net, off, inside=None, top=False, reach=LINK_REACH, size=None, clear=()):
     """Tracks on layer 4 from each via off its plane to a via of the net in the plane, an existing one or a
     new one, in an L or straight; the vias linked serve the next ones. Returns the vias left unlinked.
     inside(point, radius): where a via is in the plane, its outline by default; top: on layer 1 instead;
-    reach: the longest link; size: (track width, via diameter, via drill), those of its class by default."""
+    reach: the longest link; size: (track width, via diameter, via drill), those of its class by default;
+    clear: boxes (x0, y0, x1, y1) no track crosses nor new via sits in, but within ESCAPE_STUB of its ends; a
+    box around the via linked is its own way out and does not count."""
     inside = inside or (lambda p, r: cu.in_plane(net, p, r))
     width, _, via_d, via_drill = project.CLASSES[project.class_of(net)]
     if size:
@@ -869,7 +898,19 @@ def link(cu, net, off, inside=None, top=False, reach=LINK_REACH, size=None):
         # horizontal and vertical first: a diagonal across layer 4 would block its signals
         return ([a, (a[0], b[1]), b], [a, (b[0], a[1]), b], [a, b])
 
+    active = list(clear)
+
+    def boxed(p):
+        return any(x0 <= p[0] <= x1 and y0 <= p[1] <= y1 for x0, y0, x1, y1 in active)
+
     def path_ok(path):
+        if active:
+            for p, q in zip(path, path[1:]):
+                k = max(1, int(math.dist(p, q) / 0.2))
+                for i in range(k + 1):
+                    c = (p[0] + (q[0] - p[0]) * i / k, p[1] + (q[1] - p[1]) * i / k)
+                    if boxed(c) and min(math.dist(c, path[0]), math.dist(c, path[-1])) > ESCAPE_STUB:
+                        return False
         return all(cu.track_ok(net, p, q, width, cu.near(p, q, width + 1.0), top) for p, q in zip(path, path[1:]))
 
     def length(path):
@@ -885,6 +926,7 @@ def link(cu, net, off, inside=None, top=False, reach=LINK_REACH, size=None):
         progress = False
         todo.sort(key=lambda s: min((math.dist(s[1], t) for t in targets), default=math.inf))
         for name, a in list(todo):
+            active[:] = [(x0, y0, x1, y1) for x0, y0, x1, y1 in clear if not (x0 <= a[0] <= x1 and y0 <= a[1] <= y1)]
             best = None             # (track length, path, new via or None)
             for t in sorted(targets, key=lambda t: math.dist(a, t))[:LINK_TRIES]:
                 if math.dist(a, t) > reach:
@@ -898,12 +940,17 @@ def link(cu, net, off, inside=None, top=False, reach=LINK_REACH, size=None):
                 if math.hypot(ox, oy) + NEW_VIA_COST >= (best[0] if best else reach):
                     break
                 b = (a[0] + ox, a[1] + oy)
-                if not inside(b, r) or not cu.via_ok(net, b, r, cu.near(b, b, r + 1.0)):
+                if not inside(b, r) or boxed(b) or not cu.via_ok(net, b, r, cu.near(b, b, r + 1.0)):
                     continue
                 p = next((p for p in paths(a, b) if path_ok(p)), None)
                 if p and length(p) + NEW_VIA_COST < (best[0] if best else math.inf):
                     best = (length(p) + NEW_VIA_COST, p, b)
                     break
+            if not best and clear:
+                # no L: round what is in the way
+                found = maze(cu, net, a, inside, width, via_d, top, active)
+                if found:
+                    best = (length(found[0]), found[0], found[1])
             if best:
                 if best[2]:
                     cu.add_via(net, best[2], via_d, via_drill)
@@ -919,6 +966,61 @@ def polygon(shape):
     p = pcbnew.SHAPE_POLY_SET()
     shape.TransformToPolygon(p, MM(0.005), pcbnew.ERROR_INSIDE)
     return p
+
+
+def maze(cu, net, a, inside, width, via_d, top, clear):
+    """A way for a track from the via at a to a new via in the plane, round what is in the way: A* on a MAZE_GRID
+    grid within MAZE_REACH of a, off the clear boxes, the corners checked as tracks. Returns (path, via) or
+    None."""
+    import heapq
+    r = via_d / 2
+    x0, y0 = a[0] - MAZE_REACH, a[1] - MAZE_REACH
+    n = int(2 * MAZE_REACH / MAZE_GRID) + 1
+    local = [o for o in cu.items if abs(o.centre[0] - a[0]) < MAZE_REACH + o.reach + 1.0
+             and abs(o.centre[1] - a[1]) < MAZE_REACH + o.reach + 1.0]
+
+    def near(p, q, m):
+        return [o for o in local if seg_dist(o.centre, p, q) < o.reach + m]
+
+    def pt(c):
+        return x0 + c[1] * MAZE_GRID, y0 + c[0] * MAZE_GRID
+    free = {}
+
+    def ok(c):
+        if c not in free:
+            p = pt(c)
+            free[c] = (0 <= c[0] < n and 0 <= c[1] < n and not any(bx0 <= p[0] <= bx1 and by0 <= p[1] <= by1 for bx0, by0, bx1, by1 in clear)
+                       and cu.track_ok(net, p, p, width, near(p, p, width + 1.0), top))
+        return free[c]
+    start = (int(round((a[1] - y0) / MAZE_GRID)), int(round((a[0] - x0) / MAZE_GRID)))
+    heap, seen, prev = [(0.0, start)], {start: 0.0}, {}
+    while heap:
+        g, c = heapq.heappop(heap)
+        if g > seen.get(c, math.inf):
+            continue
+        p = pt(c)
+        if c != start and inside(p, r) and cu.via_ok(net, p, r, near(p, p, r + 1.0)):
+            cells = [c]
+            while cells[-1] in prev:
+                cells.append(prev[cells[-1]])
+            path = [a] + [pt(k) for k in cells[::-1][1:]]
+            # straight runs merged, every segment checked as a track
+            out = [path[0]]
+            for k in range(1, len(path) - 1):
+                u, v, w = out[-1], path[k], path[k + 1]
+                if abs((v[0] - u[0]) * (w[1] - v[1]) - (v[1] - u[1]) * (w[0] - v[0])) > 1e-9:
+                    out.append(v)
+            out.append(path[-1])
+            if all(cu.track_ok(net, u, v, width, near(u, v, width + 1.0), top) for u, v in zip(out, out[1:])):
+                return out, p
+            return None
+        for dj, di in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            m = (c[0] + dj, c[1] + di)
+            ng = g + math.hypot(dj, di) * MAZE_GRID
+            if ng < seen.get(m, math.inf) and ok(m):
+                seen[m], prev[m] = ng, c
+                heapq.heappush(heap, (ng, m))
+    return None
 
 
 def seg_dist(p, a, b):
@@ -952,17 +1054,31 @@ def start(name):
     return board
 
 
-def fanout_pass(board, name, nets, reach=LINK_REACH, far=False):
+def escape_boxes(board):
+    """(x0, y0, x1, y1) of the ICs with pads narrower than ESCAPE_PAD, grown by ESCAPE_GROW: their way out."""
+    out = []
+    for fp in board.GetFootprints():
+        if fp.GetReference().startswith("U") and any(
+                mm(min(p.GetSize(pcbnew.F_Cu).x, p.GetSize(pcbnew.F_Cu).y)) < ESCAPE_PAD for p in fp.Pads()):
+            bb = fp.GetBoundingBox(False)
+            out.append((mm(bb.GetLeft()) - ESCAPE_GROW, mm(bb.GetTop()) - ESCAPE_GROW,
+                        mm(bb.GetRight()) + ESCAPE_GROW, mm(bb.GetBottom()) + ESCAPE_GROW))
+    return out
+
+
+def fanout_pass(board, name, nets, reach=LINK_REACH, far=False, size=None):
     """Fanout of `nets`, then the vias off their plane linked on layer 4, up to `reach`; far: those beyond, by a
-    bridge track. Returns the copper."""
+    track of `size` (that of their class by default). Returns the copper."""
     cu = Copper(board)
     left, off = fanout(cu, nets)
     unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net], reach=reach)]
     if far:
-        # the pads planes.py leaves out of reach of their plane: a BRIDGE track up to LINK_REACH, layer 4 then 1
+        # the pads out of reach of their plane (planes.py, or a block placed apart): a track up to LINK_REACH, layer 4 then 1
+        # they keep off the way out of the fine-pitch ICs: a long track along a pin row walls its escape vias
+        clear = escape_boxes(board)
         for top in (False, True):
             unlinked = [s for net in sorted(nets) for s in link(cu, net, [(n, v) for m, n, v in off if m == net and n in unlinked],
-                                                                  None, top, LINK_REACH, BRIDGE)]
+                                                                  None, top, LINK_REACH, size, clear)]
     # an unlinked via and its stub taken back: Freerouting starts from the pad, the planes keep their copper
     for net, n, v in off:
         if n in unlinked:
@@ -1118,9 +1234,10 @@ def islands():
     """The vias of the later passes cut pieces off the planes: a via of the net left on such a piece is linked
     on layer 4, else 1, to the main body of its plane (the fill of the stage before, saved by its report)."""
     start("islands")
-    cut = unconnected_nets(refill())     # only the plane nets the DRC finds cut
+    refill()
     board = pcbnew.LoadBoard(PCB)
     project.apply_netclasses(board)
+    cut = set(cut_nets(board))      # only the plane nets found cut
     cu = Copper(board)
     planed = {"GND", "GNDISO", *SUPPLY_NETS, *PHY_ISLANDS} & cut
     linked, left = 0, []
@@ -1235,7 +1352,7 @@ def rail(name):
     gate of main wants it whole."""
     board = start(name)
     net = RAILS[name]
-    cu = fanout_pass(board, name, {net}, RAIL_LINK_MAX, far=True)
+    cu = fanout_pass(board, name, {net}, RAIL_LINK_MAX, far=True, size=BRIDGE)
     left = bridge(board, cu, net)
     if left or cu.unlinked:
         tracks, vias = freerouting(board, {net}, 4)
@@ -1304,6 +1421,9 @@ def report(rpt):
         if not v["type"].startswith("silk"):
             print("  ", v["type"], " / ".join(i["description"][:60] for i in v["items"]))
     board = pcbnew.LoadBoard(PCB)
+    cut = cut_nets(board)
+    json.dump(cut, open(PCB.replace(".kicad_pcb", "-cut.json"), "w", encoding="utf-8"), indent=0, sort_keys=True)
+    print(f"   connections missing: {sum(cut.values())} on {len(cut)} nets")
     for z in board.Zones():
         if z.GetIsRuleArea():
             continue
@@ -1431,6 +1551,7 @@ def main():
     if step == "back":
         shutil.copyfile(stage(sys.argv[2]), PCB)
         return print(f"{PCB} <- {stage(sys.argv[2])}")
+    whole = set(WHOLE.get(step, ()))      # the nets the pass must leave whole
     if step == "trunk":
         trunks()
     elif step == "gnd":
@@ -1458,7 +1579,7 @@ def main():
         board = start(step)
         names = {str(n) for n in board.GetNetsByName().keys()}
         if step == "fast":
-            nets = {n for n in names if re.fullmatch(FAST, n)}
+            nets = whole = {n for n in names if re.fullmatch(FAST, n)}
         else:
             nets = signal_nets(board)
         tracks, vias = freerouting(board, nets, int(sys.argv[2]) if len(sys.argv) > 2 else 4)
@@ -1491,13 +1612,13 @@ def main():
     # a second LoadBoard fails in a process that has removed items: report from a fresh one
     subprocess.run([sys.executable, os.path.abspath(__file__), "report"], check=True)
     rpt = PCB.replace(".kicad_pcb", "-drc.json")
-    cut = unconnected_nets(rpt) & WHOLE.get(step, set())
+    cut = set(json.load(open(PCB.replace(".kicad_pcb", "-cut.json"), encoding="utf-8"))) & whole
     if cut:
         raise SystemExit(f"FAILED: {step} pass leaves {' '.join(sorted(cut))} unconnected; stage not saved")
     # silkscreen aside, no violation: copper cut off a plane waits for the pass of its net, then the islands pass
     bad = [v["type"] for v in json.load(open(rpt, encoding="utf-8"))["violations"]
            if not v["type"].startswith("silk") and not (v["type"] == "isolated_copper"
-                                                        and net_of(v["items"][0]["description"]) not in WHOLE.get(step, set()))]
+                                                        and net_of(v["items"][0]["description"]) not in whole)]
     if bad:
         raise SystemExit(f"FAILED: {step} pass leaves violations {' '.join(sorted(set(bad)))}; stage not saved")
     shutil.copyfile(PCB, stage(step))     # zones filled by the report
