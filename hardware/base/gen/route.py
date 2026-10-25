@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import pcbnew
 
@@ -71,7 +72,8 @@ PLANE_GAP = 0.2             # plane to the copper of the other nets (a hole keep
 PLANE_INSET = 0.3           # a via stays this far inside the outline of its plane
 FANOUT_REACH = 2.5          # longest stub from a pad centre to its via
 FANOUT_EDGE = CHASSIS_BAND + 1.0    # vias stay off the chassis band and its clearance
-VIA_GROW = 100              # um added to the vias in the DSN (Freerouting keeps no hole clearance)
+SIGNAL_VIA = f"Via[0-3]_{round(project.VIA[0] * 1000)}:{round(project.VIA[1] * 1000)}_um"   # its DSN padstack
+VIA_GROW = 100             # um added to the vias in the DSN (Freerouting keeps no hole clearance)
 # Freerouting runs side by side, one per set of costs (its defaults: via 50, first rip-up 100, trace off its
 # preferred direction 2.5): one core and 1 GB each
 VARIANTS = [{}, {"via_costs": 25}, {"via_costs": 100}, {"start_ripup_costs": 50}, {"start_ripup_costs": 200},
@@ -262,45 +264,48 @@ def grow(r, d):
     return r[0] - d, r[1] - d, r[2] + d, r[3] + d
 
 
-def keep_nets(dsn, keep):
-    """DSN restricted to the nets of `keep`: the other nets are left out of the network, so Freerouting
-    sees their pads as obstacles only."""
-    out, i = [], 0
-    pat = re.compile(r'\((net|class) ')
-    while True:
-        m = pat.search(dsn, i)
-        if not m:
-            out.append(dsn[i:])
-            break
-        start = m.start()
-        depth, j = 0, start
-        while True:
-            ch = dsn[j]
-            if ch == '"':
-                j = dsn.index('"', j + 1)
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-            j += 1
-        block = dsn[start:j + 1]
-        out.append(dsn[i:start])
-        if m.group(1) == "net":
-            name = re.match(r'\(net\s+("([^"]*)"|(\S+))', block)
-            name = name.group(2) if name.group(2) is not None else name.group(3)
-            if name in keep:
-                out.append(block)
-        else:
-            # the class with its nets left out of the network dropped from its list; gone when none is left
-            head = re.match(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', block)
-            names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s"]+)', head.group(2))]
-            kept = [n for n in names if n in keep]
-            if kept:
-                out.append(f"(class {head.group(1)} " + " ".join(f'"{n}"' for n in kept) + block[head.end():])
-        i = j + 1
-    return "".join(out)
+def split_export(path, keep_file, dsn):
+    """The DSN of the board at `path` with each net outside `keep` that still has open connections split into
+    one net per connected piece, of the same class: its copper stays an obstacle, Freerouting has nothing to
+    join on it. The piece with the most items keeps the name (with a plane, the plane's piece)."""
+    board = pcbnew.LoadBoard(path)
+    project.apply_netclasses(board)
+    keep = set(json.load(open(keep_file, encoding="utf-8")))
+    nets = sorted(n for n in cut_nets(board) if n not in keep)
+    conn = board.GetConnectivity()          # built by cut_nets
+    items = collections.defaultdict(list)
+    for p in board.GetPads():
+        items[p.GetNetname()].append(p)
+    for t in board.GetTracks():
+        items[t.GetNetname()].append(t)
+    ns = board.GetDesignSettings().m_NetSettings
+    moves = []
+    for net in nets:
+        seen, pieces = set(), []
+        for it in items[net]:
+            if it.m_Uuid.AsString() in seen:
+                continue
+            piece = [it] + [i for i in conn.GetConnectedItems(it)
+                            if i.GetClass() in ("PAD", "PCB_TRACK", "PCB_ARC", "PCB_VIA") and i.GetNetname() == net]
+            piece = [i for i in piece if i.m_Uuid.AsString() not in seen]
+            seen.update(i.m_Uuid.AsString() for i in piece)
+            pieces.append(piece)
+        pieces.sort(key=len, reverse=True)
+        cls = board.FindNet(net).GetNetClassName()
+        for k, piece in enumerate(pieces[1:], 1):
+            name = f"{net}~{k}"
+            moves.append((name, cls, piece))
+    for name, cls, piece in moves:
+        ni = pcbnew.NETINFO_ITEM(board, name)
+        board.Add(ni)
+        ns.SetNetclassPatternAssignment(name, cls)
+        for i in piece:
+            i.SetNet(ni)
+    ns.RecomputeEffectiveNetclasses()
+    board.SynchronizeNetsAndNetClasses(True)
+    if not pcbnew.ExportSpecctraDSN(board, dsn):
+        raise SystemExit("DSN export failed")
+    print(f"   DSN: {len(nets)} net(s) outside the pass split in {len(moves)} piece(s) more", flush=True)
 
 
 def freerouting(board, keep, passes, band_keepout=True, widths=None):
@@ -309,10 +314,15 @@ def freerouting(board, keep, passes, band_keepout=True, widths=None):
     and the nets left out of the DSN would lose theirs. Returns (tracks, vias) added, less the copper of
     nets that clash."""
     dsn, ses = PCB.replace(".kicad_pcb", ".dsn"), PCB.replace(".kicad_pcb", ".ses")
-    if not pcbnew.ExportSpecctraDSN(board, dsn):
-        raise SystemExit("DSN export failed")
     # every net stays in the network: Freerouting drops the tracks of a net it does not know, and would cross
-    # them; it routes them all, only the nets of `keep` are taken back
+    # them. But it routes every open connection of the network, at every pass (a pass on 15 nets took 2 h, its
+    # -inc option to ignore classes does nothing): the export splits the other nets (split_export)
+    tmp = tempfile.mkdtemp()
+    copy, kept_file = os.path.join(tmp, "board.kicad_pcb"), os.path.join(tmp, "keep.json")
+    pcbnew.SaveBoard(copy, board)
+    json.dump(sorted(keep), open(kept_file, "w", encoding="utf-8"))
+    subprocess.run([sys.executable, os.path.abspath(__file__), "dsn", copy, kept_file, dsn], check=True)
+    shutil.rmtree(tmp, ignore_errors=True)
     text = open(dsn, encoding="utf-8").read()
     # the chassis band of layer 4 is a zone, which Freerouting does not see on a signal layer: keepouts
     # (the chassis pass gives it as locked tracks instead, for the chassis to reach)
@@ -333,6 +343,7 @@ def freerouting(board, keep, passes, band_keepout=True, widths=None):
     text = isolate(text, board)
     text = thin(text, THIN if widths is None else widths)
     text = pad_contacts(text, board)
+    text = barrier(text)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
     # Freerouting gives the same result for the same input: a pass replayed on the same board takes the
     # session kept from its first run instead of routing again (the signals pass routes for hours)
@@ -561,7 +572,7 @@ def thin(text, widths):
         return f"(class {m.group(1)} " + " ".join(f'"{n}"' for n in names if n not in widths)
 
     text = re.sub(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', strip, text)
-    rules = "".join(f'    (class Thin{k} "{n}"\n      (circuit\n        (use_via "Via[0-3]_400:200_um")\n      )\n'
+    rules = "".join(f'    (class Thin{k} "{n}"\n      (circuit\n        (use_via "{SIGNAL_VIA}")\n      )\n'
                     f'      (rule\n        (width {round(widths[n] * 1000)})\n'
                     f'        (clearance {round(project.CLASSES[project.class_of(n)][1] * 1000)})\n      )\n    )\n'
                     for k, n in enumerate(sorted(set(found))))
@@ -572,26 +583,34 @@ def thin(text, widths):
 
 def isolate(text, board):
     """The Modbus isolation barrier, which Freerouting does not read from the .kicad_dru: the nets of the bus
-    side in a class of their own, 1 mm from every other class."""
+    side in a class of their own, 1 mm from every other class (barrier)."""
     iso = set(pcb.iso_nets({fp.GetReference(): fp for fp in board.GetFootprints()}))
     found = []
-    classes = []
 
     def strip(m):
         names = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s"]+)', m.group(2))]
         found.extend(n for n in names if n in iso)
         rest = [n for n in names if n not in iso]
-        classes.append(m.group(1))
         return f"(class {m.group(1)} " + " ".join(f'"{n}"' for n in rest)
 
     text = re.sub(r'\(class\s+(\S+)((?:\s+(?:"[^"]*"|[^\s()]+))*)', strip, text)
     if not found:
         return text
     rules = f'    (class Isolated {" ".join(chr(34) + n + chr(34) for n in sorted(set(found)))}\n' \
-            f'      (circuit\n        (use_via "Via[0-3]_400:200_um")\n      )\n' \
+            f'      (circuit\n        (use_via "{SIGNAL_VIA}")\n      )\n' \
             f'      (rule\n        (width 250)\n        (clearance {round(project.CLASSES["Default"][1] * 1000)})\n      )\n    )\n'
-    for c in classes:
-        rules += f"    (class_class\n      (classes Isolated {c})\n      (rule\n        (clearance {round(ISO_MARGIN * 1000)})\n      )\n    )\n"
+    k = text.index("\n  (wiring")
+    end = text.rindex("  )", 0, k)
+    return text[:end] + rules + text[end:]
+
+
+def barrier(text):
+    """The isolation barrier between the Isolated classes and every other class of the DSN, once the classes
+    are final (thin adds classes)."""
+    names = re.findall(r'\(class\s+(\S+)', text)
+    iso = [n for n in names if n.startswith("Isolated")]
+    rules = "".join(f"    (class_class\n      (classes {a} {b})\n      (rule\n        (clearance {round(ISO_MARGIN * 1000)})\n"
+                    f"      )\n    )\n" for a in iso for b in names if b not in iso)
     k = text.index("\n  (wiring")
     end = text.rindex("  )", 0, k)
     return text[:end] + rules + text[end:]
@@ -1656,6 +1675,8 @@ def main():
         complete()
     elif step == "rip":
         return rip(sys.argv[2])
+    elif step == "dsn":
+        return split_export(*sys.argv[2:5])
     elif step == "pairs":
         import pairs
         board = start("pairs")
