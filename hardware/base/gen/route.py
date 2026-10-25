@@ -1693,8 +1693,9 @@ def main():
         print(f"{step} pass: {len(nets)} nets, {tracks} track(s) and {vias} via(s) added", flush=True)
         project.save(board, PCB)
     elif step == "chassis":
-        # the band of layer 4 as locked tracks of the chassis while Freerouting runs, for its pads to reach;
-        # the signals the pass before left unrouted get a second chance in the same run
+        # the band of layer 4 as locked tracks of the chassis while Freerouting runs, for its pads to reach
+        # (the signals the pass before left unrouted are the complete pass's: a second chance here took 2 h
+        # for 10 connections)
         board = start(step)
         c, ids = CHASSIS_BAND / 2, []
         ring = [(c, c), (W - c, c), (W - c, H - c), (c, H - c), (c, c)]
@@ -1708,7 +1709,7 @@ def main():
             t.SetLocked(True)
             board.Add(t)
             ids.append(t.m_Uuid.AsString())
-        tracks, vias = freerouting(board, {"CHASSIS"} | signal_nets(board), int(sys.argv[2]) if len(sys.argv) > 2 else 4,
+        tracks, vias = freerouting(board, {"CHASSIS"}, int(sys.argv[2]) if len(sys.argv) > 2 else 4,
                                    band_keepout=False)
         for t in [t for t in board.GetTracks() if t.m_Uuid.AsString() in ids]:
             board.Remove(t)
