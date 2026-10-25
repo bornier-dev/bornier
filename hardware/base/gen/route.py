@@ -64,6 +64,7 @@ SURFACE = (pcbnew.PAD_ATTRIB_SMD, pcbnew.PAD_ATTRIB_CONN)   # surface pads, with
 # the jack side of the PHY, cut into the +3V3 plane
 PHY_ISLANDS = {"/ESC/VDD33TXRX1": "U4", "/ESC/VDD33TXRX2": "U4"}
 ISLAND_GROW = 2.0          # the PHY islands reach this far past their pads: their thermal spokes find copper
+ISLAND_NECK = 2.5          # the corridor of a PHY island to its ferrite on the far side of the PHY (planes.FINGER)
 ZONE_GAP = 0.5              # zone to zone clearance (the KiCad default zone clearance is 0.508)
 PLANE_GAP = 0.2             # plane to the copper of the other nets (a hole keeps HOLE_GAP to it all the same)
 PLANE_INSET = 0.3           # a via stays this far inside the outline of its plane
@@ -187,25 +188,58 @@ def planes(board):
     band.BooleanSubtract(rect_poly(CHASSIS_BAND, CHASSIS_BAND, W - CHASSIS_BAND, H - CHASSIS_BAND))
     # the shields joined solid: their leads are on the rim of the band, where thermal spokes find no room
     add_zone(board, "CHASSIS", pcbnew.B_Cu, band, 0, "chassis band").SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)
-    fps = {fp.GetReference(): fp for fp in board.GetFootprints()}
-    for k, (net, phy) in enumerate(PHY_ISLANDS.items()):
-        # the pads of the net on the jack side of the PHY, their hull grown by ISLAND_GROW; a later island
-        # takes the overlap (higher priority)
-        cy = mm(fps[phy].GetPosition().y)
-        pts = [xy(p.GetPosition()) for fp in fps.values() for p in fp.Pads() if p.GetNetname() == net]
-        pts = [(x + ISLAND_GROW * math.cos(a), y + ISLAND_GROW * math.sin(a))
-               for x, y in pts if y > cy for a in (i * math.pi / 8 for i in range(16))]
+    for k, (net, rim, necks) in enumerate(phy_islands(board)):
         poly = pcbnew.SHAPE_POLY_SET()
         poly.NewOutline()
-        for x, y in hull(pts):
+        for x, y in rim:
             poly.Append(MM(x), MM(y))
+        for a, b in necks:
+            poly.BooleanAdd(polygon(pcbnew.SHAPE_SEGMENT(vec(a), vec(b), MM(ISLAND_NECK))))
         add_zone(board, net, pcbnew.In2_Cu, poly, k + 1, f"{net.split('/')[-1]} island")
 
 
+def phy_islands(board, margin=0.0):
+    """[(net, hull, necks)] of PHY_ISLANDS: the hull of the pads of the net on the jack side of the PHY, grown
+    by ISLAND_GROW + margin; the necks (a, b), ISLAND_NECK wide, join it to its source, the ferrite, on the far
+    side of the PHY: a track from there would wall the way out of its pins on layer 4. A later island takes
+    the overlap (higher priority)."""
+    fps = {fp.GetReference(): fp for fp in board.GetFootprints()}
+    out = []
+    for net, phy in PHY_ISLANDS.items():
+        cy = mm(fps[phy].GetPosition().y)
+        pts = [xy(p.GetPosition()) for fp in fps.values() for p in fp.Pads() if p.GetNetname() == net]
+        g = ISLAND_GROW + margin
+        rim = hull([(x + g * math.cos(a), y + g * math.sin(a))
+                    for x, y in pts if y > cy for a in (i * math.pi / 8 for i in range(16))])
+        necks = []
+        for fp in fps.values():
+            for p in fp.Pads():
+                if fp.GetReference().startswith("FB") and p.GetNetname() == net and xy(p.GetPosition())[1] <= cy:
+                    a = xy(p.GetPosition())
+                    necks.append((a, min(rim, key=lambda q: math.dist(a, q))))
+        out.append((net, rim, necks))
+    return out
+
+
+def island_keep_out(board):
+    """The PHY islands and their necks as polygons, grown by ZONE_GAP: the supply planes keep off them."""
+    out = []
+    for _, rim, necks in phy_islands(board, ZONE_GAP):
+        out.append(rim)
+        h = ISLAND_NECK / 2 + ZONE_GAP
+        for a, b in necks:
+            d = math.dist(a, b) or 1.0
+            ux, uy = (b[0] - a[0]) / d, (b[1] - a[1]) / d
+            a, b = (a[0] - ux * h, a[1] - uy * h), (b[0] + ux * h, b[1] + uy * h)
+            out.append([(a[0] - uy * h, a[1] + ux * h), (b[0] - uy * h, b[1] + ux * h),
+                        (b[0] + uy * h, b[1] - ux * h), (a[0] + uy * h, a[1] - ux * h)])
+    return out
+
+
 def supply_planes(board, strict=True):
-    """planes.supply_planes on this board: inside the fanout edge, off the isolated island."""
-    return planes_mod.supply_planes(board, (EDGE, EDGE, W - EDGE, H - EDGE), [grow(iso_island(board), ISO_MARGIN)],
-                                    strict)
+    """planes.supply_planes on this board: inside the fanout edge, off the isolated island and the PHY islands."""
+    return planes_mod.supply_planes(board, (EDGE, EDGE, W - EDGE, H - EDGE),
+                                    [grow(iso_island(board), ISO_MARGIN)] + island_keep_out(board), strict)
 
 
 def hull(pts):

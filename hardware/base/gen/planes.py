@@ -122,12 +122,18 @@ def corridor(owner, net, frm, to, blocked):
 
 
 def supply_planes(board, inside, keep_out=(), strict=True):
-    """{supply: SHAPE_POLY_SET} on layer 3, within inside (x0, y0, x1, y1), out of the keep_out rectangles."""
+    """{supply: SHAPE_POLY_SET} on layer 3, within inside (x0, y0, x1, y1), out of the keep_out rectangles
+    (x0, y0, x1, y1) and polygons [(x, y), ...]."""
+    from matplotlib.path import Path
     xs, ys = grid(inside)
     X, Y = np.meshgrid(xs, ys)
     blocked = np.zeros(X.shape, bool)
-    for x0, y0, x1, y1 in keep_out:
-        blocked |= (X >= x0) & (X <= x1) & (Y >= y0) & (Y <= y1)
+    for k in keep_out:
+        if len(k) == 4 and not isinstance(k[0], tuple):
+            x0, y0, x1, y1 = k
+            blocked |= (X >= x0) & (X <= x1) & (Y >= y0) & (Y <= y1)
+        else:
+            blocked |= Path(k).contains_points(np.column_stack([X.ravel(), Y.ravel()])).reshape(X.shape)
     seed = seeds(board)
 
     def cell(x, y):
