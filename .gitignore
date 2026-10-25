@@ -30,6 +30,8 @@ hardware/tools/
 hardware/base/kicad/stages/
 *.dsn
 *.ses
+# except the sessions kept for replay: hours of Freerouting each
+!hardware/base/kicad/sessions/*.ses
 *-drc.json
 *-ripped.json
 hardware/base/kicad/base-*.log

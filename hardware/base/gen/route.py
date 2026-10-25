@@ -26,6 +26,7 @@ on every net left but the ground and the chassis.
 """
 import collections
 import glob
+import hashlib
 import json
 import math
 import os
@@ -332,8 +333,16 @@ def freerouting(board, keep, passes, band_keepout=True, widths=None):
     text = thin(text, THIN if widths is None else widths)
     text = pad_contacts(text, board)
     open(dsn, "w", encoding="utf-8", newline="\n").write(text)
-    # Freerouting gives the same result for the same input: the variants run side by side with other costs,
-    # each into a session of its own; the one that leaves the fewest connections unrouted is taken
+    # Freerouting gives the same result for the same input: a pass replayed on the same board takes the
+    # session kept from its first run instead of routing again (the signals pass routes for hours)
+    key = hashlib.sha1((text + repr(passes) + repr(VARIANTS)).encode("utf-8")).hexdigest()[:16]
+    kept = os.path.join(os.path.dirname(PCB), "sessions", key + ".ses")
+    if os.path.exists(kept):
+        print(f"   session {key} reused", flush=True)
+        shutil.copyfile(kept, ses)
+        return take_session(board, ses, keep)
+    # the variants run side by side with other costs, each into a session of its own; the one that leaves
+    # the fewest connections unrouted is taken
     # -Xmx1g and SerialGC: one core and 1 GB per JVM; low priority, the machine stays usable
     flags = subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
     runs = []
@@ -361,8 +370,15 @@ def freerouting(board, keep, passes, band_keepout=True, widths=None):
     if not results:
         raise SystemExit("Freerouting gave no result")
     best = min(results)
-    print(f"   variant {best[2]} taken", flush=True)
+    print(f"   variant {best[2]} taken, kept as session {key}", flush=True)
     shutil.copyfile(best[3], ses)
+    os.makedirs(os.path.dirname(kept), exist_ok=True)
+    shutil.copyfile(best[3], kept)
+    return take_session(board, ses, keep)
+
+
+def take_session(board, ses, keep):
+    """The new copper of a Freerouting session added to the board, less what clashes or ends nowhere."""
     tracks, vias, new = import_ses(board, ses, keep)
     # a pass that fails midway can leave two nets crossing: the new copper of one of them taken back
     bad = clashes(board, new)
@@ -375,7 +391,42 @@ def freerouting(board, keep, passes, band_keepout=True, widths=None):
                 tracks -= 1
     if bad:
         print("   clashing new copper taken back, net(s) left unrouted: " + " ".join(sorted(bad)), flush=True)
+    # a connection Freerouting gives up on can leave the wires it had laid toward it, ending nowhere
+    gone, nets = prune_stubs(board, [t for t in new if t.GetNetname() not in bad])
+    for t in gone:
+        if t.GetClass() == "PCB_VIA":
+            vias -= 1
+        else:
+            tracks -= 1
+    if gone:
+        print(f"   {len(gone)} dead-end item(s) of unfinished routes taken back: " + " ".join(sorted(nets)), flush=True)
     return tracks, vias
+
+
+def prune_stubs(board, new):
+    """The items of `new` that end nowhere (a track end on nothing, a via joining less than two layers),
+    taken off the board until none is left. Returns (the items removed, their nets)."""
+    def layers(conn, via):
+        seen = set()
+        for i in conn.GetConnectedItems(via):
+            if i.GetClass() == "PAD" and i.HasHole():
+                return 2
+            seen.add(i.GetLayer())
+        return len(seen)
+
+    new = {t.m_Uuid.AsString(): t for t in new}
+    gone = []
+    while True:
+        board.BuildConnectivity()
+        conn = board.GetConnectivity()
+        dead = [t for t in new.values() if (conn.TestTrackEndpointDangling(t, True) if t.GetClass() != "PCB_VIA"
+                                            else layers(conn, t) < 2)]
+        if not dead:
+            return gone, {t.GetNetname() for t in gone}
+        for t in dead:
+            board.Remove(t)
+            del new[t.m_Uuid.AsString()]
+            gone.append(t)
 
 
 def seg_seg(a, b, c, d):
