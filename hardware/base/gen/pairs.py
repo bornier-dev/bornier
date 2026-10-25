@@ -413,7 +413,7 @@ def blocker(cu, net, a, b, width):
     for o in cu.near(a, b, width + 1.0):
         if o.net == net:
             continue
-        if o.drill and route.seg_dist(o.centre, a, b) < o.drill + width / 2 + route.HOLE_GAP:
+        if o.drill and route.seg_dist(o.centre, a, b) < o.drill + width / 2 + (route.LEAD_GAP if o.pad else route.HOLE_GAP):
             return f"a hole of {o.net} at ({o.centre[0]:.2f}, {o.centre[1]:.2f})"
         if o.top and o.shape.Collide(seg, pcbnew.FromMM(cu.gap(net, o.net))):
             kind = "pad" if o.pad else "track or via"
@@ -487,7 +487,7 @@ def pad_ok(cu, fp):
         for o in cu.near(c, c, 2.0):
             if o.net == p.GetNetname():
                 continue
-            if o.drill and math.dist(c, o.centre) < o.drill + 0.6 + route.HOLE_GAP:
+            if o.drill and math.dist(c, o.centre) < o.drill + 0.6 + (route.LEAD_GAP if o.pad else route.HOLE_GAP):
                 return False
             if o.top and poly.Collide(o.shape, pcbnew.FromMM(cu.gap(p.GetNetname(), o.net) + 0.01)):
                 return False        # 10 um over: both polygons are drawn inside the true shapes
