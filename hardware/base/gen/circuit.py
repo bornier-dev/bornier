@@ -235,7 +235,7 @@ RJ = "Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal"
 # (data sheet, key benefits; 100FD straps low): any order is right.
 # The terminations keep their lines whatever the orders (rs on terms).
 for j, port, jack, chans, terms, rail, led, rs, ccap, esd in (
-        ("J3", "IN", ("TXA_N", "TXA_P", "RXA_N", "RXA_P"), ("RXA_P", "RXA_N", "TXA_P", "TXA_N"),
+        ("J3", "IN", ("TXA_N", "TXA_P", "RXA_N", "RXA_P"), ("RXA_P", "RXA_N", "TXA_N", "TXA_P"),
          ("TXA_N", "TXA_P", "RXA_N", "RXA_P"), "VDD33TXRX1", "LINK0_A", ("R37", "R38", "R39", "R40"), "C35", "U7"),
         ("J4", "OUT", ("RXB_P", "RXB_N", "TXB_P", "TXB_N"), ("RXB_P", "RXB_N", "TXB_P", "TXB_N"),
          ("RXB_P", "RXB_N", "TXB_P", "TXB_N"), "VDD33TXRX2", "LINK1_A", ("R41", "R42", "R43", "R44"), "C36", "U8")):
@@ -275,19 +275,19 @@ c.block("MCU STM32H523VET6 (any H5 in LQFP-100 fits the same footprint)")
 # Pin assignment: private design notes, H523 pin table. Series terminations of the OCTOSPI at the
 # MCU: Q_* is the MCU side, ESC_* the ESC side.
 MCU_PINS = {
-    1: "ENA0", 2: "ENA1", 3: "ENA2", 4: "BUS_LATCH", 5: "ENA3", 7: "LED_MCU", 8: "ALM2", 9: "ESTOP_IN",
+    1: "ENA0", 2: "ENA1", 3: "ENA3", 4: "BUS_LATCH", 5: "ENA2", 7: "LED_MCU", 8: "ALM2", 9: "ESTOP_IN",
     12: "CLK25_MCU", 13: "SPINDLE_DIR", 14: "NRST", 15: "VIN_SENSE", 16: "BUS_IRQ", 17: "BUS_OE", 18: "ALM3",
-    23: "ENC0_A", 24: "ENC0_B", 25: "PROBE", 26: "ESC_SYNC1", 29: "ESC_SYNC0", 30: "SPINDLE_AOUT",
+    23: "ENC1_A", 24: "ENC1_B", 25: "PROBE", 26: "ESC_SYNC1", 29: "ESC_SYNC0", 30: "SPINDLE_AOUT",
     31: "Q_SIO3", 32: "Q_SIO2", 33: "ESC_WAIT_ACK", 34: "ESC_IRQ", 35: "Q_SIO1", 36: "Q_SIO0", 37: "Q_SCK",
-    38: "ESC_RST", 39: "DIR0", 40: "STEP0", 41: "DIR1", 42: "STEP1", 43: "DIR2", 44: "STEP2", 45: "STEP3",
-    46: "DIR3", 47: "Q_SCS", 51: "BUS_CS7", 52: "BUS_CS8", 53: "BUS_CS9", 54: "SPINDLE_PWM", 55: "BUS_CS6",
+    38: "ESC_RST", 39: "DIR3", 40: "STEP0", 41: "DIR0", 42: "STEP3", 43: "DIR2", 44: "STEP2", 45: "STEP1",
+    46: "DIR1", 47: "Q_SCS", 51: "BUS_CS7", 52: "BUS_CS6", 53: "BUS_CS8", 54: "SPINDLE_PWM", 55: "BUS_CS1",
     56: "VBUS_SENSE",
-    57: "BUS_CS4", 58: "BUS_CS5", 59: "ENC3_A", 60: "ENC3_B", 61: "SPINDLE_EN", 62: "WDI",
-    63: "ENC2_A", 64: "ENC2_B", 65: "ENC2_Z", 66: "PC9_GND", 67: "ALM0", 68: "PA9_GND", 69: "BUS_CS11",
-    70: "USB_DM", 71: "USB_DP", 72: "SWDIO", 76: "SWCLK", 77: "ENC0_Z", 78: "BUS_SCK", 79: "BUS_MISO",
-    80: "BUS_MOSI", 81: "BUS_CS0", 82: "BUS_CS1", 83: "ENC1_Z", 84: "BUS_CS2", 85: "MB_DE", 86: "MB_TX",
-    87: "MB_RX", 88: "BUS_CS3", 89: "SWO", 90: "ENC1_A", 91: "ENC1_B", 92: "BUS_SCL", 93: "BUS_SDA",
-    95: "BUS_CS10", 96: "ALM1", 97: "ENC3_Z",
+    57: "BUS_CS5", 58: "BUS_CS11", 59: "ENC3_A", 60: "ENC3_B", 61: "SPINDLE_EN", 62: "WDI",
+    63: "ENC2_A", 64: "ENC2_B", 65: "ENC2_Z", 66: "PC9_GND", 67: "ALM0", 68: "PA9_GND", 69: "BUS_CS4",
+    70: "USB_DM", 71: "USB_DP", 72: "SWDIO", 76: "SWCLK", 77: "ENC1_Z", 78: "BUS_SCK", 79: "BUS_MISO",
+    80: "BUS_MOSI", 81: "BUS_CS0", 82: "BUS_CS2", 83: "ENC0_Z", 84: "BUS_CS9", 85: "MB_DE", 86: "MB_TX",
+    87: "MB_RX", 88: "BUS_CS10", 89: "SWO", 90: "ENC0_A", 91: "ENC0_B", 92: "BUS_SCL", 93: "BUS_SDA",
+    95: "BUS_CS3", 96: "ALM1", 97: "ENC3_Z",
     6: "+3V3", 11: "+3V3", 28: "+3V3", 50: "+3V3", 75: "+3V3", 100: "+3V3", 73: "+3V3",
     22: "VDDA", 21: "VDDA", 20: "GND", 19: "GND", 10: "GND", 27: "GND", 49: "GND", 74: "GND", 99: "GND",
     48: "VCAP", 98: "VCAP", 94: "BOOT0",
@@ -297,8 +297,8 @@ c.part("U9", "MCU_ST_STM32H5:STM32H523VETx", "STM32H523VET6", None, "C27338462",
 # PA9 and PC9 drive the UCPD dead-battery pull-downs of PB13 and PB14 (DS14540 Table 13: UCPD1_DB1,
 # UCPD1_DB2) from every reset until the firmware sets UCPD_DBDIS; PC9 is also pulled up by the
 # bootloader (I2C3_SDA). Both are tied low and carry no signal.
-c.R("R304", "1k", "PA9_GND", "GND", note="UCPD1_DB1 held low: no pull-down on BUS_CS8 (PB13)")
-c.R("R305", "1k", "PC9_GND", "GND", note="UCPD1_DB2 held low: no pull-down on BUS_CS9 (PB14)")
+c.R("R304", "1k", "PA9_GND", "GND", note="UCPD1_DB1 held low: no pull-down on PB13 (a bus chip select)")
+c.R("R305", "1k", "PC9_GND", "GND", note="UCPD1_DB2 held low: no pull-down on PB14 (a bus chip select)")
 for i, pin in enumerate((11, 28, 50, 75, 100)):
     c.C(f"C{38 + i}", "100nF", "+3V3", "GND", note=f"VDD ({pin})")
 c.C("C43", "10µF 25V", "+3V3", "GND", fp=C0805, note="Common VDD bulk (AN5711 §7.4)")
@@ -521,8 +521,8 @@ c.R(ref("R"), "2.2k", "BUS_SDA", "+3V3", note="I2C at 100 kHz, ribbon and 12 mod
 c.R(ref("R"), "2.2k", "BUS_SCL", "+3V3")
 # ESD of every ribbon signal, at the header: the board has no enclosure and the ribbon is plugged by hand
 # (the order of the lines on the channels follows the board layout)
-for group in (("RB_CS0", "RB_CS1", "RB_CS2", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
-              ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11"), ("BUS_SDA", "BUS_SCL", "RB_SCK", "RB_MOSI"),
+for group in (("RB_CS2", "RB_CS1", "RB_CS3", "RB_CS0"), ("RB_CS7", "RB_CS5", "RB_CS4", "RB_CS6"),
+              ("RB_CS9", "RB_CS8", "RB_CS11", "RB_CS10"), ("BUS_SDA", "BUS_SCL", "RB_SCK", "RB_MOSI"),
               ("BUS_MISO", "RB_LATCH", "RB_OE", "BUS_IRQ")):
     c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
            dict(zip((1, 2, 4, 5), group)) | dict(zip((10, 9, 7, 6), group)) | {3: "GND", 8: "GND"}, "ESD of the ribbon lines, at the HE10, flow-through")

@@ -23444,7 +23444,7 @@
 			)
 		)
 	)
-	(label "RB_CS0"
+	(label "RB_CS2"
 		(at 114.3 60.96 180)
 		(effects
 			(font
@@ -23452,7 +23452,7 @@
 			)
 			(justify right bottom)
 		)
-		(uuid "21e622a0-0f51-5c76-a959-3f7068963592")
+		(uuid "dfeeb052-7f19-59d3-be4c-70677f1c52ec")
 	)
 	(label "RB_CS1"
 		(at 114.3 66.04 180)
@@ -23464,18 +23464,8 @@
 		)
 		(uuid "ca7a1d65-3619-5623-a435-9b7505f0232d")
 	)
-	(label "RB_CS2"
-		(at 149.86 60.96 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "dfeeb052-7f19-59d3-be4c-70677f1c52ec")
-	)
 	(label "RB_CS3"
-		(at 149.86 66.04 0)
+		(at 149.86 60.96 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23485,6 +23475,16 @@
 		(uuid "32c43498-beeb-50da-a5c2-723d6604b0a8")
 	)
 	(label "RB_CS0"
+		(at 149.86 66.04 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "21e622a0-0f51-5c76-a959-3f7068963592")
+	)
+	(label "RB_CS2"
 		(at 114.3 55.88 180)
 		(effects
 			(font
@@ -23492,7 +23492,7 @@
 			)
 			(justify right bottom)
 		)
-		(uuid "39e9876a-0d1d-5a50-8c03-db6fbf121ba8")
+		(uuid "30c0e42a-fb5f-5626-b7b3-70a88952e4a4")
 	)
 	(label "RB_CS1"
 		(at 114.3 71.12 180)
@@ -23504,7 +23504,7 @@
 		)
 		(uuid "24ecebe4-34f9-5287-aee7-fd0f0cd3a615")
 	)
-	(label "RB_CS2"
+	(label "RB_CS3"
 		(at 149.86 55.88 0)
 		(effects
 			(font
@@ -23512,9 +23512,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "30c0e42a-fb5f-5626-b7b3-70a88952e4a4")
+		(uuid "1ba9e2d0-642a-5e87-97cb-ead733d34f49")
 	)
-	(label "RB_CS3"
+	(label "RB_CS0"
 		(at 149.86 71.12 0)
 		(effects
 			(font
@@ -23522,7 +23522,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "1ba9e2d0-642a-5e87-97cb-ead733d34f49")
+		(uuid "39e9876a-0d1d-5a50-8c03-db6fbf121ba8")
 	)
 	(symbol
 		(lib_id "power:GND")
@@ -23677,7 +23677,7 @@
 			)
 		)
 	)
-	(label "RB_CS4"
+	(label "RB_CS7"
 		(at 114.3 91.44 180)
 		(effects
 			(font
@@ -23685,7 +23685,7 @@
 			)
 			(justify right bottom)
 		)
-		(uuid "25c717c8-c468-5e09-9dae-dd4602e4e339")
+		(uuid "699fe14a-f618-5c19-8378-3c28a92f0723")
 	)
 	(label "RB_CS5"
 		(at 114.3 96.52 180)
@@ -23697,8 +23697,18 @@
 		)
 		(uuid "81bcf346-64a2-5b2d-bcd8-8d44b890f9b8")
 	)
-	(label "RB_CS6"
+	(label "RB_CS4"
 		(at 149.86 91.44 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "25c717c8-c468-5e09-9dae-dd4602e4e339")
+	)
+	(label "RB_CS6"
+		(at 149.86 96.52 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23708,16 +23718,6 @@
 		(uuid "cff9d47b-ef35-5ef5-bdd2-0872869c9f89")
 	)
 	(label "RB_CS7"
-		(at 149.86 96.52 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "699fe14a-f618-5c19-8378-3c28a92f0723")
-	)
-	(label "RB_CS4"
 		(at 114.3 86.36 180)
 		(effects
 			(font
@@ -23725,7 +23725,7 @@
 			)
 			(justify right bottom)
 		)
-		(uuid "10dde80b-ecd4-5409-b916-87146d5d1fa5")
+		(uuid "9728bb67-83bc-5119-b495-20608beeb2be")
 	)
 	(label "RB_CS5"
 		(at 114.3 101.6 180)
@@ -23737,7 +23737,7 @@
 		)
 		(uuid "75794559-5f65-51ba-8e8f-3388605ab0ba")
 	)
-	(label "RB_CS6"
+	(label "RB_CS4"
 		(at 149.86 86.36 0)
 		(effects
 			(font
@@ -23745,9 +23745,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "dfe28614-4cd8-522d-ab5c-dc81fa78f48a")
+		(uuid "10dde80b-ecd4-5409-b916-87146d5d1fa5")
 	)
-	(label "RB_CS7"
+	(label "RB_CS6"
 		(at 149.86 101.6 0)
 		(effects
 			(font
@@ -23755,7 +23755,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "9728bb67-83bc-5119-b495-20608beeb2be")
+		(uuid "dfe28614-4cd8-522d-ab5c-dc81fa78f48a")
 	)
 	(symbol
 		(lib_id "power:GND")
@@ -23910,18 +23910,8 @@
 			)
 		)
 	)
-	(label "RB_CS8"
-		(at 114.3 121.92 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "816b79e1-aa26-5d0c-bc54-4702320202a8")
-	)
 	(label "RB_CS9"
-		(at 114.3 127 180)
+		(at 114.3 121.92 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23930,18 +23920,18 @@
 		)
 		(uuid "0ca1f43f-84b6-5994-b138-55eaccf1ed88")
 	)
-	(label "RB_CS10"
-		(at 149.86 121.92 0)
+	(label "RB_CS8"
+		(at 114.3 127 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
-		(uuid "ca15279e-02d4-5d6c-a532-62a60e086c28")
+		(uuid "816b79e1-aa26-5d0c-bc54-4702320202a8")
 	)
 	(label "RB_CS11"
-		(at 149.86 127 0)
+		(at 149.86 121.92 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23950,18 +23940,18 @@
 		)
 		(uuid "522e253c-15a7-5405-9ab7-8f587cb0915e")
 	)
-	(label "RB_CS8"
-		(at 114.3 116.84 180)
+	(label "RB_CS10"
+		(at 149.86 127 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right bottom)
+			(justify left bottom)
 		)
-		(uuid "a8c188af-a30e-5d6f-ba22-4ee8a69da53d")
+		(uuid "ca15279e-02d4-5d6c-a532-62a60e086c28")
 	)
 	(label "RB_CS9"
-		(at 114.3 132.08 180)
+		(at 114.3 116.84 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23970,7 +23960,17 @@
 		)
 		(uuid "2275d550-8d1f-5d91-95db-6d4c9915f52c")
 	)
-	(label "RB_CS10"
+	(label "RB_CS8"
+		(at 114.3 132.08 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "a8c188af-a30e-5d6f-ba22-4ee8a69da53d")
+	)
+	(label "RB_CS11"
 		(at 149.86 116.84 0)
 		(effects
 			(font
@@ -23978,9 +23978,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "68854ea0-2901-50f2-ab03-fbe0f8659689")
+		(uuid "c4c5f782-8470-59d6-b8ce-01581be42ea5")
 	)
-	(label "RB_CS11"
+	(label "RB_CS10"
 		(at 149.86 132.08 0)
 		(effects
 			(font
@@ -23988,7 +23988,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "c4c5f782-8470-59d6-b8ce-01581be42ea5")
+		(uuid "68854ea0-2901-50f2-ab03-fbe0f8659689")
 	)
 	(symbol
 		(lib_id "power:GND")
