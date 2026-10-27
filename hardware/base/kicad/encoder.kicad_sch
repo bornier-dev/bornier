@@ -14118,248 +14118,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Bornier:SW_DIP_x04_Split"
-			(pin_names
-				(offset 0)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "SW"
-				(at 0 3.175 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "SW_DIP_x04_Split"
-				(at 0 -2.54 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "https://datasheet.lcsc.com/datasheet/pdf/b12889a146649629a94eee2aab5f121b.pdf"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "4-position DIP switch, one unit per switch: unit k joins pins k and 9 - k"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "SW_DIP_x04_Split_0_1"
-				(circle
-					(center -2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.524 0.254)
-						(xy 1.524 1.778)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "SW_DIP_x04_Split_1_1"
-				(pin passive line
-					(at -5.08 0 0)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "8"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(symbol "SW_DIP_x04_Split_2_1"
-				(pin passive line
-					(at -5.08 0 0)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "7"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(symbol "SW_DIP_x04_Split_3_1"
-				(pin passive line
-					(at -5.08 0 0)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(symbol "SW_DIP_x04_Split_4_1"
-				(pin passive line
-					(at -5.08 0 0)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 2.54)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "Diode:BAT54S"
 			(pin_names
 				(offset 0)
@@ -18013,7 +17771,7 @@
 		)
 		(uuid "0421e975-1775-50e0-91ae-bbb48a6570cc")
 	)
-	(text "Placed four times (encoders 0 to 3).\nPer line: 3.3 k series, Schottky clamp to 0..5 V, bias 4.7 k / 4.7 k at the receiver: an open\nline sits at 2.5 V, so a single-ended encoder (TTL, HTL, open collector) works with its - line\nunconnected. + lines pulled up to the encoder supply. TERM switches: on for RS-422 only, set with the encoder off."
+	(text "Placed four times (encoders 0 to 3).\nPer line: 3.3 k series, Schottky clamp to 0..5 V, bias 4.7 k / 4.7 k at the receiver: an open\nline sits at 2.5 V, so a single-ended encoder (TTL, HTL, open collector) works with its - line\nunconnected. + lines pulled up to the encoder supply. No termination on the board: an RS-422 encoder\nbeyond about 5 m or 1 MHz takes a 120 ohm per pair at the end of its cable."
 		(exclude_from_sim no)
 		(at 20.32 25.4 0)
 		(effects
@@ -20452,194 +20210,6 @@
 		(uuid "4e1eba00-0a3d-538d-a346-b75e18244d0e")
 	)
 	(symbol
-		(lib_id "Bornier:SW_DIP_x04_Split")
-		(at 83.82 109.22 270)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "4e7263bd-de8f-589a-b6f0-9c4b15547e4d")
-		(property "Reference" "SW2"
-			(at 85.09 107.95 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "TERM A B Z"
-			(at 85.09 110.49 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
-			(at 83.82 109.22 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 83.82 109.22 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
-			(at 83.82 109.22 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C358628"
-			(at 83.82 109.22 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "c455efc3-a066-5733-b496-0a634432ef23")
-		)
-		(pin "8"
-			(uuid "a99e7d62-dc39-5939-a4f2-05692c63edb8")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "SW2")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "SW3")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "SW4")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "SW5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 80.01 118.11 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "59281fc3-9586-54cd-b451-24084061293d")
-		(property "Reference" "R89"
-			(at 74.93 116.84 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "120"
-			(at 74.93 119.38 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 80.01 118.11 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 80.01 118.11 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 80.01 118.11 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C22787"
-			(at 80.01 118.11 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "8821d273-870f-58d0-bac4-db53ab94a973")
-		)
-		(pin "2"
-			(uuid "8bb2d262-b460-5f2e-ad87-4e4bd82167d9")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "R89")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "R115")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "R141")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "R167")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:R")
 		(at 100.33 104.14 90)
 		(unit 1)
@@ -21994,195 +21564,6 @@
 			(justify left bottom)
 		)
 		(uuid "392bb87f-6c4e-52ff-8f18-fde51a40076f")
-	)
-	(symbol
-		(lib_id "Bornier:SW_DIP_x04_Split")
-		(at 83.82 160.02 270)
-		(unit 2)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "8abd33a4-4157-5c50-813f-972f1ef747cf")
-		(property "Reference" "SW2"
-			(at 85.09 158.75 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "TERM A B Z"
-			(at 85.09 161.29 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
-			(at 83.82 160.02 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 83.82 160.02 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
-			(at 83.82 160.02 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C358628"
-			(at 83.82 160.02 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "2"
-			(uuid "864448bf-aa10-5089-8d87-548f9f3a9efc")
-		)
-		(pin "7"
-			(uuid "76de775a-3e68-53e8-b08f-43403e32f617")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "SW2")
-					(unit 2)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "SW3")
-					(unit 2)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "SW4")
-					(unit 2)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "SW5")
-					(unit 2)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 80.01 168.91 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "d795a488-4543-5995-b32d-4ba342d24de2")
-		(property "Reference" "R97"
-			(at 74.93 167.64 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "120"
-			(at 74.93 170.18 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 80.01 168.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 80.01 168.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 80.01 168.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C22787"
-			(at 80.01 168.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "00ad1e1c-6974-5a5a-b5d8-7e95ba11a52d")
-		)
-		(pin "2"
-			(uuid "c1e63783-56dc-59de-bc79-a99aace530f3")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "R97")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "R123")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "R149")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "R175")
-					(unit 1)
-				)
-			)
-		)
 	)
 	(symbol
 		(lib_id "Device:R")
@@ -23541,195 +22922,6 @@
 		(uuid "642e34b8-df7f-5fed-aa82-87097e45482c")
 	)
 	(symbol
-		(lib_id "Bornier:SW_DIP_x04_Split")
-		(at 83.82 210.82 270)
-		(unit 3)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "46f9cf15-6529-527b-ae5a-3282bd993892")
-		(property "Reference" "SW2"
-			(at 85.09 209.55 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "TERM A B Z"
-			(at 85.09 212.09 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
-			(at 83.82 210.82 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 83.82 210.82 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
-			(at 83.82 210.82 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C358628"
-			(at 83.82 210.82 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "3"
-			(uuid "f70bbfd3-42ef-542c-9936-148b01ef1541")
-		)
-		(pin "6"
-			(uuid "c08deddf-10bb-5288-868f-e2912d4879c3")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "SW2")
-					(unit 3)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "SW3")
-					(unit 3)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "SW4")
-					(unit 3)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "SW5")
-					(unit 3)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 80.01 219.71 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "d95f4f90-7de8-59f2-bb5d-7360504208aa")
-		(property "Reference" "R105"
-			(at 74.93 218.44 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "120"
-			(at 74.93 220.98 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 80.01 219.71 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 80.01 219.71 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 80.01 219.71 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C22787"
-			(at 80.01 219.71 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "ba057529-3eaf-5d1a-b1ee-30a8a8daaa7f")
-		)
-		(pin "2"
-			(uuid "e2acaef7-110c-5ce2-9c2f-bd3a8c1285bf")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "R105")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "R131")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "R157")
-					(unit 1)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "R183")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:R")
 		(at 100.33 205.74 90)
 		(unit 1)
@@ -24971,113 +24163,6 @@
 			)
 		)
 	)
-	(symbol
-		(lib_id "Bornier:SW_DIP_x04_Split")
-		(at 83.82 256.54 270)
-		(unit 4)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "fd744701-1066-54d0-a3ec-f1e9b9afcb93")
-		(property "Reference" "SW2"
-			(at 85.09 255.27 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "TERM A B Z"
-			(at 85.09 257.81 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
-			(at 83.82 256.54 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 83.82 256.54 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" "On: 120 ohm termination of the pair (RS-422 only). Set with the encoder supply off"
-			(at 83.82 256.54 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C358628"
-			(at 83.82 256.54 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "4"
-			(uuid "078ee1e4-f3b9-5dd7-bf6c-85f2b959d2e1")
-		)
-		(pin "5"
-			(uuid "b27f798b-9a84-5396-bf7a-285322b58879")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/02cf5a62-80ed-50c3-b4aa-c0de061d98fb"
-					(reference "SW2")
-					(unit 4)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/3871fd5c-0c83-5380-9d05-c79643aeed24"
-					(reference "SW3")
-					(unit 4)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/b274f399-bff9-586b-83d1-d6138a9174ff"
-					(reference "SW4")
-					(unit 4)
-				)
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/adf381b2-f39e-587d-a611-e79cb286f0be"
-					(reference "SW5")
-					(unit 4)
-				)
-			)
-		)
-	)
-	(text "Spare"
-		(exclude_from_sim no)
-		(at 87.63 257.81 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-				(bold no)
-			)
-			(justify left top)
-		)
-		(uuid "3aefa443-5039-5e2b-ab7f-943b564dfe1b")
-	)
 	(no_connect
 		(at 116.84 71.12)
 		(uuid "ec1f0dc9-5a01-567b-89d9-d7c6ca039787")
@@ -25093,14 +24178,6 @@
 	(no_connect
 		(at 246.38 175.26)
 		(uuid "116bff2b-8982-5f73-a552-3744b5e8acd5")
-	)
-	(no_connect
-		(at 83.82 251.46)
-		(uuid "2662fa18-380f-5990-9493-dbf317d01c42")
-	)
-	(no_connect
-		(at 83.82 261.62)
-		(uuid "884d3327-9c5c-59d1-9e4c-1331f8156d25")
 	)
 	(label "VSD"
 		(at 74.93 63.5 0)
@@ -25554,24 +24631,13 @@
 	(wire
 		(pts
 			(xy 73.66 104.14)
-			(xy 83.82 104.14)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "160765fe-4f80-5e83-8f29-e58606fbfac8")
-	)
-	(wire
-		(pts
-			(xy 83.82 104.14)
 			(xy 96.52 104.14)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "0e21d609-7558-592f-b972-def5ca5bb552")
+		(uuid "c8c73556-6e63-558b-83e2-d631c2193d37")
 	)
 	(wire
 		(pts
@@ -25583,28 +24649,6 @@
 			(type default)
 		)
 		(uuid "4b1d93e1-e103-5eb8-87a1-401c3b1cf7f2")
-	)
-	(wire
-		(pts
-			(xy 83.82 114.3)
-			(xy 80.01 114.3)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "eed461c3-8d77-5350-b360-44d9aaa34cce")
-	)
-	(wire
-		(pts
-			(xy 80.01 121.92)
-			(xy 80.01 129.54)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "be3a3293-7ec0-5339-aeab-8ad113c433cc")
 	)
 	(wire
 		(pts
@@ -25653,24 +24697,13 @@
 	(wire
 		(pts
 			(xy 66.04 129.54)
-			(xy 80.01 129.54)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "dd682514-317a-5326-8e9a-6af7cac46753")
-	)
-	(wire
-		(pts
-			(xy 80.01 129.54)
 			(xy 96.52 129.54)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "590c5a8f-7f30-58b5-9850-a082f422dad0")
+		(uuid "58ffc2f4-0e21-5e46-baf4-09a887051e05")
 	)
 	(wire
 		(pts
@@ -25730,24 +24763,13 @@
 	(wire
 		(pts
 			(xy 73.66 154.94)
-			(xy 83.82 154.94)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d0cb2967-0d45-5b35-b57d-b223978ea911")
-	)
-	(wire
-		(pts
-			(xy 83.82 154.94)
 			(xy 96.52 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "acc06d8a-156e-5c65-bf87-028cb5c81c00")
+		(uuid "e9dd4cf2-9a4f-51be-8236-f1eb39f7aca0")
 	)
 	(wire
 		(pts
@@ -25759,28 +24781,6 @@
 			(type default)
 		)
 		(uuid "92ef6ba7-1ecb-5354-a0e9-08346c51c006")
-	)
-	(wire
-		(pts
-			(xy 83.82 165.1)
-			(xy 80.01 165.1)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c00fafc4-c676-5a61-a461-54bbfda23383")
-	)
-	(wire
-		(pts
-			(xy 80.01 172.72)
-			(xy 80.01 180.34)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "de8ef0d8-22ad-55c7-b602-2e1058f892fe")
 	)
 	(wire
 		(pts
@@ -25829,24 +24829,13 @@
 	(wire
 		(pts
 			(xy 66.04 180.34)
-			(xy 80.01 180.34)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c0bd1044-cb71-56a2-96e7-8761739490a0")
-	)
-	(wire
-		(pts
-			(xy 80.01 180.34)
 			(xy 96.52 180.34)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "43857d29-2af8-5be9-83b5-3af726a43a30")
+		(uuid "d895d6be-a2d0-5a23-b5af-6c45cf46dd80")
 	)
 	(wire
 		(pts
@@ -25906,24 +24895,13 @@
 	(wire
 		(pts
 			(xy 73.66 205.74)
-			(xy 83.82 205.74)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c24f048c-b22b-5eaa-81c4-91f152c06925")
-	)
-	(wire
-		(pts
-			(xy 83.82 205.74)
 			(xy 96.52 205.74)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "eb4b47ac-b762-53c1-8c5b-6246dff5e0ef")
+		(uuid "c1fa5da2-d31e-5e73-8bbd-70257065af71")
 	)
 	(wire
 		(pts
@@ -25935,28 +24913,6 @@
 			(type default)
 		)
 		(uuid "4f740797-dd7e-58af-b112-4514ee4313fd")
-	)
-	(wire
-		(pts
-			(xy 83.82 215.9)
-			(xy 80.01 215.9)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bb440f33-0e39-5b2a-91cb-623504e9a0cc")
-	)
-	(wire
-		(pts
-			(xy 80.01 223.52)
-			(xy 80.01 231.14)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b9732311-e92c-5d0e-b9b9-c6b55afb07ee")
 	)
 	(wire
 		(pts
@@ -26005,24 +24961,13 @@
 	(wire
 		(pts
 			(xy 66.04 231.14)
-			(xy 80.01 231.14)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "428edc74-1954-56f9-928f-13fc997e405d")
-	)
-	(wire
-		(pts
-			(xy 80.01 231.14)
 			(xy 96.52 231.14)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "2428f9d0-0954-5e1d-8d19-db202a9cc795")
+		(uuid "25461a36-a382-5213-a0f5-a8b7c68cd698")
 	)
 	(wire
 		(pts
@@ -26295,42 +25240,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "d5a74854-4f0b-5d83-aa4b-f8b0f260b350")
-	)
-	(junction
-		(at 80.01 129.54)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "3bd2b596-9afe-53e4-8939-862a716e69a3")
-	)
-	(junction
-		(at 80.01 180.34)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "f29bb12a-3f32-5625-be91-bef08bad4ed8")
-	)
-	(junction
-		(at 80.01 231.14)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "3f786966-e553-5dbd-ab65-5462bf7fdaf4")
-	)
-	(junction
-		(at 83.82 104.14)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "bd95d411-089d-572d-a0de-c14c7cc6e8df")
-	)
-	(junction
-		(at 83.82 154.94)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "1548eaca-f93b-5387-bc1d-b6ff2eb41ecd")
-	)
-	(junction
-		(at 83.82 205.74)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "3fb1ec74-1f87-56e8-b495-57eb6898db17")
 	)
 	(junction
 		(at 111.76 104.14)
