@@ -63,13 +63,13 @@ connector sits on a long edge: the profile closes the short ones; the USB jack i
 |---|---|
 | [`firmware/`](firmware/README.md) | C++23 firmware on the [OpSy](https://github.com/Otatiaro/OpSy) RTOS, generated STM32H563 register headers, board support for the NUCLEO-H563ZI, bring-up example and on-target tests |
 | `hardware/lib/` | `kicadgen`, the Python schematic generator and checker (ERC, netlist), and the symbols, footprints and 3D models missing from the KiCad libraries, with their generators |
-| `hardware/base/` | Base board: generators (`gen/`), generated KiCad project (`kicad/`), circuit simulation (`sim/`) |
+| `hardware/base/` | Base board: schematic generator (`gen/`), KiCad project (`kicad/`), Gerbers (`fab/`), circuit simulation (`sim/`) |
 | [`tools/hil/`](tools/hil/README.md) | Hardware-in-the-loop test scripts |
 | `tools/udev/` | udev rules for debug probes on Linux |
 
-The KiCad files are generated: edit the scripts in `hardware/base/gen/`, then run
-`python hardware/base/gen/schematic.py`, which regenerates the schematic and runs the checks, and
-`hardware/base/gen/pcb.py` with the Python shipped with KiCad, which rebuilds the PCB from it.
+The schematic is generated: edit the scripts in `hardware/base/gen/`, then run
+`python hardware/base/gen/schematic.py`, which regenerates it and runs the checks. The PCB is edited in
+KiCad: after a schematic change, update it from the schematic (Tools > Update PCB from Schematic).
 
 Building, flashing and coding rules: [CONTRIBUTING.md](CONTRIBUTING.md).
 

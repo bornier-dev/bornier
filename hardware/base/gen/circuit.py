@@ -230,10 +230,9 @@ c.R("R36", "1k", "LINK1", "LINK1_A")
 # --------------------------------------------------------------------------------------------
 c.block("EtherCAT ports: IN = port 0 (PHY A), OUT = port 1 (PHY B)")
 RJ = "Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal"
-# The lines on jack pins 1, 2, 3, 6, and on ESD channels 1, 2, 4, 5, in the orders the block layout found
-# for the pairs to route through their arrays (blocks.py, pair_lanes; they change with the placement, and
-# pcb.py stops on a board wired otherwise). The PHYs correct the polarity and have HP Auto-MDIX (data sheet,
-# key benefits; 100FD straps low): any order is right.
+# The lines on jack pins 1, 2, 3, 6, and on ESD channels 1, 2, 4, 5, in the orders that let the pairs
+# route straight through their arrays on the board. The PHYs correct the polarity and have HP Auto-MDIX
+# (data sheet, key benefits; 100FD straps low): any order is right.
 # The terminations keep their lines whatever the orders (rs on terms).
 for j, port, jack, chans, terms, rail, led, rs, ccap, esd in (
         ("J3", "IN", ("TXNA", "TXPA", "RXNA", "RXPA"), ("RXPA", "RXNA", "TXPA", "TXNA"),
@@ -453,7 +452,7 @@ for n in range(4):
     u = ref("U")
     rx = {}
     pins = {16: "+3V3", 8: "GND", 4: "+3V3", 12: "GND"}
-    # channels as channels.py found them for this placement: A on 1, Z on 2, B on 4, channel 3 unused
+    # channels in the order of the board layout: A on 1, Z on 2, B on 4, channel 3 unused
     for ch, (p, m, y) in zip("ABZ", ((2, 1, 3), (14, 15, 13), (6, 7, 5))):
         pins.update({p: f"ENC{n}_{ch}P_R", m: f"ENC{n}_{ch}N_R", y: f"ENC{n}_{ch}"})
     c.part(u, "Interface:AM26LV32xD", "AM26LV32EIDR", "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm", "C527448", pins,
@@ -523,7 +522,7 @@ c.R(ref("R"), "100k", "BUS_MOSI", "GND", note="MOSI defined while the MCU pin is
 c.R(ref("R"), "2.2k", "BUS_SDA", "+3V3", note="I2C at 100 kHz, ribbon and 12 modules: rise < 1 us")
 c.R(ref("R"), "2.2k", "BUS_SCL", "+3V3")
 # ESD of every ribbon signal, at the header: the board has no enclosure and the ribbon is plugged by hand
-# (the order of the lines on the channels as channels.py found it for this placement)
+# (the order of the lines on the channels follows the board layout)
 for group in (("RB_SCK", "RB_MOSI", "BUS_MISO", "RB_LATCH"), ("BUS_IRQ", "RB_OE", "BUS_SCL", "BUS_SDA"),
               ("RB_CS0", "RB_CS2", "RB_CS1", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
               ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11")):

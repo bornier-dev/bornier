@@ -364,7 +364,7 @@ def encoder(prj):
     s.power("+3V3", *s.P(cd, 1))
     s.rail("GND", *s.P(cd, 2))
     pins = c.by_ref()[rx]["pins"]
-    # the channels of each line as wired in circuit.py (channels.py may reorder them)
+    # the channels of each line as wired in circuit.py
     chan = {ch: next((a, b, y) for a, b, y in (("2", "1", "3"), ("6", "7", "5"), ("10", "9", "11"), ("14", "15", "13"))
                      if pins.get(a) == f"ENC{n}_{ch}P_R") for ch in "ABZ"}
     for ch in "ABZ":
