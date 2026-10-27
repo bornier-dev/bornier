@@ -76,7 +76,7 @@ def local_bus(prj):
     for k, esd in enumerate(sorted(esds, key=lambda r: int(r[1:]))):
         ex0, ey0 = 132.08, 63.5 + 30.48 * k
         s.place(esd, ex0, ey0, ref_at=(ex0 + 3.81, ey0 - 8.89), val_at=(ex0 + 3.81, ey0 - 11.43))
-        for pin in ("1", "2", "4", "5"):
+        for pin in ("1", "2", "4", "5", "10", "9", "7", "6"):     # 10, 9, 7, 6: flow-through, opposite each line
             px_, py_ = s.P(esd, pin)
             net = c.by_ref()[esd]["pins"][pin]
             d = -5.08 if px_ < ex0 else 5.08

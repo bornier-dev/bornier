@@ -135,6 +135,8 @@ def spindle(prj):
     s.place(tp, jx_ + 2.54, yy + 20.32, rot=270, mirror="y", ref_at=(jx_ - 2.54, yy + 35.56),
             val_at=(jx_ - 2.54, yy + 38.1))
     s.w("SP_PWM_C", (jx_, yy), s.P(tp, 1))
+    s.label("SP_PWM_C", *s.P(tp, 1), tag=f"{tp}.1")
+    s.label("SP_PWM_C", *s.P(tp, 10), tag=f"{tp}.10")     # flow-through: the NC pin opposite carries the line
     s.rail("GND", *s.P(tp, 3))
     re = sorted((s.P(rs2, 1), s.P(rs2, 2)))[1]
     s.w("SP_PWM", re, (re[0] + 20.32, yy))

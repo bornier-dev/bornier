@@ -315,7 +315,7 @@ c.C("C49", "100nF", "VDDA", "GND", note="VDDA (22)")
 c.C("C50", "1µF 50V", "VDDA", "GND", note="VREF+ (21)")
 c.C("C51", "100nF", "VDDA", "GND", note="VREF+ (21)")
 c.C("C52", "100nF", "NRST", "GND", note="At the NRST pin")
-c.part("D10", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714", {1: "NRST", 3: "GND", 8: "GND"},
+c.part("D10", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714", {1: "NRST", 10: "NRST", 3: "GND", 8: "GND"},
        "ESD of NRST, which reaches the debug connector: one channel of the array of the PHY lines (one BOM line less)")
 c.R("R45", "10k", "BOOT0", "GND", note="BOOT0 low: boot from flash")
 c.part("SW1", "Switch:SW_Push", "BOOT", "Bornier:SW_XKB_TS-1187A", "C318884", {1: "+3V3", 2: "BOOT0"},
@@ -433,7 +433,8 @@ for k in range(2):
                "3-6 B, 4-5 Z, 7-8 supply/0 V. Supply always on 7-8: an Ethernet or encoder cable plugged by "
                "mistake shorts 7-8 into the current limit", also=f"enc{n}")
         c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
-               {1: f"STEP{n}_P", 2: f"STEP{n}_N", 4: f"DIR{n}_P", 5: f"DIR{n}_N", 3: "GND", 8: "GND"},
+               {1: f"STEP{n}_P", 2: f"STEP{n}_N", 4: f"DIR{n}_P", 5: f"DIR{n}_N", 10: f"STEP{n}_P", 9: f"STEP{n}_N",
+                7: f"DIR{n}_P", 6: f"DIR{n}_N", 3: "GND", 8: "GND"},
                "ESD of STEP and DIR at the RJ45, flow-through")
 
 c.block("Encoders: RS-422, TTL or HTL, differential or single-ended, 5 V or VIN supply")
@@ -533,7 +534,7 @@ for group in (("RB_CS0", "RB_CS1", "RB_CS2", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB
               ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11"), ("BUS_SDA", "BUS_SCL", "RB_SCK", "RB_MOSI"),
               ("BUS_MISO", "RB_LATCH", "RB_OE", "BUS_IRQ")):
     c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
-           dict(zip((1, 2, 4, 5), group)) | {3: "GND", 8: "GND"}, "ESD of the ribbon lines, at the HE10, flow-through")
+           dict(zip((1, 2, 4, 5), group)) | dict(zip((10, 9, 7, 6), group)) | {3: "GND", 8: "GND"}, "ESD of the ribbon lines, at the HE10, flow-through")
 
 # --------------------------------------------------------------------------------------------
 c.block("Spindle / laser: 0-10 V, PWM 5 V, enable and direction open drain")
@@ -573,7 +574,7 @@ c.R(ref("R"), "100k", "SPINDLE_PWM", "GND", note="Laser off while PB15 is not co
 c.R(ref("R"), "120", "SP_PWM_B", "SP_PWM_C", fp=R0603, note="With the next one, 240 ohm: 20 mA into a short (74AHCT: 25 mA)")
 c.R(ref("R"), "120", "SP_PWM_C", "SP_PWM", fp=R0603)
 c.part(ref("D"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
-       {1: "SP_PWM_C", 3: "GND", 8: "GND"},
+       {1: "SP_PWM_C", 10: "SP_PWM_C", 3: "GND", 8: "GND"},
        "ESD between the two 120 ohm (one channel of the array of the PHY lines); a miswire to VIN burns the outer "
        "120 ohm (fuse) and may short the array, not the buffer")
 c.R(ref("R"), "2.2k", "SP_PWM_B", "SP_PWM_LA", note="1.3 mA: the buffer stays below 25 mA into a shorted output")

@@ -604,6 +604,9 @@ def mcu(prj):
     xp = xl - 68.58
     s.place("D10", xp - 2.54, yn + 25.4, rot=270, ref_at=(xp + 7.62, yn + 22.86), val_at=(xp + 7.62, yn + 25.4))
     s.w("NRST", (xp, yn), s.P("D10", 1))
+    nx, ny = s.P("D10", 10)     # flow-through: the NC pin opposite carries the line
+    s.w("NRST", (nx, ny), (nx, ny + 5.08))
+    s.glabel("NRST", nx, ny + 5.08, 270, "bidirectional")
     s.rail("GND", *s.P("D10", 3))
     yb = P(94)[1]
     s.w("BOOT0", (xl, yb), (xl - 35.56, yb))

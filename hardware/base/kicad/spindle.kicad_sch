@@ -20359,6 +20359,26 @@
 			)
 		)
 	)
+	(label "SP_PWM_C"
+		(at 162.56 170.18 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b6ab55b7-b473-5122-82e3-cb229cff2069")
+	)
+	(label "SP_PWM_C"
+		(at 157.48 170.18 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "f623b5c5-72b5-5529-90b8-3e34a4bdb99d")
+	)
 	(symbol
 		(lib_id "power:GND")
 		(at 177.8 185.42 0)
@@ -22245,10 +22265,6 @@
 	(no_connect
 		(at 172.72 170.18)
 		(uuid "489e0ef7-1328-57ec-998e-576fdb6812d3")
-	)
-	(no_connect
-		(at 157.48 170.18)
-		(uuid "57475500-7a54-5e26-8e9f-b3e660dd769b")
 	)
 	(no_connect
 		(at 370.84 137.16)

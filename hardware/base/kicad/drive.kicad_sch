@@ -19286,6 +19286,46 @@
 		)
 		(uuid "ccd6cae5-3cb9-58a1-9c09-96cfe3c22137")
 	)
+	(label "STEP_P"
+		(at 332.74 149.86 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "aa80f72e-86d9-547f-8e23-018c54d9eef2")
+	)
+	(label "STEP_N"
+		(at 332.74 165.1 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "5d78a59b-ad75-574a-8d3d-2b110f2f8956")
+	)
+	(label "DIR_P"
+		(at 358.14 149.86 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "61b3cc3c-eaae-51ce-b69b-a771accb7437")
+	)
+	(label "DIR_N"
+		(at 358.14 165.1 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "ab4c10ad-e904-55fd-8f8c-8a92cd6e65df")
+	)
 	(symbol
 		(lib_id "power:GND")
 		(at 345.44 172.72 0)
@@ -20713,22 +20753,6 @@
 				)
 			)
 		)
-	)
-	(no_connect
-		(at 358.14 165.1)
-		(uuid "08471ae4-59c2-530f-bf0c-256330418458")
-	)
-	(no_connect
-		(at 358.14 149.86)
-		(uuid "711dda26-ced5-576a-82c1-0362f4907b80")
-	)
-	(no_connect
-		(at 332.74 165.1)
-		(uuid "a797b5d7-532c-5cd2-9826-33539728b6dc")
-	)
-	(no_connect
-		(at 332.74 149.86)
-		(uuid "739372ce-b30b-5772-8785-02ae1cc04de8")
 	)
 	(wire
 		(pts

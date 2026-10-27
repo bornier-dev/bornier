@@ -215,6 +215,8 @@ def drive_port(prj):
             px_, py_ = s.P(esd, pin)
             d = -5.08 if px_ < ex0 else 5.08
             stub(s, (px_, py_), c.by_ref()[esd]["pins"][pin], d)
+        for pin in ("10", "9", "7", "6"):     # flow-through: the NC pin opposite each line carries it
+            s.label(c.by_ref()[esd]["pins"][pin], *s.P(esd, pin), tag=f"{esd}.{pin}")
         s.rail("GND", *s.P(esd, 3))
         # ENA: open drain
         q = on(f"ENA{n}_OUT", "Q")[0]
