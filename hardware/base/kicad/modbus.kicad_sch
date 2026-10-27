@@ -16861,245 +16861,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Jumper:Jumper_3_Open"
-			(pin_names
-				(offset 0)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom no)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "JP"
-				(at -2.54 -2.54 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "Jumper_3_Open"
-				(at 0 2.794 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 -10.16 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "Jumper, 3-pole, both open"
-				(at 0 -12.7 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property private "KLC_S5.1" "This is a generic symbol, it has fp-filter, but no default footprint"
-				(at 0 -17.78 0)
-				(show_name yes)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property private "KLC_S3.3" "Graphical-Symbol: thickness is 6mm, fill is background"
-				(at -1.27 -20.32 0)
-				(show_name yes)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "Jumper SPDT"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_fp_filters" "Jumper* TestPoint*3Pads* TestPoint*Bridge*"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "Jumper_3_Open_0_0"
-				(circle
-					(center -2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 0 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "Jumper_3_Open_0_1"
-				(arc
-					(start -2.032 1.016)
-					(mid -1.143 1.3235)
-					(end -0.254 1.016)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 -0.508)
-						(xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0.254 1.016)
-					(mid 1.143 1.3235)
-					(end 2.032 1.016)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "Jumper_3_Open_1_1"
-				(pin passive line
-					(at -5.08 0 0)
-					(length 2.54)
-					(name "A"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -3.81 90)
-					(length 2.54)
-					(name "C"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 2.54)
-					(name "B"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "Diode:SM712_SOT23"
 			(pin_names
 				(offset 1.016)
@@ -17771,7 +17532,7 @@
 		)
 		(uuid "6070e118-fee7-52d3-9bd6-6a139774bf9d")
 	)
-	(text "Isolated half-duplex RS-485: the bus side is powered by the DC-DC inside the transceiver (VISO = 3.3 V).\nBornier is the master of the line, so it biases it: 370 mV at idle with a 120 ohm termination at each end.\nTERM: shunt on 1-2 when Bornier sits at an end of the line. Wiring: D1 (A), D0 (B), common, shield."
+	(text "Isolated half-duplex RS-485: the bus side is powered by the DC-DC inside the transceiver (VISO = 3.3 V).\nBornier is the master of the line, so it biases it: 370 mV at idle with a 120 ohm termination at each end.\nTermination always fitted (Bornier at an end of the line); a master in the middle: remove it.\nWiring: D1 (A), D0 (B), common, shield."
 		(exclude_from_sim no)
 		(at 20.32 25.4 0)
 		(effects
@@ -19752,7 +19513,7 @@
 	)
 	(symbol
 		(lib_id "Device:R")
-		(at 248.92 106.68 180)
+		(at 248.92 119.38 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -19760,7 +19521,7 @@
 		(dnp no)
 		(uuid "da7e8d21-6fc8-5294-bcb6-deaa4804ebd5")
 		(property "Reference" "R246"
-			(at 242.57 105.41 0)
+			(at 251.46 118.11 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19769,7 +19530,7 @@
 			)
 		)
 		(property "Value" "120"
-			(at 242.57 107.95 0)
+			(at 251.46 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19778,7 +19539,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 248.92 106.68 0)
+			(at 248.92 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19788,7 +19549,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 248.92 106.68 0)
+			(at 248.92 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19797,8 +19558,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 248.92 106.68 0)
+		(property "Description" "Line termination, always fitted: the master sits at an end of the line. A master in the middle of the line: remove this resistor"
+			(at 248.92 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19808,7 +19569,7 @@
 			)
 		)
 		(property "LCSC" "C22787"
-			(at 248.92 106.68 0)
+			(at 248.92 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19827,91 +19588,6 @@
 			(project "base"
 				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/1db87ff9-7931-5191-874e-3f183651a4c0"
 					(reference "R246")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Jumper:Jumper_3_Open")
-		(at 254 100.33 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "c2b09b07-662b-54a3-9e06-a18c6c0c1b1e")
-		(property "Reference" "JP5"
-			(at 251.46 95.25 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "TERM"
-			(at 251.46 97.79 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
-			(at 254 100.33 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 254 100.33 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "Description" "Shunt on 1-2 when Bornier is at an end of the line; on 2-3: parked"
-			(at 254 100.33 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C2937625"
-			(at 254 100.33 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "d200ee0a-b293-59b7-a32a-dd01710dcb3d")
-		)
-		(pin "2"
-			(uuid "5aeab630-db45-5034-9e07-469f27712133")
-		)
-		(pin "3"
-			(uuid "26b1b1c5-48f5-5cae-b1c7-21e7c0703007")
-		)
-		(instances
-			(project "base"
-				(path "/9b4c2b7d-fa04-53c9-b0c7-6c18a909472b/1db87ff9-7931-5191-874e-3f183651a4c0"
-					(reference "JP5")
 					(unit 1)
 				)
 			)
@@ -20364,10 +20040,6 @@
 	(no_connect
 		(at 193.04 125.73)
 		(uuid "162f2be9-92a8-51a3-8e89-e4dabe044ae1")
-	)
-	(no_connect
-		(at 259.08 100.33)
-		(uuid "b2af498d-6817-5d88-b9c7-83b066283629")
 	)
 	(label "VISO"
 		(at 194.31 107.95 0)
@@ -20897,24 +20569,24 @@
 	(wire
 		(pts
 			(xy 233.68 118.11)
-			(xy 254 118.11)
+			(xy 248.92 118.11)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "98cdc1ee-140d-5052-9f5f-38b7d3207eed")
+		(uuid "a21be72e-203f-5200-9725-f6fefc5657cb")
 	)
 	(wire
 		(pts
-			(xy 254 118.11)
+			(xy 248.92 118.11)
 			(xy 278.13 118.11)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "0afbd71e-77b7-56ec-ba30-e23993e71455")
+		(uuid "6733295d-d050-5e1b-b1f1-4d2b7da96a2f")
 	)
 	(wire
 		(pts
@@ -20951,36 +20623,14 @@
 	)
 	(wire
 		(pts
-			(xy 248.92 115.57)
-			(xy 248.92 110.49)
+			(xy 248.92 123.19)
+			(xy 248.92 118.11)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "5c14d98e-6a3e-5228-ae25-ce803272b6f8")
-	)
-	(wire
-		(pts
-			(xy 248.92 102.87)
-			(xy 248.92 100.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5ddfe0a1-86c7-55de-ba83-2c40915e6000")
-	)
-	(wire
-		(pts
-			(xy 254 104.14)
-			(xy 254 118.11)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "086e5fbf-9544-531a-8996-ed36fe0618e4")
+		(uuid "9aa63a7d-688c-5e9c-b426-2f8638644167")
 	)
 	(wire
 		(pts
@@ -21165,10 +20815,10 @@
 		(uuid "93de4cd4-67ba-57cb-8b30-4ce8cfac17c7")
 	)
 	(junction
-		(at 254 118.11)
+		(at 248.92 118.11)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "f1b5d4a2-5803-59ea-8227-acc67bb9e78a")
+		(uuid "ec1ce9e2-2593-5120-bebd-7b8fd2adb391")
 	)
 	(junction
 		(at 260.35 115.57)

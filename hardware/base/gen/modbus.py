@@ -27,7 +27,8 @@ def modbus(prj):
     s.text("MODBUS RS-485", 20.32, 17.78, 2.54, True)
     s.text("Isolated half-duplex RS-485: the bus side is powered by the DC-DC inside the transceiver (VISO = 3.3 V).\n"
            "Bornier is the master of the line, so it biases it: 370 mV at idle with a 120 ohm termination at each end.\n"
-           "TERM: shunt on 1-2 when Bornier sits at an end of the line. Wiring: D1 (A), D0 (B), common, shield.", 20.32, 25.4)
+           "Termination always fitted (Bornier at an end of the line); a master in the middle: remove it.\n"
+           "Wiring: D1 (A), D0 (B), common, shield.", 20.32, 25.4)
 
     u = on("MB_A", "U")[0]
     cx, cy = 177.8, 116.84
@@ -110,17 +111,11 @@ def modbus(prj):
     vr(s, rb2, ax + 40.64, by + 7.62)
     iso_gnd(s, *s.P(rb2, 2))
     s.quiet.update({"MB_BA", "MB_BB"})
-    # termination: A -> 120 ohm -> switch -> B
-    rt = next(r for r in on("MB_A", "R") if "MB_T" in B[r]["pins"].values())
-    sw = on("MB_T", "JP")[0]
+    # termination: 120 ohm from A to B, always fitted
+    rt = next(r for r in on("MB_A", "R") if "MB_B" in B[r]["pins"].values())
     xt = ax + 55.88
-    s.place(rt, xt, ay - 8.89, rot=180, ref_at=(xt - 6.35, ay - 10.16), val_at=(xt - 6.35, ay - 7.62))
-    s.w("MB_A", (xt, ay), sorted((s.P(rt, 1), s.P(rt, 2)), key=lambda p: p[1])[1])
-    s.place(sw, xt + 5.08, ay - 15.24, rot=0, ref_at=(xt + 2.54, ay - 20.32), val_at=(xt + 2.54, ay - 17.78))
-    s.w("MB_T", sorted((s.P(rt, 1), s.P(rt, 2)), key=lambda p: p[1])[0], (xt, ay - 15.24), s.P(sw, 1))
-    s2 = s.P(sw, 2)
-    s.w("MB_B", s2, (s2[0], by))
-    s.quiet.add("MB_T")
+    vr(s, rt, xt, ay, rot=0 if B[rt]["pins"]["1"] == "MB_A" else 180)
+    s.w("MB_B", s.P(rt, 2 if B[rt]["pins"]["1"] == "MB_A" else 1), (xt, by))
     # clamp
     tv = on("MB_A", "D")[0]
     xc = ax + 76.2

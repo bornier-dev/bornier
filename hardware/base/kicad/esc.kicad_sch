@@ -16861,245 +16861,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Jumper:Jumper_3_Open"
-			(pin_names
-				(offset 0)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom no)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "JP"
-				(at -2.54 -2.54 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "Jumper_3_Open"
-				(at 0 2.794 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 -10.16 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "Jumper, 3-pole, both open"
-				(at 0 -12.7 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property private "KLC_S5.1" "This is a generic symbol, it has fp-filter, but no default footprint"
-				(at 0 -17.78 0)
-				(show_name yes)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property private "KLC_S3.3" "Graphical-Symbol: thickness is 6mm, fill is background"
-				(at -1.27 -20.32 0)
-				(show_name yes)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "Jumper SPDT"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_fp_filters" "Jumper* TestPoint*3Pads* TestPoint*Bridge*"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "Jumper_3_Open_0_0"
-				(circle
-					(center -2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 0 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 2.032 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "Jumper_3_Open_0_1"
-				(arc
-					(start -2.032 1.016)
-					(mid -1.143 1.3235)
-					(end -0.254 1.016)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 -0.508)
-						(xy 0 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0.254 1.016)
-					(mid 1.143 1.3235)
-					(end 2.032 1.016)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "Jumper_3_Open_1_1"
-				(pin passive line
-					(at -5.08 0 0)
-					(length 2.54)
-					(name "A"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -3.81 90)
-					(length 2.54)
-					(name "C"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 2.54)
-					(name "B"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "Diode:SM712_SOT23"
 			(pin_names
 				(offset 1.016)
@@ -25297,7 +25058,7 @@
 			)
 		)
 	)
-	(label "RXPA"
+	(label "RXA_P"
 		(at 271.78 107.95 0)
 		(effects
 			(font
@@ -25305,9 +25066,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "87e71231-bc94-546a-ba25-3680cd0a80bf")
+		(uuid "354c5095-3ed1-5ac4-b20f-b6c63a6a63f2")
 	)
-	(label "RXNA"
+	(label "RXA_N"
 		(at 271.78 123.19 0)
 		(effects
 			(font
@@ -25315,9 +25076,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "d26f7b05-0d45-53d0-bf00-bf63641888f9")
+		(uuid "b1288d2a-4f3b-5f5b-ac40-ec3336dbb564")
 	)
-	(label "TXPA"
+	(label "TXA_P"
 		(at 297.18 107.95 0)
 		(effects
 			(font
@@ -25325,9 +25086,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "cb2caff3-cffb-5af6-8a41-c0c4b78a138d")
+		(uuid "dee39055-d571-5187-b19b-6c37ca3f1b90")
 	)
-	(label "TXNA"
+	(label "TXA_N"
 		(at 297.18 123.19 0)
 		(effects
 			(font
@@ -25335,7 +25096,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "0ed02739-5aa3-58ec-820a-144ba4f8c87e")
+		(uuid "89e9f0d8-a7ab-5051-9e31-75c4d23cf2b0")
 	)
 	(text "IN: port 0 (PHY A)"
 		(exclude_from_sim no)
@@ -26172,7 +25933,7 @@
 			)
 		)
 	)
-	(label "RXPB"
+	(label "RXB_P"
 		(at 271.78 166.37 0)
 		(effects
 			(font
@@ -26180,9 +25941,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "fe95d825-7075-5e6a-a6ed-2479a7340743")
+		(uuid "a8c9ca6e-b049-5cbb-afe1-73090e690e70")
 	)
-	(label "RXNB"
+	(label "RXB_N"
 		(at 271.78 181.61 0)
 		(effects
 			(font
@@ -26190,9 +25951,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "69fa3e32-0538-5081-86c7-fca111695cbb")
+		(uuid "f43823a6-718d-5f17-883a-842b7ed3c9e5")
 	)
-	(label "TXPB"
+	(label "TXB_P"
 		(at 297.18 166.37 0)
 		(effects
 			(font
@@ -26200,9 +25961,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "3d6f63d6-1021-569f-a4d0-86c0870bfe29")
+		(uuid "ff276905-30a8-52cd-9e88-f0e58992f061")
 	)
-	(label "TXNB"
+	(label "TXB_N"
 		(at 297.18 181.61 0)
 		(effects
 			(font
@@ -26210,7 +25971,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "38ad9c17-58be-5406-a71a-1eb0fa0ba43c")
+		(uuid "cebf5b31-d2c1-5deb-a977-b82bbe2b28ad")
 	)
 	(text "OUT: port 1 (PHY B)"
 		(exclude_from_sim no)
@@ -27722,7 +27483,7 @@
 		)
 		(uuid "862e3344-e39e-55ef-8788-3415a06ffa09")
 	)
-	(label "TXNA"
+	(label "TXA_N"
 		(at 276.86 92.71 0)
 		(effects
 			(font
@@ -27730,9 +27491,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "43ab5a6b-d4ce-5102-87b2-509463385270")
+		(uuid "89e77b82-0bba-58f7-97a3-b585e3dfe429")
 	)
-	(label "TXPA"
+	(label "TXA_P"
 		(at 275.59 90.17 0)
 		(effects
 			(font
@@ -27740,9 +27501,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "1e812785-eed9-5152-8182-c1895afde2cd")
+		(uuid "b784f9ac-da1c-5cca-aed2-5e1e922fdaba")
 	)
-	(label "RXNA"
+	(label "RXA_N"
 		(at 274.32 97.79 0)
 		(effects
 			(font
@@ -27750,9 +27511,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "3b3c1bd6-c55b-5394-baad-82aa912db6f6")
+		(uuid "45966748-40a0-5f3d-8d82-12fa3de084be")
 	)
-	(label "RXPA"
+	(label "RXA_P"
 		(at 273.05 95.25 0)
 		(effects
 			(font
@@ -27760,9 +27521,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "c461769c-9a46-54c3-9bc3-295e5a834278")
+		(uuid "516e2efb-1210-5a2e-bc5f-19a19b986c56")
 	)
-	(label "RXPB"
+	(label "RXB_P"
 		(at 276.86 156.21 0)
 		(effects
 			(font
@@ -27770,9 +27531,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "e33969e6-fa80-5a9f-bfda-87a41062fee0")
+		(uuid "be62cb75-abf4-5254-9d68-6e0ca08c013d")
 	)
-	(label "RXNB"
+	(label "RXB_N"
 		(at 275.59 158.75 0)
 		(effects
 			(font
@@ -27780,9 +27541,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "3cb95720-89d2-5c98-bddc-42bfd57cd0bd")
+		(uuid "e142cf8a-7d28-583a-9680-0e953fc696dd")
 	)
-	(label "TXPB"
+	(label "TXB_P"
 		(at 274.32 151.13 0)
 		(effects
 			(font
@@ -27790,9 +27551,9 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "9b926929-2414-55e1-a350-444d6a7922b9")
+		(uuid "c8199386-c9bb-5fd6-8d90-35f22c8dc5eb")
 	)
-	(label "TXNB"
+	(label "TXB_N"
 		(at 273.05 153.67 0)
 		(effects
 			(font
@@ -27800,7 +27561,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "ba4cc307-a8f8-5da1-a22a-9365319839d9")
+		(uuid "c77315a6-c520-5f23-bd3e-eee0e6a7535e")
 	)
 	(label "LINK0"
 		(at 241.3 186.69 0)

@@ -600,14 +600,6 @@ def mcu(prj):
     s.glabel("NRST", xl - 78.74, yn, 180, "bidirectional")
     vpart(s, "C52", xl - 60.96, yn, label_dx=1.905)
     s.rail("GND", *s.P("C52", 2))
-    # ESD array, one channel used: rotated so that channel 1 is on top, ground on the left
-    xp = xl - 68.58
-    s.place("D10", xp - 2.54, yn + 25.4, rot=270, ref_at=(xp + 7.62, yn + 22.86), val_at=(xp + 7.62, yn + 25.4))
-    s.w("NRST", (xp, yn), s.P("D10", 1))
-    nx, ny = s.P("D10", 10)     # flow-through: the NC pin opposite carries the line
-    s.w("NRST", (nx, ny), (nx, ny + 5.08))
-    s.glabel("NRST", nx, ny + 5.08, 270, "bidirectional")
-    s.rail("GND", *s.P("D10", 3))
     yb = P(94)[1]
     s.w("BOOT0", (xl, yb), (xl - 35.56, yb))
     s.place("R45", xl - 27.94, yb + 3.81, ref_at=(xl - 26.035, yb + 2.54), val_at=(xl - 26.035, yb + 5.08))

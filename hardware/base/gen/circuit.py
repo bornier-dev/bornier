@@ -165,7 +165,7 @@ ESC_PINS = {
     58: "VDD33BIAS", 51: "VDD33TXRX1", 64: "VDD33TXRX2", 57: "RBIAS", 8: "CLK25_OFF",
     11: "ESC_RST", 50: "ESC_SCS", 19: "ESC_SCK", 17: "ESC_SIO0", 13: "ESC_SIO1", 12: "ESC_SIO2", 35: "ESC_SIO3",
     44: "ESC_IRQ", 34: "ESC_SYNC0", 18: "ESC_SYNC1", 10: "ESC_WAIT_ACK", 42: "EESDA", 43: "EESCL",
-    53: "TXPA", 52: "TXNA", 55: "RXPA", 54: "RXNA", 62: "TXPB", 63: "TXNB", 60: "RXPB", 61: "RXNB",
+    53: "TXA_P", 52: "TXA_N", 55: "RXA_P", 54: "RXA_N", 62: "TXB_P", 63: "TXB_N", 60: "RXB_P", 61: "RXB_N",
     48: "LINK0", 46: "LINK1", 45: "RUN", 9: "ERR",
 }
 c.part("U4", "Bornier:LAN9253", "LAN9253-I/R4X", None, "C5745149", ESC_PINS,
@@ -235,10 +235,10 @@ RJ = "Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal"
 # (data sheet, key benefits; 100FD straps low): any order is right.
 # The terminations keep their lines whatever the orders (rs on terms).
 for j, port, jack, chans, terms, rail, led, rs, ccap, esd in (
-        ("J3", "IN", ("TXNA", "TXPA", "RXNA", "RXPA"), ("RXPA", "RXNA", "TXPA", "TXNA"),
-         ("TXNA", "TXPA", "RXNA", "RXPA"), "VDD33TXRX1", "LINK0_A", ("R37", "R38", "R39", "R40"), "C35", "U7"),
-        ("J4", "OUT", ("RXPB", "RXNB", "TXPB", "TXNB"), ("RXPB", "RXNB", "TXPB", "TXNB"),
-         ("RXPB", "RXNB", "TXPB", "TXNB"), "VDD33TXRX2", "LINK1_A", ("R41", "R42", "R43", "R44"), "C36", "U8")):
+        ("J3", "IN", ("TXA_N", "TXA_P", "RXA_N", "RXA_P"), ("RXA_P", "RXA_N", "TXA_P", "TXA_N"),
+         ("TXA_N", "TXA_P", "RXA_N", "RXA_P"), "VDD33TXRX1", "LINK0_A", ("R37", "R38", "R39", "R40"), "C35", "U7"),
+        ("J4", "OUT", ("RXB_P", "RXB_N", "TXB_P", "TXB_N"), ("RXB_P", "RXB_N", "TXB_P", "TXB_N"),
+         ("RXB_P", "RXB_N", "TXB_P", "TXB_N"), "VDD33TXRX2", "LINK1_A", ("R41", "R42", "R43", "R44"), "C36", "U8")):
     j1, j2, j3, j6 = jack
     tp, tn, rp, rn = chans
     c.part(j, "Connector:RJ45_Hanrun_HR911105A_Horizontal", f"HY911105AE {port}", RJ, "C69427",
@@ -315,8 +315,6 @@ c.C("C49", "100nF", "VDDA", "GND", note="VDDA (22)")
 c.C("C50", "1µF 50V", "VDDA", "GND", note="VREF+ (21)")
 c.C("C51", "100nF", "VDDA", "GND", note="VREF+ (21)")
 c.C("C52", "100nF", "NRST", "GND", note="At the NRST pin")
-c.part("D10", "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714", {1: "NRST", 10: "NRST", 3: "GND", 8: "GND"},
-       "ESD of NRST, which reaches the debug connector: one channel of the array of the PHY lines (one BOM line less)")
 c.R("R45", "10k", "BOOT0", "GND", note="BOOT0 low: boot from flash")
 c.part("SW1", "Switch:SW_Push", "BOOT", "Bornier:SW_XKB_TS-1187A", "C318884", {1: "+3V3", 2: "BOOT0"},
        "XKB TS-1187A-B-A-B, 5.1 x 5.1 mm: hold it during a reset or power-up to start the system bootloader. "
@@ -354,7 +352,7 @@ class Refs:
 
 ref = Refs(R=54, C=53, D=12, U=10, J=6, Q=1, JP=1, SW=2)
 # 1x3 through-hole header (PZ254V-11-03P, C2937625; 3.6 x 8.7 mm against 7.5 x 8.3 for the SMD one):
-# encoder supply selector, exclusive by construction, and Modbus termination (third position parks the shunt)
+# encoder supply selector, exclusive by construction
 HDR3 = "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 HDR3_LCSC = "C2937625"
 
@@ -602,9 +600,10 @@ c.R(ref("R"), "120", "VISO", "MB_BA", fp=R0603, note="Line bias, 2 x 120 per sid
 c.R(ref("R"), "120", "MB_BA", "MB_A", fp=R0603)
 c.R(ref("R"), "120", "MB_B", "MB_BB", fp=R0603)
 c.R(ref("R"), "120", "MB_BB", "GNDISO", fp=R0603)
-c.part(ref("JP"), "Jumper:Jumper_3_Open", "TERM", HDR3, HDR3_LCSC, {1: "MB_T", 2: "MB_B"},
-       "Shunt on 1-2 when Bornier is at an end of the line; on 2-3: parked")
-c.R(ref("R"), "120", "MB_A", "MB_T", fp=R0603)
+ref("JP")       # reference of the removed termination jumper, kept free so that no other one moves
+c.R(ref("R"), "120", "MB_A", "MB_B", fp=R0603,
+    note="Line termination, always fitted: the master sits at an end of the line. A master in the middle of the "
+         "line: remove this resistor")
 c.part(ref("D"), "Diode:SM712_SOT23", "PSM712-LF-T7", "Package_TO_SOT_SMD:SOT-23", "C32677",
        {1: "MB_A", 2: "MB_B", 3: "GNDISO"}, "-7/+12 V clamp, the RS-485 common-mode range")
 c.part(ref("J"), TB4[0], "MODBUS", TB4[1], TB4[2], {1: "CHASSIS", 2: "GNDISO", 3: "MB_A", 4: "MB_B"},
