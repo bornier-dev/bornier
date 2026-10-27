@@ -724,6 +724,10 @@
       },
       {
         "netclass": "Limited",
+        "pattern": "+VIN_BUS*"
+      },
+      {
+        "netclass": "Limited",
         "pattern": "*/VSD"
       },
       {

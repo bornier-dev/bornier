@@ -364,20 +364,21 @@ HDR3_LCSC = "C2937625"
 DIP4 = "Button_Switch_SMD:SW_DIP_SPSTx04_Slide_KingTek_DSHP04TS_W7.62mm_P1.27mm"
 
 
-def limited_supply(vs, out, rcl, note):
+def limited_supply(vs, out, rcl, note, refs=None):
     """TPS1H000 high-side switch: always on, current limit by rcl, auto-retry.
 
     DIAG_EN low: open-load detection off (it lit the fault output on an empty port); the current
-    limit and thermal protections stay active (TPS1H000-Q1 Table 6-3). FAULT left open."""
-    u = ref("U")
+    limit and thermal protections stay active (TPS1H000-Q1 Table 6-3). FAULT left open.
+    refs: (U, R, R, C, C, C) for a switch added after the board was laid out, so that no other reference moves."""
+    u, rd, rc, c1, c2, c3 = refs or (ref("U"), ref("R"), ref("R"), ref("C"), ref("C"), ref("C"))
     c.part(u, "Bornier:TPS1H000", "TPS1H000AQDGNRQ1", None, "C2653764",
            {8: vs, 7: out, 1: "+3V3", 2: "GND", 5: f"{u}_DLY", 4: f"{u}_CL", 6: "GND", 9: "GND"},
            note)
-    c.R(ref("R"), "10k", f"{u}_DLY", "+3V3", note="DELAY pulled up: auto-retry in current limit")
-    c.R(ref("R"), rcl, f"{u}_CL", "GND", note="I(limit) = 0.8 V x 600 / R(CL)")
-    c.C(ref("C"), "100nF", vs, "GND")
-    c.C(ref("C"), "1µF 50V", vs, "GND", note="Local reserve for the fast trip (< 1 us)")
-    c.C(ref("C"), "1µF 50V", out, "GND", fp=C0603)
+    c.R(rd, "10k", f"{u}_DLY", "+3V3", note="DELAY pulled up: auto-retry in current limit")
+    c.R(rc, rcl, f"{u}_CL", "GND", note="I(limit) = 0.8 V x 600 / R(CL)")
+    c.C(c1, "100nF", vs, "GND")
+    c.C(c2, "1µF 50V", vs, "GND", note="Local reserve for the fast trip (< 1 us)")
+    c.C(c3, "1µF 50V", out, "GND", fp=C0603)
     return u
 
 
@@ -491,14 +492,19 @@ c.part(ref("D"), "Device:D", "1N4148WS", SOD323, "C2128", {1: "PROBE_R", 2: "PRO
 
 # --------------------------------------------------------------------------------------------
 c.block("Local bus: HE10 2x17 ribbon to the extension modules")
-# Pinout of the ribbon (conductor order = pin number): a ground next to SCK and between groups.
-BUS_PINOUT = {1: "GND", 2: "RB_SCK", 3: "GND", 4: "RB_MOSI", 5: "BUS_MISO", 6: "GND", 7: "RB_LATCH",
-              8: "RB_OE", 9: "GND", 10: "BUS_IRQ", 11: "BUS_SDA", 12: "BUS_SCL", 13: "GND",
-              14: "RB_CS0", 15: "RB_CS1", 16: "RB_CS2", 17: "GND", 18: "RB_CS3", 19: "RB_CS4", 20: "RB_CS5",
-              21: "GND", 22: "RB_CS6", 23: "RB_CS7", 24: "RB_CS8", 25: "GND", 26: "RB_CS9", 27: "RB_CS10",
-              28: "RB_CS11", 29: "GND", 30: "+3V3_BUS", 31: "+3V3_BUS", 32: "GND", 33: "GND", 34: "GND"}
+# Pinout of the ribbon (conductor order = pin number). The chip selects first, in order, on consecutive
+# conductors (slow lines, shifted by each module). Then every other line on an even pin, a ground facing it
+# on the odd pin, so a ground or +3V3_BUS on both sides in the ribbon; SPI on the rows facing the MCU.
+# VIN_BUS last, one switch per pin, with a ground as its only neighbour: a conductor it shorts to is a ground.
+BUS_PINOUT = {k + 1: f"RB_CS{k}" for k in range(12)} | {
+    13: "GND", 14: "+3V3_BUS", 15: "GND", 16: "BUS_SDA", 17: "GND", 18: "BUS_SCL", 19: "GND", 20: "RB_SCK",
+    21: "GND", 22: "RB_MOSI", 23: "GND", 24: "BUS_MISO", 25: "GND", 26: "RB_LATCH", 27: "GND", 28: "RB_OE",
+    29: "GND", 30: "BUS_IRQ", 31: "+3V3_BUS", 32: "GND", 33: "+VIN_BUS1", 34: "+VIN_BUS2"}
 c.part(ref("J"), "Connector_Generic:Conn_02x17_Odd_Even", "LOCAL BUS", "Connector_IDC:IDC-Header_2x17_P2.54mm_Vertical",
        "C20920", BUS_PINOUT, "Shrouded, keyed IDC header (no ejector in stock at JLC)")
+for pin, (out, refs) in enumerate((("+VIN_BUS1", ("U302", "R312", "R313", "C313", "C314", "C315")),
+                                   ("+VIN_BUS2", ("U303", "R314", "R315", "C316", "C317", "C318"))), 33):
+    limited_supply("+VIN", out, "1k", f"VIN of the ribbon, pin {pin}: 480 mA limit per conductor", refs)
 u = ref("U")
 c.part(u, "Bornier:TPS2553", "TPS2553DBVR", None, "C55266",
        {1: "+3V3", 3: "+5V", 5: f"{u}_ILIM", 6: "+3V3_BUS", 4: f"{u}_FLT", 2: "GND"},
@@ -523,9 +529,9 @@ c.R(ref("R"), "2.2k", "BUS_SDA", "+3V3", note="I2C at 100 kHz, ribbon and 12 mod
 c.R(ref("R"), "2.2k", "BUS_SCL", "+3V3")
 # ESD of every ribbon signal, at the header: the board has no enclosure and the ribbon is plugged by hand
 # (the order of the lines on the channels follows the board layout)
-for group in (("RB_SCK", "RB_MOSI", "BUS_MISO", "RB_LATCH"), ("BUS_IRQ", "RB_OE", "BUS_SCL", "BUS_SDA"),
-              ("RB_CS0", "RB_CS2", "RB_CS1", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
-              ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11")):
+for group in (("RB_CS0", "RB_CS1", "RB_CS2", "RB_CS3"), ("RB_CS4", "RB_CS5", "RB_CS6", "RB_CS7"),
+              ("RB_CS8", "RB_CS9", "RB_CS10", "RB_CS11"), ("BUS_SDA", "BUS_SCL", "RB_SCK", "RB_MOSI"),
+              ("BUS_MISO", "RB_LATCH", "RB_OE", "BUS_IRQ")):
     c.part(ref("U"), "Power_Protection:TPD4E05U06DQA", "TPD4E05U06DQAR", None, "C138714",
            dict(zip((1, 2, 4, 5), group)) | {3: "GND", 8: "GND"}, "ESD of the ribbon lines, at the HE10, flow-through")
 

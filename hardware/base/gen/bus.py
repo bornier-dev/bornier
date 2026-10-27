@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: CERN-OHL-W-2.0
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
-"""Local bus sheet: HE10 2x17 ribbon to the extension modules (SPI, 12 CS, I2C, IRQ, LATCH, OE).
+"""Local bus sheet: HE10 2x17 ribbon to the extension modules (12 CS, I2C, SPI, LATCH, OE, IRQ, 3.3 V, VIN).
 
 Called by schematic.py; the parts and their connections come from circuit.py.
 """
 from circuit import c
-from motion import on, stub, vr, hr
+from motion import on, stub, vr, hr, limited_supply
 
 SERIES = [f"CS{i}" for i in range(12)] + ["LATCH", "OE", "SCK", "MOSI"]
 PULLED = {f"CS{i}" for i in range(12)} | {"LATCH", "OE", "IRQ", "SDA", "SCL", "SCK", "MOSI"}
@@ -66,7 +66,8 @@ def local_bus(prj):
             s.glabel(net, pt[0] + d, pt[1], 0 if d > 0 else 180, "bidirectional")
         else:
             stub(s, pt, net, d)
-    s.text("Ribbon: conductor n = pin n; a ground next to SCK and between groups.", jx - 25.4, jy + 27.94)
+    s.text("Ribbon: conductor n = pin n. CS0-CS11 on pins 1-12; every other line on an even pin with a ground\n"
+           "facing it; VIN_BUS on pins 33-34, its only neighbour a ground (pin 32).", jx - 25.4, jy + 27.94)
 
     # ESD of the ribbon lines, placed at the header on the board
     esds = [u for u in c.by_ref() if c.by_ref()[u]["value"] == "TPD4E05U06DQAR"
@@ -121,3 +122,12 @@ def local_bus(prj):
     s.w(f"{u}_LED", s.P(d, 2), s.P(rr, 2))
     s.power("+3V3", *s.P(rr, 1), 270)
     s.quiet.update({f"{u}_ILIM", f"{u}_FLT", f"{u}_LED"})
+
+    # VIN of the ribbon: one switch per conductor
+    s.text("+VIN_BUS1, +VIN_BUS2: the supply voltage on ribbon pins 33 and 34, one switch per pin,\n"
+           "480 mA limit each, auto-retry.", ux - 30.48, 111.76)
+    for k, net in enumerate(("+VIN_BUS1", "+VIN_BUS2")):
+        sw = on(net, "U")[0]
+        caps = sorted((r for r in on("+VIN", "C") if c.by_ref()[r]["block"].startswith("Local bus")),
+                      key=lambda r: int(r[1:]))[2 * k:2 * k + 2]
+        limited_supply(s, sw, ux, 134.62 + 40.64 * k, lambda s_, pt: s_.rail("+VIN", *pt, drop=2.54), net, caps)

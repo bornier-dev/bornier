@@ -76,14 +76,15 @@ def instances(s, base, prefix, pinmaps):
     s.repeat([(f"{prefix} {k}", dict(zip(first, c.members(f"{base}{k}"))), pm) for k, pm in enumerate(pinmaps)])
 
 
-def limited_supply(s, u, x, y, vs_draw, out_net):
-    """TPS1H000 block. vs_draw(s, point) draws the supply side of the VS line ending at point."""
+def limited_supply(s, u, x, y, vs_draw, out_net, vs_caps=None):
+    """TPS1H000 block. vs_draw(s, point) draws the supply side of the VS line ending at point.
+    vs_caps: its two VS capacitors, when other switches share its VS net."""
     P = lambda n: s.P(u, n)  # noqa: E731
     s.place(u, x, y, ref_at=(x - 5.08, y - 13.97), val_at=(x - 5.08, y - 11.43))
     r_dly, r_cl = on(f"{u}_DLY", "R")[0], on(f"{u}_CL", "R")[0]
     vs = c.by_ref()[u]["pins"]["8"]
-    c_vs = next(r for r in on(vs, "C") if c.by_ref()[r]["value"] == "100nF")
-    c_vs2 = next(r for r in on(vs, "C") if c.by_ref()[r]["value"] == "1µF 50V")
+    c_vs, c_vs2 = vs_caps or (next(r for r in on(vs, "C") if c.by_ref()[r]["value"] == "100nF"),
+                              next(r for r in on(vs, "C") if c.by_ref()[r]["value"] == "1µF 50V"))
     c_out = on(out_net, "C")[0]
     # VS with its decoupling
     vx, vy = P(8)
