@@ -483,6 +483,17 @@
       "wire_dangling": "error"
     }
   },
+  "kicad_routing_tools": {
+    "fab_floor_origin": {
+      "min_hole_clearance": 0.2,
+      "min_through_hole_diameter": 0.15,
+      "min_track_width": 0.09,
+      "min_via_annular_width": 0.05,
+      "min_via_diameter": 0.25
+    },
+    "records_rev": 2,
+    "same_net_pad_clearance": 0.1
+  },
   "libraries": {
     "pinned_footprint_libs": [],
     "pinned_symbol_libs": []
@@ -509,7 +520,7 @@
         "track_width": 0.09,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -528,7 +539,7 @@
         "track_width": 0.4,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -566,7 +577,7 @@
         "track_width": 0.2,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -585,7 +596,7 @@
         "track_width": 0.25,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -623,7 +634,7 @@
         "track_width": 0.25,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -642,7 +653,7 @@
         "track_width": 0.25,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -661,7 +672,7 @@
         "track_width": 0.265,
         "tuning_profile": "",
         "via_diameter": 0.45,
-        "via_drill": 0.3,
+        "via_drill": 0.2,
         "wire_width": 6
       }
     ],

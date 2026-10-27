@@ -56,3 +56,8 @@
 (rule "Modbus isolation barrier"
 	(condition "((A.NetName == '/Modbus/MB_A' || A.NetName == '/Modbus/MB_B' || A.NetName == '/Modbus/VISO' || A.NetName == 'GNDISO' || A.NetName == 'Net-(JP5-A)' || A.NetName == 'Net-(R242-Pad2)' || A.NetName == 'Net-(R244-Pad2)' || A.NetName == 'unconnected-(JP5-B-Pad3)') && !(B.NetName == '/Modbus/MB_A' || B.NetName == '/Modbus/MB_B' || B.NetName == '/Modbus/VISO' || B.NetName == 'GNDISO' || B.NetName == 'Net-(JP5-A)' || B.NetName == 'Net-(R242-Pad2)' || B.NetName == 'Net-(R244-Pad2)' || B.NetName == 'unconnected-(JP5-B-Pad3)') && B.NetName != '' && B.NetName != 'unconnected-*') || ((B.NetName == '/Modbus/MB_A' || B.NetName == '/Modbus/MB_B' || B.NetName == '/Modbus/VISO' || B.NetName == 'GNDISO' || B.NetName == 'Net-(JP5-A)' || B.NetName == 'Net-(R242-Pad2)' || B.NetName == 'Net-(R244-Pad2)' || B.NetName == 'unconnected-(JP5-B-Pad3)') && !(A.NetName == '/Modbus/MB_A' || A.NetName == '/Modbus/MB_B' || A.NetName == '/Modbus/VISO' || A.NetName == 'GNDISO' || A.NetName == 'Net-(JP5-A)' || A.NetName == 'Net-(R242-Pad2)' || A.NetName == 'Net-(R244-Pad2)' || A.NetName == 'unconnected-(JP5-B-Pad3)') && A.NetName != '' && A.NetName != 'unconnected-*')")
 	(constraint clearance (min 1mm)))
+
+(rule "modbus barrier: the other nets out of the isolated island"
+	(condition "A.intersectsArea('modbus barrier') && !(A.NetName == '/Modbus/MB_A' || A.NetName == '/Modbus/MB_B' || A.NetName == '/Modbus/VISO' || A.NetName == 'GNDISO' || A.NetName == 'Net-(JP5-A)' || A.NetName == 'Net-(R242-Pad2)' || A.NetName == 'Net-(R244-Pad2)' || A.NetName == 'unconnected-(JP5-B-Pad3)' || A.NetName == 'CHASSIS')")
+	(constraint disallow track via))
+
