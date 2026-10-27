@@ -103,7 +103,7 @@ def save(board, path):
         if name != "Default":
             c["priority"] = k
         classes.append(c)
-    ns["classes"] = classes
+    ns["classes"] = sorted(classes, key=lambda c: (c["name"] != "Default", c["name"]))   # KiCad's order
     ns["netclass_patterns"] = [{"netclass": name, "pattern": p} for name, pats in PATTERNS.items() for p in pats]
     with open(pro, "w", encoding="utf-8", newline="\n") as f:
         json.dump(after, f, indent=2, sort_keys=True, ensure_ascii=False)   # as KiCad writes it
