@@ -580,17 +580,24 @@ def mcu(prj):
     for i, ref in enumerate(caps):
         vpart(s, ref, xd + 7.62 + 10.16 * i, yd, label_dx=1.905)
         s.rail("GND", *s.P(ref, 2))
-    # VDDA through its own ferrite; VREF+ tied to VDDA
+    # VDDA through its own ferrite; VREF+ from VDDA through an RC filter (AN5711, 47 ohm option)
     xa = 134.62
     s.place("FB5", xa + 7.62, yd, rot=90, ref_at=(xa + 3.81, yd + 3.81), val_at=(xa + 3.81, yd + 6.35))
     s.w("+3V3", (xa, yd), s.P("FB5", 1))
     s.rail("+3V3", xa, yd)
-    s.w("VDDA", s.P("FB5", 2), (xa + 53.34, yd))
-    s.label("VDDA", xa + 12.7, yd)
-    s.power("PWR_FLAG", xa + 53.34, yd)
-    for i, ref in enumerate(("C48", "C49", "C50", "C51")):
+    for i, ref in enumerate(("C48", "C49")):
         vpart(s, ref, xa + 17.78 + 10.16 * i, yd, label_dx=1.905)
         s.rail("GND", *s.P(ref, 2))
+    hpart(s, "R316", xa + 40.64, yd)
+    s.w("VDDA", s.P("FB5", 2), s.P("R316", 1))
+    s.label("VDDA", xa + 12.7, yd)
+    s.power("PWR_FLAG", xa + 33.02, yd)
+    for i, ref in enumerate(("C50", "C51")):
+        vpart(s, ref, xa + 50.8 + 10.16 * i, yd, label_dx=1.905)
+        s.rail("GND", *s.P(ref, 2))
+    s.w("VREF+", s.P("R316", 2), (xa + 66.04, yd))
+    s.label("VREF+", xa + 45.72, yd)
+    s.power("PWR_FLAG", xa + 66.04, yd)
     s.text("C48, C49 at VDDA (22); C50, C51 at VREF+ (21).", xa, yd + 17.78)
 
     # --- left: NRST, BOOT0, VREF, VCAP, VCP -------------------------------------------------------
@@ -607,8 +614,8 @@ def mcu(prj):
     s.place("SW1", xl - 40.64, yb, ref_at=(xl - 43.18, yb + 3.81), val_at=(xl - 43.18, yb + 6.35))
     s.power("+3V3", *s.P("SW1", 1), 90)
     x, y = P(21)
-    s.w("VDDA", (x, y), (x - 5.08, y))
-    s.label("VDDA", x - 5.08, y)
+    s.w("VREF+", (x, y), (x - 5.08, y))
+    s.label("VREF+", x - 5.08, y)
     x, y = P(20)
     s.w("GND", (x, y), (x - 5.08, y))
     s.power("GND", x - 5.08, y, 270, show=False)

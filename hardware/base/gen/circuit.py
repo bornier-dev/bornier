@@ -289,7 +289,7 @@ MCU_PINS = {
     87: "MB_RX", 88: "BUS_CS10", 89: "SWO", 90: "ENC0_A", 91: "ENC0_B", 92: "BUS_SCL", 93: "BUS_SDA",
     95: "BUS_CS3", 96: "ALM1", 97: "ENC3_Z",
     6: "+3V3", 11: "+3V3", 28: "+3V3", 50: "+3V3", 75: "+3V3", 100: "+3V3", 73: "+3V3",
-    22: "VDDA", 21: "VDDA", 20: "GND", 19: "GND", 10: "GND", 27: "GND", 49: "GND", 74: "GND", 99: "GND",
+    22: "VDDA", 21: "VREF+", 20: "GND", 19: "GND", 10: "GND", 27: "GND", 49: "GND", 74: "GND", 99: "GND",
     48: "VCAP", 98: "VCAP", 94: "BOOT0",
 }
 c.part("U9", "MCU_ST_STM32H5:STM32H523VETx", "STM32H523VET6", None, "C27338462", MCU_PINS,
@@ -312,8 +312,10 @@ c.part("FB5", "Device:FerriteBead_Small", "220R@100MHz", FB, "C80165", {1: "+3V3
        "VDDA separate path from VDD (AN5711 §2.1.1)")
 c.C("C48", "1µF 50V", "VDDA", "GND", note="VDDA (22)")
 c.C("C49", "100nF", "VDDA", "GND", note="VDDA (22)")
-c.C("C50", "1µF 50V", "VDDA", "GND", note="VREF+ (21)")
-c.C("C51", "100nF", "VDDA", "GND", note="VREF+ (21)")
+c.R("R316", "49.9", "VDDA", "VREF+", fp=R0603,
+    note="VREF+ filter from VDDA (AN5711: 47 ohm option); with C50, -3 dB at 3.2 kHz")
+c.C("C50", "1µF 50V", "VREF+", "GND", note="VREF+ (21)")
+c.C("C51", "100nF", "VREF+", "GND", note="VREF+ (21)")
 c.C("C52", "100nF", "NRST", "GND", note="At the NRST pin")
 c.R("R45", "10k", "BOOT0", "GND", note="BOOT0 low: boot from flash")
 c.part("SW1", "Switch:SW_Push", "BOOT", "Bornier:SW_XKB_TS-1187A", "C318884", {1: "+3V3", 2: "BOOT0"},
