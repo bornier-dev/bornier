@@ -112,13 +112,31 @@ def command(port, text: str, timeout: float = 2.0) -> list:
 # ── Capture ────────────────────────────────────────────────────────────────────────────
 
 def read_digital(path: Path):
-    """Saleae binary export of one digital channel: initial state and transition times."""
-    data = path.read_bytes()
-    ident, version, kind, initial, begin, end, count = struct.unpack_from("<8siiIddQ", data, 0)
+    """Saleae binary export of one digital channel: initial state and transition times.
+
+    The times are memory-mapped: a long capture does not have to fit in memory.
+    """
+    header = struct.calcsize("<8siiIddQ")
+    with path.open("rb") as f:
+        ident, version, kind, initial, begin, end, count = struct.unpack("<8siiIddQ", f.read(header))
     if ident != b"<SALEAE>" or kind != 0:
         raise ValueError(f"{path.name}: not a Saleae digital export")
-    times = np.frombuffer(data, dtype="<f8", count=count, offset=struct.calcsize("<8siiIddQ"))
+    times = np.memmap(path, dtype="<f8", mode="r", offset=header, shape=(count,)) if count else np.zeros(0)
     return int(initial), times
+
+
+def count_pulses(step_initial: int, step_times, dir_initial: int, dir_times, chunk: int = 1 << 24):
+    """Pulses (rising edges) of a STEP channel, and their sum signed by DIR, chunk by chunk."""
+    first_rising = 0 if step_initial == 0 else 1
+    dir_times = np.asarray(dir_times)
+    pulses = 0
+    net = 0
+    for start in range(first_rising, len(step_times), 2 * chunk):
+        rise = np.asarray(step_times[start:start + 2 * chunk:2])
+        forward = level_at(dir_initial, dir_times, rise) == 1
+        pulses += len(rise)
+        net += int(forward.sum()) - int((~forward).sum())
+    return pulses, net
 
 
 def edges(initial: int, times):
@@ -143,6 +161,25 @@ class Checker:
         print(("ok    " if ok else "FAIL  ") + text)
         if not ok:
             self.failures.append(text)
+
+
+def analyze_counts(capture_dir: Path, config: dict, derived: dict, axes_report: list, run_args, c: Checker):
+    """Counts and positions only, for long captures."""
+    finish = int(int(run_args.seconds) * 1e9 // int(config["cycle"]))
+    segments = MIXED if config["profile"] == "mixed" else FULL
+    max_steps = int(derived["max_steps"])
+    for a in range(AXES):
+        rep = axes_report[a]
+        i_step, t_step = read_digital(capture_dir / f"digital_{STEP_CHANNELS[a]}.bin")
+        i_dir, t_dir = read_digital(capture_dir / f"digital_{DIR_CHANNELS[a]}.bin")
+        pulses, net = count_pulses(i_step, t_step, i_dir, t_dir)
+        targets = replay(segments[a], max_steps, finish)
+        expected_pulses = int(np.abs(np.diff(np.concatenate(([0], targets)))).sum())
+        final = targets[-1] if targets else 0
+        c.check(pulses == int(rep["pulses"]) == expected_pulses,
+                f"axis {a} pulses: seen {pulses}, board {rep['pulses']}, motion {expected_pulses}")
+        c.check(net == int(rep["position"]) == final == int(rep["target"]),
+                f"axis {a} position: seen {net}, board {rep['position']}, target {rep['target']}, motion {final}")
 
 
 def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, run_args, c: Checker,
@@ -274,11 +311,15 @@ def main() -> int:
                          ("dirsetup", 1000), ("dirhold", 1000), ("detune", 0), ("seconds", 10)):
         parser.add_argument(f"--{key}", type=int, default=default)
     parser.add_argument("--profile", choices=["mixed", "full"], default="mixed")
+    parser.add_argument("--load", choices=["none", "gpdma2", "gpdma1"], default="none",
+                        help="competing memory-to-memory DMA during the run (stands for the slave controller interface)")
+    parser.add_argument("--counts-only", action="store_true",
+                        help="check step counts and positions only, reading the capture in chunks (long runs)")
     args = parser.parse_args()
 
     run = (f"run rate={args.rate} cycle={args.cycle} steplen={args.steplen} stepspace={args.stepspace} "
            f"dirsetup={args.dirsetup} dirhold={args.dirhold} "
-           f"detune={args.detune} profile={args.profile} seconds={args.seconds}")
+           f"detune={args.detune} profile={args.profile} seconds={args.seconds} load={args.load}")
     c = Checker()
     with serial.Serial(args.port, 115200, timeout=0.5) as port, \
             automation.Manager.connect(port=args.logic_port) as manager:
@@ -329,7 +370,10 @@ def main() -> int:
             capture.close()
             sync_line = next(parse_fields(l) for l in report if l.startswith("sync "))
             corrections = [int(v) for v in sync_line["correction"].split(",")]
-            analyze(out, config, derived, axes_report, args, c, max(abs(v) for v in corrections))
+            if args.counts_only:
+                analyze_counts(out, config, derived, axes_report, args, c)
+            else:
+                analyze(out, config, derived, axes_report, args, c, max(abs(v) for v in corrections))
 
     if c.failures:
         print(f"{len(c.failures)} check(s) failed", file=sys.stderr)

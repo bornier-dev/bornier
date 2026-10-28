@@ -15,7 +15,9 @@
 //                        dirsetup=1000 dirhold=1000 (ns)
 //                        detune=0 (ns added to the SYNC0 period, rounded down to 16 ns)
 //                        profile=mixed|full seconds=10
+//                        load=none|gpdma2|gpdma1 (competing memory-to-memory DMA, dma_load.hpp)
 //   report               print the report of the last run, or "busy"
+//   load <controller> <ms>  competing DMA alone, generator stopped: bytes per second
 //   stop                 abort the run
 
 #include <opsy.hpp>
@@ -24,6 +26,7 @@
 #include <clock.hpp>
 #include <uart.hpp>
 
+#include "dma_load.hpp"
 #include "motion.hpp"
 #include "step_generator.hpp"
 #include "sync_simulator.hpp"
@@ -32,6 +35,7 @@
 #include <array>
 #include <atomic>
 #include <charconv>
+#include <chrono>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
@@ -43,12 +47,14 @@ using namespace STM32H563;
 namespace {
 
 constexpr opsy::isr_priority fill_priority{0x20};
+constexpr opsy::isr_priority load_priority{0xC0};
 
 struct run_config
 {
 	step_generator::config generator{};
 	int32_t detune = 0;
 	motion::profile profile = motion::profile::mixed;
+	dma_load::controller load = dma_load::controller::none;
 	uint32_t seconds = 10;
 };
 
@@ -65,6 +71,7 @@ uint32_t profile_cycles_max = 0;
 /// Set by the interrupt when the motion is over and the last steps are played.
 std::atomic<bool> finished{false};
 std::atomic<bool> running{false};
+uint32_t load_blocks = 0; ///< blocks the competing DMA copied during the run
 
 constexpr uint32_t idle_after_done = 20;
 
@@ -120,10 +127,13 @@ void start_run()
 
 	step_generator::start(run.generator, fill_priority);
 	sync_simulator::start(static_cast<uint32_t>(static_cast<int32_t>(run.generator.cycle_ns) + run.detune), 1000);
+	dma_load::start(run.load, load_priority);
 }
 
 void stop_run()
 {
+	load_blocks = dma_load::blocks();
+	dma_load::stop();
 	sync_simulator::stop();
 	step_generator::stop();
 	running.store(false, std::memory_order_relaxed);
@@ -158,6 +168,13 @@ bool parse_option(std::string_view key, std::string_view value, run_config& c)
 	if (key == "dirhold")   return parse_number(value, g.dirhold_ns);
 	if (key == "detune")    return parse_number(value, c.detune);
 	if (key == "seconds")   return parse_number(value, c.seconds);
+	if (key == "load")
+	{
+		if (value == "none")   { c.load = dma_load::controller::none; return true; }
+		if (value == "gpdma2") { c.load = dma_load::controller::on_gpdma2; return true; }
+		if (value == "gpdma1") { c.load = dma_load::controller::on_gpdma1; return true; }
+		return false;
+	}
 	if (key == "profile")
 	{
 		if (value == "mixed") { c.profile = motion::profile::mixed; return true; }
@@ -168,6 +185,7 @@ bool parse_option(std::string_view key, std::string_view value, run_config& c)
 
 constexpr std::array error_names{ "none", "rate", "cycle", "pulse" };
 constexpr std::array profile_names{ "mixed", "full" };
+constexpr std::array load_names{ "none", "gpdma2", "gpdma1" };
 
 void print_config()
 {
@@ -225,6 +243,12 @@ void report()
 		" steps=%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 "\r\n",
 		f[0], f[2], f[3], f[4], f[5], s.fill_max_steps[0], s.fill_max_steps[1], s.fill_max_steps[2], s.fill_max_steps[3]));
 
+	// Bytes per second over the cycles run (one cycle per cycle_ns)
+	uint64_t const run_ns = uint64_t{s.cycles} * run.generator.cycle_ns;
+	auto const load_rate = run_ns == 0 ? 0u : static_cast<uint32_t>(uint64_t{load_blocks} * dma_load::block_bytes * 1'000'000'000u / run_ns);
+	print(std::snprintf(line.data(), line.size(), "load controller=%s blocks=%" PRIu32 " bytes_per_s=%" PRIu32 "\r\n",
+		load_names[static_cast<std::size_t>(run.load)], load_blocks, load_rate));
+
 	print(std::snprintf(line.data(), line.size(), "verdict %s\r\nend\r\n", pass ? "PASS" : "FAIL"));
 }
 
@@ -275,6 +299,27 @@ void handle(std::string_view command)
 			report();
 		}
 	}
+	else if (verb == "load")
+	{
+		// load <controller> <ms>: the competing DMA alone, as a reference
+		std::string_view rest = space == std::string_view::npos ? std::string_view{} : command.substr(space + 1);
+		auto const gap = rest.find(' ');
+		run_config c;
+		uint32_t ms = 0;
+		if (gap == std::string_view::npos || !parse_option("load", rest.substr(0, gap), c) || !parse_number(rest.substr(gap + 1), ms))
+		{
+			print(std::snprintf(line.data(), line.size(), "error load\r\n"));
+			return;
+		}
+		stop_run();
+		dma_load::start(c.load, load_priority);
+		opsy::sleep_for(std::chrono::milliseconds(ms));
+		uint32_t const blocks = dma_load::blocks();
+		dma_load::stop();
+		auto const rate = ms == 0 ? 0u : static_cast<uint32_t>(uint64_t{blocks} * dma_load::block_bytes * 1000u / ms);
+		print(std::snprintf(line.data(), line.size(), "load controller=%s blocks=%" PRIu32 " bytes_per_s=%" PRIu32 "\r\n",
+			load_names[static_cast<std::size_t>(c.load)], blocks, rate));
+	}
 	else if (verb == "stop")
 	{
 		stop_run();
@@ -298,6 +343,8 @@ int main()
 
 	opsy::cortex_m::move_vtor(ram_vectors.data(), ram_vectors.size());
 	opsy::cortex_m::set_isr_handler(TIM5_IRQn, tim5_isr);
+	opsy::cortex_m::set_isr_handler(GPDMA2_CH0_IRQn, dma_load::gpdma2_isr);
+	opsy::cortex_m::set_isr_handler(GPDMA1_CH5_IRQn, dma_load::gpdma1_isr);
 
 	bool const system_ok = console.start([]{
 		std::array<char, 256> command{};
