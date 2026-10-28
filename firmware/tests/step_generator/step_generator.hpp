@@ -150,10 +150,11 @@ public:
 		int32_t correction_min = 0;   ///< slots lengthened (+) or shortened (-) by one tick, per cycle
 		int32_t correction_max = 0;
 		uint32_t dma_errors = 0;      ///< transfer, link or user setting errors on either channel
-		uint32_t fill_cycles_max = 0; ///< CPU cycles of one fill, maximum
+		uint32_t fill_cycles_max = 0; ///< CPU cycles of one fill, maximum, once locked
 		uint32_t fill_max_cycle = 0;  ///< index of the cycle with the longest fill
 		/// Longest fill split: placement and clear, then each axis, in CPU cycles
 		std::array<uint32_t, 2 + axis_count> fill_max_split{};
+		std::array<uint32_t, axis_count> fill_max_steps{}; ///< steps written per axis in that fill
 		uint64_t fill_cycles_sum = 0; ///< CPU cycles of all fills
 		uint32_t fill_end_max = 0;    ///< end of fill, TIM5 ticks after SYNC0, maximum
 		uint32_t position_retries = 0; ///< DMA position readings taken again (FIFO moving, burst in progress)
@@ -311,11 +312,12 @@ public:
 		apply_correction(start, state_.correction);
 
 		std::array<uint32_t, 2 + axis_count> split{};
+		std::array<uint32_t, axis_count> steps{};
 		split[0] = cycle_counter() - t0;
 		for (std::size_t a = 0; a < axis_count; ++a)
 		{
 			auto const ta = cycle_counter();
-			fill_axis(a, start, next[a]);
+			steps[a] = fill_axis(a, start, next[a]);
 			split[2 + a] = cycle_counter() - ta;
 		}
 
@@ -325,12 +327,16 @@ public:
 		state_.next_start = start + n;
 		++stats_.cycles;
 
+		// Statistics once locked: the first cycles run with cold caches and settle the phase
 		auto const elapsed = cycle_counter() - t0;
+		if (state_.cycles_locked < lock_cycles)
+			return true;
 		if (elapsed > stats_.fill_cycles_max)
 		{
 			stats_.fill_cycles_max = elapsed;
 			stats_.fill_max_cycle = stats_.cycles - 1;
 			stats_.fill_max_split = split;
+			stats_.fill_max_steps = steps;
 		}
 		stats_.fill_cycles_sum += elapsed;
 		stats_.fill_end_max = std::max(stats_.fill_end_max, static_cast<uint32_t>(tim5.tim5_cnt.load().cnt()));
@@ -390,14 +396,11 @@ private:
 		uint32_t cycles_locked = 0;
 	};
 
-	/// One slot as the DMA burst writes it: ARR, RCR, CCR1..CCR4.
-	struct slot
-	{
-		uint8_t arr;
-		uint8_t rcr;
-		std::array<uint8_t, axis_count> ccr;
-	};
-	static_assert(sizeof(slot) == slot_bytes);
+	/// Byte offsets in a slot, in the order of the DMA burst: ARR, RCR, CCR1..CCR4.
+	static constexpr uint32_t arr_byte = 0;
+	static constexpr uint32_t ccr_byte = 2;
+	static_assert(ccr_byte + axis_count == slot_bytes);
+	static_assert(2 * slot_bytes % 4 == 0, "two slots are a whole number of words");
 
 	struct lli
 	{
@@ -498,6 +501,7 @@ private:
 		// Channel 2: slot bytes → TIM1_DMAR, one byte read and one word written per request
 		uint32_t const ring_bytes = ring_slots * slot_bytes;
 		step_lli_ = { ring_bytes, address(ring_.data()) };
+		static_assert(sizeof(ring_) == ring_slots * slot_bytes);
 		gpdma1.gpdma_c2tr1 = r::gpdma_cxtr1_r::sdw_log2_f(0) | r::gpdma_cxtr1_r::sinc_f()
 		                   | r::gpdma_cxtr1_r::pam_f(0) | r::gpdma_cxtr1_r::ddw_log2_f(2);
 		gpdma1.gpdma_c2tr2 = r::gpdma_cxtr2_r::reqsel_f(62) | r::gpdma_cxtr2_r::dreq_f(); // tim1_upd_dma
@@ -684,7 +688,7 @@ private:
 	/// Length of a slot in kernel ticks, from its ARR byte.
 	static uint32_t slot_length(uint32_t slot)
 	{
-		return (uint32_t{ring_[wrap(slot)].arr} + 1) * d_.prescaler;
+		return (uint32_t{bytes()[wrap(slot) * slot_bytes + arr_byte]} + 1) * d_.prescaler;
 	}
 
 	/// Lengthens (correction > 0) or shortens |correction| slots of a cycle by one tick, evenly.
@@ -696,26 +700,53 @@ private:
 		auto const arr = static_cast<uint8_t>(correction > 0 ? d_.slot_ticks : d_.slot_ticks - 2);
 		uint32_t const n = d_.cycle_slots;
 		for (uint32_t i = 0; i < count; ++i)
-			ring_[wrap(start + i * n / count)].arr = arr;
+			bytes()[wrap(start + i * n / count) * slot_bytes + arr_byte] = arr;
 	}
 
 	/// Empty slots of nominal length.
 	static void clear_slots(uint32_t start, uint32_t count)
 	{
-		slot const empty{ static_cast<uint8_t>(d_.slot_ticks - 1), 0, {} };
-		for (uint32_t s = start; s != start + count; ++s)
-			ring_[wrap(s)] = empty;
+		// Two slots are 12 bytes, three aligned words: slot pairs are written as words (little
+		// endian ARR, RCR, CCR1..CCR4 twice), single slots at the ends as bytes. Copying a slot
+		// as a 6-byte struct went through the stack with unaligned stores: 18 cycles per slot.
+		auto const arr = static_cast<uint8_t>(d_.slot_ticks - 1);
+		auto const clear_one = [arr](uint32_t slot)
+		{
+			uint8_t* const b = bytes() + wrap(slot) * slot_bytes;
+			b[arr_byte] = arr;
+			for (uint32_t i = 1; i < slot_bytes; ++i)
+				b[i] = 0;
+		};
+		uint32_t s = start;
+		uint32_t const end = start + count;
+		if ((s & 1u) != 0 && s != end)
+			clear_one(s++);
+		uint32_t const first_word = arr;
+		uint32_t const second_word = uint32_t{arr} << 16;
+		for (; end - s >= 2; s += 2)
+		{
+			uint32_t* const pair = ring_.data() + wrap(s) / 2 * 3;
+			pair[0] = first_word;
+			pair[1] = second_word;
+			pair[2] = 0;
+		}
+		if (s != end)
+			clear_one(s);
 	}
+
+	/// The ring as bytes: six per slot.
+	static uint8_t* bytes() { return reinterpret_cast<uint8_t*>(ring_.data()); }
 
 	static constexpr uint32_t wrap(uint32_t slot) { return slot & (ring_slots - 1); }
 
-	static void fill_axis(std::size_t a, uint32_t start, int32_t target)
+	/// Writes the steps of axis @p a for the cycle at @p start; returns how many.
+	static uint32_t fill_axis(std::size_t a, uint32_t start, int32_t target)
 	{
 		auto& st = stats_.axes[a];
 		auto& ax = state_.axes[a];
 		int32_t const wanted = target - st.position;
 		if (wanted == 0)
-			return;
+			return 0;
 
 		bool const forward = wanted > 0;
 		bool const reverse = forward != ax.forward;
@@ -745,14 +776,21 @@ private:
 		uint32_t const remainder = (usable - ax.acc - 1) % steps;
 		uint32_t const gap = d_.gap_slots;
 		walk_state w{ quotient, remainder, ax.has_last ? ax.last_step : first - gap, 0 };
-		walk_params const p{ &ring_[0].ccr[channel_of_axis[a]], first, end, steps, step_quotient, step_remainder,
+		walk_params const p{ bytes() + ccr_byte + channel_of_axis[a], first, end, steps, step_quotient, step_remainder,
 		                     gap, d_.pulse_slots - 1, static_cast<uint8_t>(d_.pulse_last) };
 		// Fast path when no check is needed: the first step clears the previous cycle by the
 		// minimum gap, and steps x gap <= usable, so that the walk spaces steps by at least
 		// floor(usable / steps) >= gap and its last step lands before the end.
 		bool const fast = static_cast<int32_t>(first + quotient - (w.last + gap)) >= 0 && uint32_t{steps} * gap <= usable;
-		if (p.continued == 0)
-			w = fast ? walk<false, false>(p, w) : walk<false, true>(p, w);
+		if (fast && p.continued == 0)
+		{
+			// The common case, kept out of line: see walk_fast
+			uint32_t const end_quotient = walk_fast(p.column, first, steps, quotient, remainder,
+			                                        step_quotient, step_remainder, p.pulse_last);
+			w = { end_quotient, 0, first + end_quotient - step_quotient - 1, steps };
+		}
+		else if (p.continued == 0)
+			w = walk<false, true>(p, w);
 		else
 			w = fast ? walk<true, false>(p, w) : walk<true, true>(p, w);
 		uint32_t const emitted = w.emitted;
@@ -762,6 +800,7 @@ private:
 			++st.deferred;
 		st.pulses += emitted;
 		st.position += forward ? static_cast<int32_t>(emitted) : -static_cast<int32_t>(emitted);
+		return emitted;
 	}
 
 	struct walk_params
@@ -784,6 +823,34 @@ private:
 		uint32_t last;      ///< slot of the last step written
 		uint32_t emitted;
 	};
+
+	/**
+	 * @brief Writes the steps of one axis for one cycle: single-slot pulses, no check needed.
+	 *
+	 *        The loop that runs at full speed. Out of line and with scalar parameters, so that
+	 *        its eight values stay in registers: inlined in fill_axis with the other walks, -Os
+	 *        ran out of registers and reloaded three of them from the stack on every step.
+	 *
+	 * @return the quotient after the last step (slot of the step that would come next, from
+	 *         @p first)
+	 */
+	[[gnu::noinline]] static uint32_t walk_fast(uint8_t* const column, uint32_t const first, uint32_t const steps,
+	                                            uint32_t quotient, uint32_t remainder, uint32_t const step_quotient,
+	                                            uint32_t const step_remainder, uint8_t const pulse)
+	{
+		for (uint32_t j = 0; j < steps; ++j)
+		{
+			column[wrap(first + quotient) * slot_bytes] = pulse;
+			quotient += step_quotient;
+			remainder += step_remainder;
+			if (remainder >= steps)
+			{
+				remainder -= steps;
+				++quotient;
+			}
+		}
+		return quotient;
+	}
 
 	/**
 	 * @brief Writes the steps of one axis for one cycle.
@@ -862,7 +929,8 @@ private:
 	static run_state state_;
 	static inline uint32_t dir_bits_ = 0; ///< bit a: axis a forward (DIR high)
 
-	alignas(4) static inline std::array<slot, ring_slots> ring_{};
+	/// Slots, six bytes each, stored as words so that slot pairs can be cleared word by word.
+	static inline std::array<uint32_t, ring_slots * slot_bytes / 4> ring_{};
 	alignas(4) static inline std::array<uint32_t, dir_ring_words> dir_ring_{};
 	alignas(4) static inline lli step_lli_{};
 	alignas(4) static inline lli dir_lli_{};

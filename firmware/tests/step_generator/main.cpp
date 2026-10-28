@@ -221,8 +221,9 @@ void report()
 
 	auto const& f = s.fill_max_split;
 	print(std::snprintf(line.data(), line.size(),
-		"split place=%" PRIu32 " axis0=%" PRIu32 " axis1=%" PRIu32 " axis2=%" PRIu32 " axis3=%" PRIu32 "\r\n",
-		f[0], f[2], f[3], f[4], f[5]));
+		"split place=%" PRIu32 " axis0=%" PRIu32 " axis1=%" PRIu32 " axis2=%" PRIu32 " axis3=%" PRIu32
+		" steps=%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 "\r\n",
+		f[0], f[2], f[3], f[4], f[5], s.fill_max_steps[0], s.fill_max_steps[1], s.fill_max_steps[2], s.fill_max_steps[3]));
 
 	print(std::snprintf(line.data(), line.size(), "verdict %s\r\nend\r\n", pass ? "PASS" : "FAIL"));
 }
