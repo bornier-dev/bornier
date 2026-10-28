@@ -231,6 +231,7 @@ public:
 	static void start(config const& c, opsy::isr_priority fill_priority)
 	{
 		stop();
+		(void)opsy::cortex_m::enable_cycle_count(); // fill statistics
 		config_ = c;
 		(void)derive(c, d_);
 		stats_ = {};
@@ -346,27 +347,13 @@ public:
 	[[nodiscard]] static stats const& statistics() { return stats_; }
 	[[nodiscard]] static derived const& values() { return d_; }
 
-	/// DWT cycle counter (opsy::cortex_m::cycle_count), once enabled by enable_cycle_counter().
+	/// DWT cycle counter, started by start().
 	static uint32_t cycle_counter()
 	{
 		return opsy::cortex_m::cycle_count();
 	}
 
-	/// Starts the DWT cycle counter. OpSy reads it but does not enable it yet: until a debugger
-	/// enables it, it does not count after a reset.
-	static void enable_cycle_counter()
-	{
-		auto& demcr = *reinterpret_cast<volatile uint32_t*>(scb_demcr);
-		auto& ctrl = *reinterpret_cast<volatile uint32_t*>(dwt_ctrl);
-		demcr = demcr | (1u << 24); // TRCENA
-		ctrl = ctrl | 1u;            // CYCCNTENA
-	}
-
 private:
-
-	// Core debug registers that enable the cycle counter: not in the device SVD nor in OpSy.
-	static constexpr uint32_t scb_demcr = 0xE000EDFCu;
-	static constexpr uint32_t dwt_ctrl = 0xE0001000u;
 
 	/// Byte of each axis in a slot: CCR1..CCR4 order of the DMA burst.
 	static constexpr std::array<std::size_t, axis_count> channel_of_axis{ 0, 3, 2, 1 };

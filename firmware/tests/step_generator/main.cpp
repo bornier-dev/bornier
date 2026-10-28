@@ -339,7 +339,6 @@ int main()
 {
 	clock::init();
 	uart::init();
-	step_generator::enable_cycle_counter();
 
 	opsy::cortex_m::move_vtor(ram_vectors.data(), ram_vectors.size());
 	opsy::cortex_m::set_isr_handler(TIM5_IRQn, tim5_isr);
