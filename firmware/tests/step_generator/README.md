@@ -32,7 +32,15 @@ A wire takes the simulated SYNC0 from PB8 (TIM16_CH1, CN7-2, D15) to PA4 (CN11-3
 ```sh
 python3 tools/hil/step_generator.py --port /dev/ttyACM0 --seconds 10
 python3 tools/hil/step_generator.py --port /dev/ttyACM0 --profile full --seconds 10
+python3 tools/hil/step_generator.py --port /dev/ttyACM0 --speed 800 --drop-every 97 --drop-burst 3
+python3 tools/hil/step_generator.py --port /dev/ttyACM0 --speed 800 --outage 3000 --outage-len 50
 ```
+
+The last two lose frames: isolated or in bursts within the tolerance (extrapolated), then an
+outage that faults the generator (ramp down, hold) until the simulated master acknowledges and
+resumes from where the axes stopped (`--rebase 0`: it does not, and its targets are refused).
+`--speed 800` runs the motion at 80 % of the maximum, so that catching up after extrapolated
+frames fits in a cycle.
 
 `--help` lists the generator settings (`--rate`, `--steplen`, `--dirsetup`...) and
 `--detune`, which shifts the SYNC0 period (in ns) to play the drift of the distributed clock:

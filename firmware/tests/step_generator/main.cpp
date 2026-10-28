@@ -16,6 +16,14 @@
 //                        detune=0 (ns added to the SYNC0 period, rounded down to 16 ns)
 //                        profile=mixed|full seconds=10
 //                        load=none|gpdma2|gpdma1 (competing memory-to-memory DMA, dma_load.hpp)
+//                        tolerance=3 (missed cycles extrapolated) decel=0 (stop deceleration,
+//                        steps/s^2, all axes; 0: f_max to rest in 100 ms)
+//                        drop_every=0 drop_burst=1: from cycle drop_every on, the first
+//                        drop_burst cycles of every drop_every are missed
+//                        outage=0 outage_len=0: cycles [outage, outage + outage_len) missed
+//                        speed=1000: profile velocities in thousandths of the maximum
+//                        rebase=1: after a fault, the simulated master acknowledges and resumes
+//                        from the position the axes stopped at (0: it does not, targets refused)
 //   report               print the report of the last run, or "busy"
 //   load <controller> <ms>  competing DMA alone, generator stopped: bytes per second
 //   stop                 abort the run
@@ -56,13 +64,21 @@ struct run_config
 	motion::profile profile = motion::profile::mixed;
 	dma_load::controller load = dma_load::controller::none;
 	uint32_t seconds = 10;
+	uint32_t drop_every = 0;
+	uint32_t drop_burst = 1;
+	uint32_t outage = 0;
+	uint32_t outage_len = 0;
+	uint32_t rebase = 1;
+	uint32_t speed = 1000; ///< profile velocities, thousandths of max_steps
 };
 
 // ── Run, shared with the fill interrupt ───────────────────────────────────────
 
 run_config run;
 std::array<motion::axis, step_generator::axis_count> axes;
-std::array<int32_t, step_generator::axis_count> targets{};
+std::array<int32_t, step_generator::axis_count> targets{}; ///< of the simulated master, offset included
+std::array<int32_t, step_generator::axis_count> offsets{}; ///< master resumed from where the axes stopped
+bool acknowledged = false; ///< the simulated master acknowledged the current fault
 uint32_t run_cycles = 0;    ///< cycles of motion so far
 uint32_t finish_cycles = 0; ///< cycles after which the axes finish their loop
 uint32_t idle_cycles = 0;   ///< cycles at rest after every axis is done
@@ -75,6 +91,14 @@ uint32_t load_blocks = 0; ///< blocks the competing DMA copied during the run
 
 constexpr uint32_t idle_after_done = 20;
 
+/// Frames the simulated network loses: tools/hil/step_generator.py replays the same rule.
+bool missed(uint32_t cycle)
+{
+	bool const dropped = run.drop_every != 0 && cycle >= run.drop_every && cycle % run.drop_every < run.drop_burst;
+	bool const outage = run.outage_len != 0 && cycle >= run.outage && cycle < run.outage + run.outage_len;
+	return dropped || outage;
+}
+
 void tim5_isr()
 {
 	(void)step_generator::fill([]{
@@ -83,14 +107,32 @@ void tim5_isr()
 		bool all_done = true;
 		for (std::size_t a = 0; a < axes.size(); ++a)
 		{
-			targets[a] = axes[a].next(finish);
+			targets[a] = axes[a].next(finish) + offsets[a];
 			all_done &= axes[a].done();
 		}
+		bool const lost = missed(run_cycles);
 		++run_cycles;
 		if (all_done && ++idle_cycles == idle_after_done)
 			finished.store(true, std::memory_order_release);
+
+		// A master that sees the axes at rest in fault acknowledges once, and with rebase
+		// resumes from where they stopped
+		if (step_generator::state() != step_generator::mode::faulted)
+			acknowledged = false;
+		else if (!lost && !acknowledged)
+		{
+			acknowledged = true;
+			step_generator::acknowledge();
+			if (run.rebase != 0)
+				for (std::size_t a = 0; a < axes.size(); ++a)
+				{
+					int32_t const stop = step_generator::statistics().axes[a].target;
+					offsets[a] += stop - targets[a];
+					targets[a] = stop;
+				}
+		}
 		profile_cycles_max = std::max(profile_cycles_max, step_generator::cycle_counter() - t0);
-		return targets;
+		return step_generator::command{ !lost, targets };
 	});
 }
 
@@ -101,7 +143,7 @@ void start_run()
 
 	step_generator::derived d;
 	(void)step_generator::derive(run.generator, d);
-	auto const vmax = static_cast<int64_t>(d.max_steps);
+	auto const vmax = static_cast<int64_t>(d.max_steps) * run.speed / 1000;
 	switch (run.profile)
 	{
 	case motion::profile::mixed:
@@ -118,6 +160,8 @@ void start_run()
 		break;
 	}
 	targets = {};
+	offsets = {};
+	acknowledged = false;
 	run_cycles = 0;
 	idle_cycles = 0;
 	profile_cycles_max = 0;
@@ -168,6 +212,21 @@ bool parse_option(std::string_view key, std::string_view value, run_config& c)
 	if (key == "dirhold")   return parse_number(value, g.dirhold_ns);
 	if (key == "detune")    return parse_number(value, c.detune);
 	if (key == "seconds")   return parse_number(value, c.seconds);
+	if (key == "tolerance") return parse_number(value, g.missed_tolerance);
+	if (key == "decel")
+	{
+		uint32_t v = 0;
+		if (!parse_number(value, v))
+			return false;
+		g.stop_decel.fill(v);
+		return true;
+	}
+	if (key == "drop_every") return parse_number(value, c.drop_every);
+	if (key == "drop_burst") return parse_number(value, c.drop_burst);
+	if (key == "outage")     return parse_number(value, c.outage);
+	if (key == "outage_len") return parse_number(value, c.outage_len);
+	if (key == "rebase")     return parse_number(value, c.rebase);
+	if (key == "speed")      return parse_number(value, c.speed);
 	if (key == "load")
 	{
 		if (value == "none")   { c.load = dma_load::controller::none; return true; }
@@ -203,6 +262,11 @@ void print_config()
 		" fill_ticks=%" PRIu32 " max_steps=%" PRIu32 "\r\n",
 		d.prescaler, d.slot_ticks, d.cycle_slots, d.pulse_ticks, d.pulse_slots, d.gap_slots,
 		d.dir_ticks, d.guard_slots, d.fill_ticks, d.max_steps));
+	print(std::snprintf(line.data(), line.size(),
+		"frames tolerance=%" PRIu32 " decel=%" PRIu32 " stop_step=%" PRId32 " drop_every=%" PRIu32
+		" drop_burst=%" PRIu32 " outage=%" PRIu32 " outage_len=%" PRIu32 " rebase=%" PRIu32 " speed=%" PRIu32 "\r\n",
+		g.missed_tolerance, g.stop_decel[0], static_cast<int32_t>(d.stop_step_x65536[0]), run.drop_every,
+		run.drop_burst, run.outage, run.outage_len, run.rebase, run.speed));
 }
 
 void report()
@@ -214,11 +278,13 @@ void report()
 	for (std::size_t a = 0; a < s.axes.size(); ++a)
 	{
 		auto const& x = s.axes[a];
-		pass &= x.position == targets[a] && x.deferred == 0;
+		// With frames missed, catching up after an extrapolation may need more steps than a cycle
+		// holds: they are deferred, not lost (the logic analyzer checks the counts)
+		pass &= x.position == x.target && (x.deferred == 0 || s.missed != 0);
 		print(std::snprintf(line.data(), line.size(),
 			"axis %u target=%" PRId32 " position=%" PRId32 " pulses=%" PRIu32 " deferred=%" PRIu32
-			" reversals=%" PRIu32 "\r\n",
-			static_cast<unsigned>(a), targets[a], x.position, x.pulses, x.deferred, x.reversals));
+			" reversals=%" PRIu32 " master=%" PRId32 "\r\n",
+			static_cast<unsigned>(a), x.target, x.position, x.pulses, x.deferred, x.reversals, targets[a]));
 	}
 
 	uint32_t const cycle_ticks = run.generator.cycle_ns / 4u;
@@ -229,6 +295,11 @@ void report()
 		" dma_errors=%" PRIu32 " position_retries=%" PRIu32 "\r\n",
 		s.cycles, s.unsynced, s.resyncs, s.phase_min, s.phase_max, s.correction_min, s.correction_max,
 		s.dma_errors, s.position_retries));
+	constexpr std::array mode_names{ "running", "stopping", "faulted" };
+	print(std::snprintf(line.data(), line.size(),
+		"missed count=%" PRIu32 " extrapolated=%" PRIu32 " faults=%" PRIu32 " refused=%" PRIu32 " state=%s\r\n",
+		s.missed, s.extrapolated, s.faults, s.refused,
+		mode_names[static_cast<std::size_t>(step_generator::state())]));
 
 	auto const mean = s.cycles == 0 ? 0u : static_cast<uint32_t>(s.fill_cycles_sum / s.cycles);
 	print(std::snprintf(line.data(), line.size(),

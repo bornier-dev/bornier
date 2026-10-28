@@ -34,6 +34,13 @@
  *   The step count of the next cycle is the target minus the position already scheduled, so a
  *   step that did not fit is emitted in the following cycle and the position never drifts.
  *
+ * @par Missed frames
+ *   A cycle whose target did not arrive is extrapolated at the last velocity of each axis, up
+ *   to missed_tolerance cycles in a row. One more and the generator faults: every axis ramps
+ *   down to rest at its stop deceleration, then holds. It takes targets again only once
+ *   acknowledge() was called and only from a target one cycle away at most from where the axes
+ *   stand: the master resumes from the actual position, never with a jump.
+ *
  * @par Resources (same as the Bornier base board)
  *   | Axis | STEP          | DIR  |
  *   |------|---------------|------|
@@ -56,6 +63,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 
@@ -105,6 +113,23 @@ public:
 		uint32_t stepspace_ns = 500;       ///< STEP low time between two steps
 		uint32_t dirsetup_ns = 1000;       ///< DIR stable before the first step
 		uint32_t dirhold_ns = 1000;        ///< DIR stable after the last step
+		uint32_t missed_tolerance = 3;     ///< missed cycles in a row extrapolated before the fault
+		/// Stop deceleration per axis, steps/s^2; 0: from f_max to rest in 100 ms
+		std::array<uint32_t, axis_count> stop_decel{};
+	};
+
+	/// Targets of one cycle, as they came: not received when the frame was missed.
+	struct command
+	{
+		bool received = false;
+		std::array<int32_t, axis_count> targets{};
+	};
+
+	enum class mode : uint8_t
+	{
+		running,  ///< following the targets, extrapolating missed ones within the tolerance
+		stopping, ///< fault: ramping down to rest
+		faulted,  ///< fault: at rest, waiting for acknowledge() and a reachable target
 	};
 
 	/// Values derived from a config; all times in timer ticks or slots.
@@ -121,6 +146,8 @@ public:
 		uint32_t guard_slots = 0;    ///< slots kept empty after SYNC0 on a direction change
 		uint32_t fill_ticks = 0;     ///< fill interrupt, TIM5 ticks after SYNC0
 		uint32_t max_steps = 0;      ///< steps per cycle an axis can take without reversal
+		/// Velocity drop per cycle at the stop deceleration, steps per cycle x 65536
+		std::array<int64_t, axis_count> stop_step_x65536{};
 	};
 
 	enum class error
@@ -134,6 +161,7 @@ public:
 	struct axis_stats
 	{
 		int32_t position = 0;   ///< steps scheduled, signed (all of them are played)
+		int32_t target = 0;     ///< target followed: received, extrapolated or ramping down
 		uint32_t pulses = 0;    ///< steps scheduled, both directions
 		uint32_t deferred = 0;  ///< cycles that could not take all the requested steps
 		uint32_t reversals = 0; ///< direction changes
@@ -145,6 +173,10 @@ public:
 		uint32_t cycles = 0;          ///< cycles filled
 		uint32_t unsynced = 0;        ///< fill interrupts without a SYNC0 since the previous one
 		uint32_t resyncs = 0;         ///< phase lost by more than half a cycle: grid locked again
+		uint32_t missed = 0;          ///< cycles whose target did not arrive
+		uint32_t extrapolated = 0;    ///< of those, extrapolated within the tolerance
+		uint32_t faults = 0;          ///< tolerance exceeded: ramp down, then hold
+		uint32_t refused = 0;         ///< targets refused after a fault: no acknowledge, or too far
 		int32_t phase_min = 0;        ///< phase error once locked, timer kernel ticks (4 ns)
 		int32_t phase_max = 0;
 		int32_t correction_min = 0;   ///< slots lengthened (+) or shortened (-) by one tick, per cycle
@@ -216,6 +248,14 @@ public:
 		if (reserved + d.gap_slots >= d.cycle_slots)
 			return error::pulse;
 		d.max_steps = (d.cycle_slots - reserved) / d.gap_slots;
+
+		// a x T^2 in steps per cycle, x 65536 = a x cycle_us^2 x 65536 / 10^12 = a x cycle_us^2 x 16 / 5^12
+		uint64_t const cycle_us = c.cycle_ns / 1000u;
+		for (std::size_t a = 0; a < axis_count; ++a)
+		{
+			uint64_t const decel = c.stop_decel[a] != 0 ? c.stop_decel[a] : uint64_t{c.slot_rate_hz} * 10u;
+			d.stop_step_x65536[a] = static_cast<int64_t>(std::max<uint64_t>(1, decel * cycle_us * cycle_us * 16u / 244'140'625u));
+		}
 		out = d;
 		return error::none;
 	}
@@ -236,6 +276,8 @@ public:
 		(void)derive(c, d_);
 		stats_ = {};
 		state_ = {};
+		follow_ = {};
+		acknowledged_.store(false, std::memory_order_relaxed);
 		clear_slots(0, ring_slots);
 		dir_bits_ = (1u << axis_count) - 1; // all forward, as axis_state::forward
 		for (auto& w : dir_ring_)
@@ -285,10 +327,10 @@ public:
 	/**
 	 * @brief TIM5 interrupt: fills the next cycle.
 	 *
-	 * @param targets callable returning the target position of each axis at the end of the
-	 *        next cycle, in steps (std::array<int32_t, axis_count>). Called once per SYNC0;
-	 *        the steps of the next cycle are the target minus the position already scheduled.
-	 *        Its run time is not counted in the fill statistics.
+	 * @param targets callable returning the command of the next cycle (command): the target
+	 *        position of each axis at the end of it, in steps, or not received. Called once per
+	 *        SYNC0; the steps of the next cycle are the target followed minus the position
+	 *        already scheduled. Its run time is not counted in the fill statistics.
 	 * @return false when the interrupt was not a fill (no SYNC0 since the previous one).
 	 */
 	template<typename TTargets>
@@ -301,8 +343,12 @@ public:
 			++stats_.unsynced;
 			return false;
 		}
-		std::array<int32_t, axis_count> const next = targets();
+		command const received = targets();
 		auto const t0 = cycle_counter();
+		follow(received);
+		std::array<int32_t, axis_count> next{};
+		for (std::size_t a = 0; a < axis_count; ++a)
+			next[a] = stats_.axes[a].target;
 
 		check_dma_errors();
 		lock_phase();
@@ -344,6 +390,11 @@ public:
 		return true;
 	}
 
+	/// After a fault, lets the generator take targets again (from a reachable one).
+	static void acknowledge() { acknowledged_.store(true, std::memory_order_release); }
+
+	[[nodiscard]] static mode state() { return follow_.state; }
+
 	[[nodiscard]] static stats const& statistics() { return stats_; }
 	[[nodiscard]] static derived const& values() { return d_; }
 
@@ -361,6 +412,107 @@ private:
 	static constexpr std::array<uint32_t, axis_count> dir_pin{ 10, 15, 12, 8 };
 
 	static constexpr uint32_t dir_ring_words = 4;
+
+	/// Missed-frame handling: what the axes follow.
+	struct follow_state
+	{
+		mode state = mode::running;
+		uint32_t missed_in_row = 0;
+		std::array<int32_t, axis_count> velocity{};    ///< last received target step, steps per cycle
+		std::array<int64_t, axis_count> ramp_position{}; ///< x 65536, while stopping
+		std::array<int64_t, axis_count> ramp_velocity{}; ///< x 65536, while stopping
+	};
+
+	/**
+	 * @brief Sets the target of each axis for the next cycle from the command received.
+	 *
+	 *        running: a received target is followed and its step from the previous target kept
+	 *        as the velocity; a missed one is extrapolated at that velocity, up to
+	 *        missed_tolerance in a row, then the fault starts. stopping: every axis loses
+	 *        stop_step_x65536 of velocity per cycle until rest. faulted: the target holds until
+	 *        acknowledge() and a received target within max_steps of it on every axis.
+	 */
+	static void follow(command const& received)
+	{
+		auto& f = follow_;
+		auto& axes = stats_.axes;
+		if (!received.received)
+			++stats_.missed;
+
+		switch (f.state)
+		{
+		case mode::running:
+			if (received.received)
+			{
+				f.missed_in_row = 0;
+				for (std::size_t a = 0; a < axis_count; ++a)
+				{
+					f.velocity[a] = received.targets[a] - axes[a].target;
+					axes[a].target = received.targets[a];
+				}
+				return;
+			}
+			if (++f.missed_in_row <= config_.missed_tolerance)
+			{
+				++stats_.extrapolated;
+				for (std::size_t a = 0; a < axis_count; ++a)
+					axes[a].target += f.velocity[a];
+				return;
+			}
+			// Fault: ramp down from the last velocity, starting with this cycle
+			++stats_.faults;
+			f.state = mode::stopping;
+			for (std::size_t a = 0; a < axis_count; ++a)
+			{
+				f.ramp_position[a] = int64_t{axes[a].target} * 65536;
+				f.ramp_velocity[a] = int64_t{f.velocity[a]} * 65536;
+			}
+			[[fallthrough]];
+
+		case mode::stopping:
+		{
+			bool at_rest = true;
+			for (std::size_t a = 0; a < axis_count; ++a)
+			{
+				auto& v = f.ramp_velocity[a];
+				auto const drop = d_.stop_step_x65536[a];
+				v = v > 0 ? std::max<int64_t>(0, v - drop) : std::min<int64_t>(0, v + drop);
+				f.ramp_position[a] += v;
+				axes[a].target = static_cast<int32_t>(f.ramp_position[a] >> 16);
+				at_rest &= v == 0;
+			}
+			if (at_rest)
+				f.state = mode::faulted;
+			return;
+		}
+
+		case mode::faulted:
+		{
+			if (!received.received)
+				return;
+			bool reachable = acknowledged_.load(std::memory_order_acquire);
+			for (std::size_t a = 0; a < axis_count; ++a)
+			{
+				int32_t const step = received.targets[a] - axes[a].target;
+				reachable &= step <= static_cast<int32_t>(d_.max_steps) && step >= -static_cast<int32_t>(d_.max_steps);
+			}
+			if (!reachable)
+			{
+				++stats_.refused;
+				return;
+			}
+			acknowledged_.store(false, std::memory_order_relaxed);
+			f.state = mode::running;
+			f.missed_in_row = 0;
+			for (std::size_t a = 0; a < axis_count; ++a)
+			{
+				f.velocity[a] = received.targets[a] - axes[a].target;
+				axes[a].target = received.targets[a];
+			}
+			return;
+		}
+		}
+	}
 
 	struct axis_state
 	{
@@ -915,6 +1067,8 @@ private:
 	static derived d_;
 	static stats stats_;
 	static run_state state_;
+	static follow_state follow_;
+	static inline std::atomic<bool> acknowledged_{false};
 	static inline uint32_t dir_bits_ = 0; ///< bit a: axis a forward (DIR high)
 
 	/// Slots, six bytes each, stored as words so that slot pairs can be cleared word by word.
@@ -931,5 +1085,6 @@ inline step_generator::config step_generator::config_{};
 inline step_generator::derived step_generator::d_{};
 inline step_generator::stats step_generator::stats_{};
 inline step_generator::run_state step_generator::state_{};
+inline step_generator::follow_state step_generator::follow_{};
 
 } // namespace STM32H563

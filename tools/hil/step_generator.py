@@ -83,6 +83,100 @@ def replay(segments, max_steps: int, finish_cycles: int):
         cycle += 1
 
 
+def missed(cycle: int, frames: dict) -> bool:
+    """Frames the simulated network loses (main.cpp, missed())."""
+    every, burst = int(frames["drop_every"]), int(frames["drop_burst"])
+    outage, length = int(frames["outage"]), int(frames["outage_len"])
+    dropped = every != 0 and cycle >= every and cycle % every < burst
+    return dropped or (length != 0 and outage <= cycle < outage + length)
+
+
+def followed_targets(master, frames: dict, max_steps: int, cycles: int):
+    """Targets the generator follows, cycle by cycle, for all axes.
+
+    Same rules as step_generator::follow() and the simulated master of main.cpp: extrapolation
+    of missed frames up to the tolerance, ramp down at stop_step (x 65536 per cycle), hold,
+    acknowledge once at rest, resume from where the axes stopped when rebase is set.
+    """
+    tolerance, stop_step, rebase = int(frames["tolerance"]), int(frames["stop_step"]), int(frames["rebase"])
+    axes = len(master)
+    state = "running"
+    in_row = 0
+    velocity = [0] * axes
+    target = [0] * axes
+    ramp_position = [0] * axes
+    ramp_velocity = [0] * axes
+    offsets = [0] * axes
+    acknowledged = False  # by the simulated master, for the current fault
+    ack_pending = False   # acknowledge() called, not yet taken by the generator
+    out = [[0] * cycles for _ in range(axes)]
+    for k in range(cycles):
+        t = [(master[a][k] if k < len(master[a]) else master[a][-1] if master[a] else 0) + offsets[a] for a in range(axes)]
+        lost = missed(k, frames)
+        if state != "faulted":
+            acknowledged = False
+        elif not lost and not acknowledged:
+            acknowledged = True
+            ack_pending = True
+            if rebase:
+                for a in range(axes):
+                    offsets[a] += target[a] - t[a]
+                    t[a] = target[a]
+
+        if state == "running":
+            if not lost:
+                in_row = 0
+                for a in range(axes):
+                    velocity[a] = t[a] - target[a]
+                    target[a] = t[a]
+            else:
+                in_row += 1
+                if in_row <= tolerance:
+                    for a in range(axes):
+                        target[a] += velocity[a]
+                else:
+                    state = "stopping"
+                    for a in range(axes):
+                        ramp_position[a] = target[a] * 65536
+                        ramp_velocity[a] = velocity[a] * 65536
+        if state == "stopping":
+            at_rest = True
+            for a in range(axes):
+                v = ramp_velocity[a]
+                v = max(0, v - stop_step) if v > 0 else min(0, v + stop_step)
+                ramp_velocity[a] = v
+                ramp_position[a] += v
+                target[a] = ramp_position[a] >> 16
+                at_rest = at_rest and v == 0
+            if at_rest:
+                state = "faulted"
+        elif state == "faulted" and not lost:
+            reachable = ack_pending and all(abs(t[a] - target[a]) <= max_steps for a in range(axes))
+            if reachable:
+                ack_pending = False
+                state = "running"
+                in_row = 0
+                for a in range(axes):
+                    velocity[a] = t[a] - target[a]
+                    target[a] = t[a]
+        for a in range(axes):
+            out[a][k] = target[a]
+    return out
+
+
+def expected_steps(config: dict, derived: dict, frames: dict, cycles: int, run_args):
+    """Pulses and final position of each axis, from the motion and the frames lost."""
+    finish = int(int(run_args.seconds) * 1e9 // int(config["cycle"]))
+    segments = MIXED if config["profile"] == "mixed" else FULL
+    max_steps = int(derived["max_steps"])
+    vmax = max_steps * int(frames["speed"]) // 1000
+    master = [replay(segments[a], vmax, finish) for a in range(AXES)]
+    followed = followed_targets(master, frames, max_steps, cycles)
+    pulses = [int(np.abs(np.diff(np.concatenate(([0], f)))).sum()) for f in followed]
+    finals = [f[-1] if f else 0 for f in followed]
+    return pulses, finals
+
+
 # ── Board ──────────────────────────────────────────────────────────────────────────────
 
 def parse_fields(line: str) -> dict:
@@ -163,26 +257,21 @@ class Checker:
             self.failures.append(text)
 
 
-def analyze_counts(capture_dir: Path, config: dict, derived: dict, axes_report: list, run_args, c: Checker):
+def analyze_counts(capture_dir: Path, axes_report: list, expected, c: Checker):
     """Counts and positions only, for long captures."""
-    finish = int(int(run_args.seconds) * 1e9 // int(config["cycle"]))
-    segments = MIXED if config["profile"] == "mixed" else FULL
-    max_steps = int(derived["max_steps"])
     for a in range(AXES):
         rep = axes_report[a]
         i_step, t_step = read_digital(capture_dir / f"digital_{STEP_CHANNELS[a]}.bin")
         i_dir, t_dir = read_digital(capture_dir / f"digital_{DIR_CHANNELS[a]}.bin")
         pulses, net = count_pulses(i_step, t_step, i_dir, t_dir)
-        targets = replay(segments[a], max_steps, finish)
-        expected_pulses = int(np.abs(np.diff(np.concatenate(([0], targets)))).sum())
-        final = targets[-1] if targets else 0
+        expected_pulses, final = expected[0][a], expected[1][a]
         c.check(pulses == int(rep["pulses"]) == expected_pulses,
                 f"axis {a} pulses: seen {pulses}, board {rep['pulses']}, motion {expected_pulses}")
         c.check(net == int(rep["position"]) == final == int(rep["target"]),
                 f"axis {a} position: seen {net}, board {rep['position']}, target {rep['target']}, motion {final}")
 
 
-def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, run_args, c: Checker,
+def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, expected, run_args, c: Checker,
             correction: int = 0):
     sample_rate = run_args.sample_rate
     resolution = 1.0 / sample_rate
@@ -190,6 +279,10 @@ def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, r
 
     s_init, s_times = read_digital(capture_dir / f"digital_{SYNC_CHANNEL}.bin")
     sync, sync_fall = edges(s_init, s_times)
+    if len(sync) == 0:
+        c.check(False, "SYNC0: no edge on the analyzer; check its probe on PA4 (CN11-32): the board does "
+                       "receive SYNC0 if its report shows no unsynced cycle")
+        return
     # The simulated SYNC0 pulse lasts 1 us: shorter ones are crosstalk on the probe wire
     n = min(len(sync), len(sync_fall[sync_fall > sync[0]])) if len(sync) else 0
     width = sync_fall[sync_fall > sync[0]][:n] - sync[:n]
@@ -217,10 +310,6 @@ def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, r
     slot_ticks = int(derived["slot_ticks"])
     jitter_limit = 1.0 + abs(correction) / slot_ticks + 2 * resolution / slot
 
-    finish = int(int(run_args.seconds) * 1e9 // int(config["cycle"]))
-    segments = MIXED if config["profile"] == "mixed" else FULL
-    max_steps = int(derived["max_steps"])
-
     for a in range(AXES):
         rep = axes_report[a]
         i_step, t_step = read_digital(capture_dir / f"digital_{STEP_CHANNELS[a]}.bin")
@@ -232,9 +321,7 @@ def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, r
         n = min(len(rise), len(fall))
         rise, fall = rise[:n], fall[:n]
 
-        targets = replay(segments[a], max_steps, finish)
-        expected_pulses = int(np.abs(np.diff(np.concatenate(([0], targets)))).sum())
-        final = targets[-1] if targets else 0
+        expected_pulses, final = expected[0][a], expected[1][a]
         forward = level_at(i_dir, t_dir, rise) == 1
         net = int(forward.sum()) - int((~forward).sum())
 
@@ -308,8 +395,10 @@ def main() -> int:
     parser.add_argument("--sample-rate", type=int, default=125_000_000,
                         help="logic analyzer sample rate; 9 channels at 250 MS/s may overrun the host")
     for key, default in (("rate", 1_000_000), ("cycle", 1_000_000), ("steplen", 500), ("stepspace", 500),
-                         ("dirsetup", 1000), ("dirhold", 1000), ("detune", 0), ("seconds", 10)):
-        parser.add_argument(f"--{key}", type=int, default=default)
+                         ("dirsetup", 1000), ("dirhold", 1000), ("detune", 0), ("seconds", 10),
+                         ("tolerance", 3), ("decel", 0), ("drop_every", 0), ("drop_burst", 1),
+                         ("outage", 0), ("outage_len", 0), ("rebase", 1), ("speed", 1000)):
+        parser.add_argument(f"--{key.replace('_', '-')}", type=int, default=default)
     parser.add_argument("--profile", choices=["mixed", "full"], default="mixed")
     parser.add_argument("--load", choices=["none", "gpdma2", "gpdma1"], default="none",
                         help="competing memory-to-memory DMA during the run (stands for the slave controller interface)")
@@ -319,7 +408,9 @@ def main() -> int:
 
     run = (f"run rate={args.rate} cycle={args.cycle} steplen={args.steplen} stepspace={args.stepspace} "
            f"dirsetup={args.dirsetup} dirhold={args.dirhold} "
-           f"detune={args.detune} profile={args.profile} seconds={args.seconds} load={args.load}")
+           f"detune={args.detune} profile={args.profile} seconds={args.seconds} load={args.load} "
+           f"tolerance={args.tolerance} decel={args.decel} drop_every={args.drop_every} drop_burst={args.drop_burst} "
+           f"outage={args.outage} outage_len={args.outage_len} rebase={args.rebase} speed={args.speed}")
     c = Checker()
     with serial.Serial(args.port, 115200, timeout=0.5) as port, \
             automation.Manager.connect(port=args.logic_port) as manager:
@@ -370,10 +461,15 @@ def main() -> int:
             capture.close()
             sync_line = next(parse_fields(l) for l in report if l.startswith("sync "))
             corrections = [int(v) for v in sync_line["correction"].split(",")]
+            frames = next(parse_fields(l) for l in report if l.startswith("frames "))
+            missed_line = next(parse_fields(l) for l in report if l.startswith("missed "))
+            print(f"      frames: {missed_line['count']} missed, {missed_line['extrapolated']} extrapolated, "
+                  f"{missed_line['faults']} faults, {missed_line['refused']} refused, state {missed_line['state']}")
+            expected = expected_steps(config, derived, frames, int(sync_line["cycles"]), args)
             if args.counts_only:
-                analyze_counts(out, config, derived, axes_report, args, c)
+                analyze_counts(out, axes_report, expected, c)
             else:
-                analyze(out, config, derived, axes_report, args, c, max(abs(v) for v in corrections))
+                analyze(out, config, derived, axes_report, expected, args, c, max(abs(v) for v in corrections))
 
     if c.failures:
         print(f"{len(c.failures)} check(s) failed", file=sys.stderr)
