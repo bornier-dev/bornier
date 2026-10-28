@@ -7,12 +7,12 @@
 // TIM16 plays SYNC0 on PB8; a wire takes it to PA4. The outputs are checked with a logic
 // analyzer by tools/hil/step_generator.py, which also replays the motion to know the expected
 // step counts. The firmware checks what it can see on its own: final positions on target,
-// no DMA error, no loss of alignment, fill done in time.
+// no DMA error, no loss of phase lock, fill done in time.
 //
 // Commands on the ST-LINK virtual COM port (115200 8N1), one per line:
 //   run [key=value ...]  start a run. Keys and defaults:
 //                        rate=1000000 cycle=1000000 (ns) steplen=500 stepspace=500
-//                        dirsetup=1000 dirhold=1000 (ns) head=0 tail=0 (slots)
+//                        dirsetup=1000 dirhold=1000 (ns)
 //                        detune=0 (ns added to the SYNC0 period, rounded down to 16 ns)
 //                        profile=mixed|full seconds=10
 //   report               print the report of the last run, or "busy"
@@ -156,8 +156,6 @@ bool parse_option(std::string_view key, std::string_view value, run_config& c)
 	if (key == "stepspace") return parse_number(value, g.stepspace_ns);
 	if (key == "dirsetup")  return parse_number(value, g.dirsetup_ns);
 	if (key == "dirhold")   return parse_number(value, g.dirhold_ns);
-	if (key == "head")      return parse_number(value, g.head_blank);
-	if (key == "tail")      return parse_number(value, g.tail_blank);
 	if (key == "detune")    return parse_number(value, c.detune);
 	if (key == "seconds")   return parse_number(value, c.seconds);
 	if (key == "profile")
@@ -177,10 +175,10 @@ void print_config()
 	auto const& d = step_generator::values();
 	print(std::snprintf(line.data(), line.size(),
 		"config rate=%" PRIu32 " cycle=%" PRIu32 " steplen=%" PRIu32 " stepspace=%" PRIu32
-		" dirsetup=%" PRIu32 " dirhold=%" PRIu32 " head=%" PRIu32 " tail=%" PRIu32
+		" dirsetup=%" PRIu32 " dirhold=%" PRIu32
 		" detune=%" PRId32 " profile=%s seconds=%" PRIu32 "\r\n",
 		g.slot_rate_hz, g.cycle_ns, g.steplen_ns, g.stepspace_ns, g.dirsetup_ns, g.dirhold_ns,
-		g.head_blank, g.tail_blank, run.detune, profile_names[static_cast<std::size_t>(run.profile)], run.seconds));
+		run.detune, profile_names[static_cast<std::size_t>(run.profile)], run.seconds));
 	print(std::snprintf(line.data(), line.size(),
 		"derived prescaler=%" PRIu32 " slot_ticks=%" PRIu32 " cycle_slots=%" PRIu32 " pulse_ticks=%" PRIu32
 		" pulse_slots=%" PRIu32 " gap_slots=%" PRIu32 " dir_ticks=%" PRIu32 " guard_slots=%" PRIu32
@@ -209,10 +207,10 @@ void report()
 	pass &= s.resyncs == 0 && s.dma_errors == 0 && s.fill_end_max < cycle_ticks;
 	print(std::snprintf(line.data(), line.size(),
 		"sync cycles=%" PRIu32 " unsynced=%" PRIu32 " resyncs=%" PRIu32
-		" slip=%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32
-		" taken_back=%" PRIu32 " dma_errors=%" PRIu32 " position_retries=%" PRIu32 "\r\n",
-		s.cycles, s.unsynced, s.resyncs, s.alignment[0], s.alignment[1], s.alignment[2],
-		s.alignment[3], s.alignment[4], s.taken_back, s.dma_errors, s.position_retries));
+		" phase=%" PRId32 ",%" PRId32 " correction=%" PRId32 ",%" PRId32
+		" dma_errors=%" PRIu32 " position_retries=%" PRIu32 "\r\n",
+		s.cycles, s.unsynced, s.resyncs, s.phase_min, s.phase_max, s.correction_min, s.correction_max,
+		s.dma_errors, s.position_retries));
 
 	auto const mean = s.cycles == 0 ? 0u : static_cast<uint32_t>(s.fill_cycles_sum / s.cycles);
 	print(std::snprintf(line.data(), line.size(),

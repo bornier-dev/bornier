@@ -145,14 +145,20 @@ class Checker:
             self.failures.append(text)
 
 
-def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, run_args, c: Checker):
+def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, run_args, c: Checker,
+            correction: int = 0):
     sample_rate = run_args.sample_rate
     resolution = 1.0 / sample_rate
     tol = 2 * resolution
 
     s_init, s_times = read_digital(capture_dir / f"digital_{SYNC_CHANNEL}.bin")
-    sync, _ = edges(s_init, s_times)
-    c.check(len(sync) > 10, f"SYNC0: {len(sync)} rising edges")
+    sync, sync_fall = edges(s_init, s_times)
+    # The simulated SYNC0 pulse lasts 1 us: shorter ones are crosstalk on the probe wire
+    n = min(len(sync), len(sync_fall[sync_fall > sync[0]])) if len(sync) else 0
+    width = sync_fall[sync_fall > sync[0]][:n] - sync[:n]
+    glitches = int((width < 0.5e-6).sum())
+    sync = sync[:n][width >= 0.5e-6]
+    c.check(len(sync) > 10, f"SYNC0: {len(sync)} rising edges, {glitches} glitches under 500 ns ignored")
     if len(sync) < 2:
         return
     periods = np.diff(sync)
@@ -167,10 +173,12 @@ def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, r
     dirsetup = int(config["dirsetup"]) * 1e-9 * scale
     dirhold = int(config["dirhold"]) * 1e-9 * scale
     cycle_slots = int(derived["cycle_slots"])
-    head = int(config["head"])
-    tail = int(config["tail"])
     guard = int(derived["guard_slots"])
     pulse_slots = int(derived["pulse_slots"])
+    # Bresenham keeps each step within one slot of its ideal place; the phase lock may move the
+    # grid by |correction| ticks within a cycle; plus the analyzer's sampling.
+    slot_ticks = int(derived["slot_ticks"])
+    jitter_limit = 1.0 + abs(correction) / slot_ticks + 2 * resolution / slot
 
     finish = int(int(run_args.seconds) * 1e9 // int(config["cycle"]))
     segments = MIXED if config["profile"] == "mixed" else FULL
@@ -233,22 +241,26 @@ def analyze(capture_dir: Path, config: dict, derived: dict, axes_report: list, r
         # spread of (slot - j * usable / N) is the distance to the ideal evenly spaced position.
         reversal_cycles = set(np.searchsorted(sync, dir_changes, side="right") - 1) if len(dir_changes) else set()
         worst = 0.0
+        worst_cycle = (0, 0)
         over = 0
         ks = k[inside]
         cuts = np.flatnonzero(np.diff(ks)) + 1
         for group in np.split(np.arange(len(ks)), cuts):
             m = len(group)
-            if m < 2:
-                continue
             cycle_index = int(ks[group[0]])
-            lead = max(head, guard) if cycle_index in reversal_cycles else head
-            usable = cycle_slots - lead - tail - (pulse_slots - 1)
+            # The first cycles bring the cycle boundary onto SYNC0 (phase lock)
+            if m < 2 or cycle_index < 50:
+                continue
+            lead = guard if cycle_index in reversal_cycles else 0
+            usable = cycle_slots - lead - (pulse_slots - 1)
             dev = slots[group] - np.arange(m) * (usable / m)
             spread = dev.max() - dev.min()
-            worst = max(worst, spread)
-            if spread > 1.0 + 0.05:
+            if spread > worst:
+                worst, worst_cycle = spread, (cycle_index, m)
+            if spread > jitter_limit:
                 over += 1
-        c.check(over == 0, f"axis {a} jitter: worst spread {worst:.2f} slot, {over} cycles above one slot")
+        c.check(over == 0, f"axis {a} jitter: worst spread {worst:.2f} slot (cycle {worst_cycle[0]}, "
+                           f"{worst_cycle[1]} steps), {over} cycles above {jitter_limit:.2f}")
 
 
 def main() -> int:
@@ -259,14 +271,13 @@ def main() -> int:
     parser.add_argument("--sample-rate", type=int, default=125_000_000,
                         help="logic analyzer sample rate; 9 channels at 250 MS/s may overrun the host")
     for key, default in (("rate", 1_000_000), ("cycle", 1_000_000), ("steplen", 500), ("stepspace", 500),
-                         ("dirsetup", 1000), ("dirhold", 1000), ("head", 0), ("tail", 0), ("detune", 0),
-                         ("seconds", 10)):
+                         ("dirsetup", 1000), ("dirhold", 1000), ("detune", 0), ("seconds", 10)):
         parser.add_argument(f"--{key}", type=int, default=default)
     parser.add_argument("--profile", choices=["mixed", "full"], default="mixed")
     args = parser.parse_args()
 
     run = (f"run rate={args.rate} cycle={args.cycle} steplen={args.steplen} stepspace={args.stepspace} "
-           f"dirsetup={args.dirsetup} dirhold={args.dirhold} head={args.head} tail={args.tail} "
+           f"dirsetup={args.dirsetup} dirhold={args.dirhold} "
            f"detune={args.detune} profile={args.profile} seconds={args.seconds}")
     c = Checker()
     with serial.Serial(args.port, 115200, timeout=0.5) as port, \
@@ -316,7 +327,9 @@ def main() -> int:
             if args.keep:
                 capture.save_capture(str(out / "capture.sal"))
             capture.close()
-            analyze(out, config, derived, axes_report, args, c)
+            sync_line = next(parse_fields(l) for l in report if l.startswith("sync "))
+            corrections = [int(v) for v in sync_line["correction"].split(",")]
+            analyze(out, config, derived, axes_report, args, c, max(abs(v) for v in corrections))
 
     if c.failures:
         print(f"{len(c.failures)} check(s) failed", file=sys.stderr)

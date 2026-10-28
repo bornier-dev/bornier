@@ -34,8 +34,9 @@ python3 tools/hil/step_generator.py --port /dev/ttyACM0 --seconds 10
 python3 tools/hil/step_generator.py --port /dev/ttyACM0 --profile full --seconds 10
 ```
 
-`--help` lists the generator settings (`--rate`, `--steplen`, `--dirsetup`, `--head`...) and
-`--detune`, which shifts the SYNC0 period to play the drift of the distributed clock.
+`--help` lists the generator settings (`--rate`, `--steplen`, `--dirsetup`...) and
+`--detune`, which shifts the SYNC0 period (in ns) to play the drift of the distributed clock:
+the generator follows it with its phase lock.
 
 The board answers on the ST-LINK virtual COM port; the commands are described at the top of
 [`main.cpp`](main.cpp).
