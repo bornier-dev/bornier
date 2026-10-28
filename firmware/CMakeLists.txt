@@ -63,3 +63,4 @@ add_subdirectory(examples/hello)
 
 # ── On-target tests ───────────────────────────────────────────────────────────
 add_subdirectory(tests/atomic_mmio)
+add_subdirectory(tests/step_generator)
