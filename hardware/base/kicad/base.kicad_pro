@@ -759,44 +759,44 @@
         "pattern": "CHASSIS"
       },
       {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/TXPA"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/TXPB"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/TXNA"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/TXNB"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/RXPA"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/RXPB"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/RXNA"
-      },
-      {
-        "netclass": "Ethernet",
-        "pattern": "/ESC/RXNB"
-      },
-      {
         "netclass": "USB",
         "pattern": "USB_DP"
       },
       {
         "netclass": "USB",
         "pattern": "USB_DM"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/TXA_P"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/TXA_N"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/TXB_P"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/TXB_N"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/RXA_P"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/RXA_N"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/RXB_P"
+      },
+      {
+        "netclass": "Ethernet",
+        "pattern": "/ESC/RXB_N"
       }
     ]
   },
