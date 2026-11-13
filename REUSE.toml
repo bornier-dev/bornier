@@ -1,8 +1,8 @@
 version = 1
 
-# Register headers generated from the STMicroelectronics SVD file.
+# Register headers generated from the STMicroelectronics SVD files.
 [[annotations]]
-path = "firmware/devices/STM32H563/*.hpp"
+path = ["firmware/devices/STM32H563/*.hpp", "firmware/devices/STM32H523/*.hpp"]
 SPDX-FileCopyrightText = "2025 STMicroelectronics"
 SPDX-License-Identifier = "Apache-2.0"
 

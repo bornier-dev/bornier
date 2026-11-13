@@ -61,7 +61,7 @@ connector sits on a long edge: the profile closes the short ones; the USB jack i
 
 | Directory | Contents |
 |---|---|
-| [`firmware/`](firmware/README.md) | C++23 firmware on the [OpSy](https://github.com/Otatiaro/OpSy) RTOS, generated STM32H563 register headers, board support for the NUCLEO-H563ZI, bring-up example and on-target tests |
+| [`firmware/`](firmware/README.md) | C++23 firmware on the [OpSy](https://github.com/Otatiaro/OpSy) RTOS, generated STM32H563 and STM32H523 register headers, board support for the NUCLEO-H563ZI and the base board, bring-up examples and on-target tests |
 | `hardware/lib/` | `kicadgen`, the Python schematic generator and checker (ERC, netlist), and the symbols, footprints and 3D models missing from the KiCad libraries, with their generators |
 | `hardware/base/` | Base board: schematic generator (`gen/`), KiCad project (`kicad/`), Gerbers (`fab/`), circuit simulation (`sim/`) |
 | [`tools/hil/`](tools/hil/README.md) | Hardware-in-the-loop test scripts |
