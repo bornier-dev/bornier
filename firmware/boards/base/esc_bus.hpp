@@ -7,19 +7,28 @@
  * @author  Thomas Legrand
  * @brief   Register access to the LAN9253 EtherCAT slave controller of the Bornier base board
  *
- *          The OCTOSPI runs as a single-line SPI master, in indirect mode:
+ *          The OCTOSPI is the bus master, in indirect mode:
  *
- *          | Signal | Pin  | Function            |
- *          |--------|------|---------------------|
- *          | SCK    | PB2  | OCTOSPI1_CLK, AF9   |
- *          | SCS#   | PB10 | OCTOSPI1_NCS, AF9   |
- *          | SI     | PB1  | OCTOSPI1_IO0, AF6   |
- *          | SO     | PB0  | OCTOSPI1_IO1, AF6   |
+ *          | Signal   | Pin  | Function            |
+ *          |----------|------|---------------------|
+ *          | SCK      | PB2  | OCTOSPI1_CLK, AF9   |
+ *          | SCS#     | PB10 | OCTOSPI1_NCS, AF9   |
+ *          | SI/SIO0  | PB1  | OCTOSPI1_IO0, AF6   |
+ *          | SO/SIO1  | PB0  | OCTOSPI1_IO1, AF6   |
+ *          | SIO2     | PA7  | OCTOSPI1_IO2, AF10  |
+ *          | SIO3     | PA6  | OCTOSPI1_IO3, AF6   |
  *
- *          SIO2 (PA7) and SIO3 (PA6) are left to the pull-ups of the LAN9253: they only serve
- *          in quad mode, which this driver does not use.
+ *          Two bus modes:
  *
- *          Blocking transfers at 10 MHz, 32 bits at a time. Not reentrant: the registers of the
+ *          | Mode   | Lines | Clock    | Read command                       |
+ *          |--------|-------|----------|------------------------------------|
+ *          | single | 1     | 10 MHz   | READ (0x03)                        |
+ *          | quad   | 4     | 62.5 MHz | FASTREAD (0x0B), 8 dummy cycles    |
+ *
+ *          Single mode only needs SCK, SCS#, SI and SO: it tells a fault of the bus from a
+ *          fault of SIO2 or SIO3. Quad mode (SQI) is the one to work in.
+ *
+ *          Blocking transfers, 32 bits at a time. Not reentrant: the registers of the
  *          EtherCAT core go through one shared command register, so all the calls must come
  *          from a single task.
  *
@@ -31,6 +40,7 @@
 
 #include <cstdint>
 
+#include <STM32H523/gpioa.hpp>
 #include <STM32H523/gpiob.hpp>
 #include <STM32H523/octospi.hpp>
 #include <STM32H523/rcc.hpp>
@@ -55,54 +65,93 @@ public:
 	static constexpr uint16_t hw_cfg    = 0x0074; ///< Bit 27, READY: set once the configuration is loaded from the SII EEPROM
 	static constexpr uint32_t hw_cfg_ready = 1u << 27;
 
+	/** @brief Bus mode, see the table at the top of this file. */
+	enum class mode
+	{
+		single,
+		quad,
+	};
+
 	/**
-	 * @brief Configures the pins and the OCTOSPI: SPI mode 0, 10 MHz.
+	 * @brief Configures the pins and the OCTOSPI, and leaves the bus in single mode.
+	 *
+	 *        The LAN9253 keeps its bus mode through a reset of the MCU alone: it is sent the
+	 *        command that leaves quad mode, which it ignores when in single mode.
 	 *
 	 *        The OCTOSPI is clocked by HCLK, its reset selection. HCLK equals SYSCLK on this
 	 *        board, the condition under which that selection gives correct data.
 	 */
 	static void init()
 	{
-		rcc.rcc_ahb2enr |= rcc_p::rcc_ahb2enr_r::gpioben_f() | atomic;
+		rcc.rcc_ahb2enr |= (rcc_p::rcc_ahb2enr_r::gpioaen_f() | rcc_p::rcc_ahb2enr_r::gpioben_f()) | atomic;
 		rcc.rcc_ahb4enr |= rcc_p::rcc_ahb4enr_r::octospi1en_f() | atomic;
 
+		gpioa.gpioa_afrl <<= gpioa_p::gpioa_afrl_r::afsel6_f(6) || atomic;  // PA6  IO3
+		gpioa.gpioa_afrl <<= gpioa_p::gpioa_afrl_r::afsel7_f(10) || atomic; // PA7  IO2
 		gpiob.gpiob_afrl <<= gpiob_p::gpiob_afrl_r::afsel0_f(6) || atomic;  // PB0  IO1
 		gpiob.gpiob_afrl <<= gpiob_p::gpiob_afrl_r::afsel1_f(6) || atomic;  // PB1  IO0
 		gpiob.gpiob_afrl <<= gpiob_p::gpiob_afrl_r::afsel2_f(9) || atomic;  // PB2  CLK
 		gpiob.gpiob_afrh <<= gpiob_p::gpiob_afrh_r::afsel10_f(9) || atomic; // PB10 NCS
 
-		// High speed (0b10) on the four pins, then alternate function mode (0b10).
+		// High speed (0b10) on the six pins, then alternate function mode (0b10).
+		gpioa.gpioa_ospeedr <<= gpioa_p::gpioa_ospeedr_r::ospeed6_f(0b10) || atomic;
+		gpioa.gpioa_ospeedr <<= gpioa_p::gpioa_ospeedr_r::ospeed7_f(0b10) || atomic;
 		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed0_f(0b10) || atomic;
 		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed1_f(0b10) || atomic;
 		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed2_f(0b10) || atomic;
 		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed10_f(0b10) || atomic;
+		gpioa.gpioa_moder <<= gpioa_p::gpioa_moder_r::mode6_f(0b10) || atomic;
+		gpioa.gpioa_moder <<= gpioa_p::gpioa_moder_r::mode7_f(0b10) || atomic;
 		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode0_f(0b10) || atomic;
 		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode1_f(0b10) || atomic;
 		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode2_f(0b10) || atomic;
 		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode10_f(0b10) || atomic;
 
 		// DEVSIZE 15: 64 KB address space, the 16-bit addresses of the LAN9253.
-		// CSHT 7: SCS# stays high 8 clock cycles between two commands (800 ns, 50 ns needed).
+		// CSHT 7: SCS# stays high 8 clock cycles between two commands (50 ns needed).
 		// CKMODE 0: clock low while SCS# is high (SPI mode 0).
 		octospi.octospi_dcr1 = octospi_p::octospi_dcr1_r::devsize_f(15)
 		                     | octospi_p::octospi_dcr1_r::csht_f(7);
-		octospi.octospi_dcr2 = octospi_p::octospi_dcr2_r::prescaler_f(24); // 250 MHz / 25 = 10 MHz
+		octospi.octospi_dcr2 = octospi_p::octospi_dcr2_r::prescaler_f(prescaler_single);
 		octospi.octospi_cr   = octospi_p::octospi_cr_r::en_f();
+
+		command(lines_quad, reset_quad);
+		quad_ = false;
 	}
 
+	/**
+	 * @brief Switches the LAN9253 and the OCTOSPI to a bus mode.
+	 *
+	 * @param wanted Bus mode to work in from now on.
+	 */
+	static void set_mode(mode wanted)
+	{
+		const bool quad = wanted == mode::quad;
+		if (quad == quad_)
+			return;
+
+		// The command goes out in the mode the chip is still in; the clock changes while the
+		// OCTOSPI is idle, which command() guarantees on return.
+		if (quad)
+			command(lines_single, enable_quad);
+		else
+			command(lines_quad, reset_quad);
+		octospi.octospi_dcr2 = octospi_p::octospi_dcr2_r::prescaler_f(quad ? prescaler_quad : prescaler_single);
+		quad_ = quad;
+	}
 
 	/**
 	 * @brief Reads one 32-bit register of the LAN9253.
 	 *
-	 *        READ command (0x03, at most 30 MHz): 8-bit instruction, 16-bit address, 4 data
-	 *        bytes, least significant first, all on single lines.
+	 *        8-bit instruction, 16-bit address, dummy cycles in quad mode, then 4 data bytes,
+	 *        least significant first.
 	 *
 	 * @param address Register address.
 	 * @return        Register value.
 	 */
 	static uint32_t read(uint16_t address)
 	{
-		start(0b01, 0x03); // indirect read
+		start(0b01, quad_ ? fast_read_instruction : read_instruction, quad_ ? fast_read_dummy_cycles : 0);
 		octospi.octospi_ar = octospi_p::octospi_ar_r(address); // starts the transfer
 
 		while (!octospi.octospi_sr.load().tcf()) {}
@@ -115,14 +164,14 @@ public:
 	 * @brief Writes one 32-bit register of the LAN9253.
 	 *
 	 *        WRITE command (0x02): 8-bit instruction, 16-bit address, 4 data bytes, least
-	 *        significant first, all on single lines.
+	 *        significant first.
 	 *
 	 * @param address Register address.
 	 * @param value   Value to write.
 	 */
 	static void write(uint16_t address, uint32_t value)
 	{
-		start(0b00, 0x02); // indirect write
+		start(0b00, write_instruction, 0);
 		octospi.octospi_ar = octospi_p::octospi_ar_r(address);
 		octospi.octospi_dr = octospi_p::octospi_dr_r(value); // starts the transfer
 
@@ -170,16 +219,48 @@ private:
 	static constexpr uint32_t csr_busy = 1u << 31;    ///< Written 1 to start, reads 1 until done
 	static constexpr uint32_t csr_read = 1u << 30;
 
-	/// Sets up a 4-byte transfer with a 16-bit address; the caller then gives the address.
-	static void start(uint8_t functional_mode, uint32_t instruction)
+	static constexpr uint32_t read_instruction      = 0x03; ///< READ, at most 30 MHz
+	static constexpr uint32_t fast_read_instruction = 0x0B; ///< FASTREAD
+	static constexpr uint32_t write_instruction     = 0x02; ///< WRITE
+	static constexpr uint32_t enable_quad           = 0x38; ///< EQIO: single to quad
+	static constexpr uint32_t reset_quad            = 0xFF; ///< RSTQIO: quad to single
+
+	/// Dummy clock cycles between address and data of a FASTREAD in quad mode: measured on the
+	/// board, the only count out of 0 to 11 that reads BYTE_TEST right, from 10 to 83 MHz.
+	static constexpr uint8_t fast_read_dummy_cycles = 8;
+
+	static constexpr uint8_t prescaler_single = 24; ///< 250 MHz / 25 = 10 MHz
+	static constexpr uint8_t prescaler_quad   = 3;  ///< 250 MHz / 4 = 62.5 MHz (80 MHz at most)
+
+	// Values of the IMODE, ADMODE and DMODE fields.
+	static constexpr uint8_t lines_single = 1;
+	static constexpr uint8_t lines_quad   = 3;
+
+	static inline bool quad_ = false; ///< Bus mode the LAN9253 is in
+
+	/// Sends an instruction alone, on the given lines, and returns once the OCTOSPI is idle.
+	static void command(uint8_t lines, uint32_t instruction)
 	{
+		octospi.octospi_cr  = octospi_p::octospi_cr_r::en_f(); // indirect write
+		octospi.octospi_ccr = octospi_p::octospi_ccr_r::imode_f(lines);
+		octospi.octospi_tcr = octospi_p::octospi_tcr_r(0u);
+		octospi.octospi_ir  = octospi_p::octospi_ir_r(instruction); // starts the transfer
+
+		while (!octospi.octospi_sr.load().tcf()) {}
+		finish();
+	}
+
+	/// Sets up a 4-byte transfer with a 16-bit address; the caller then gives the address.
+	static void start(uint8_t functional_mode, uint32_t instruction, uint8_t dummy_cycles)
+	{
+		const uint8_t lines = quad_ ? lines_quad : lines_single;
 		octospi.octospi_cr  = octospi_p::octospi_cr_r::en_f() | octospi_p::octospi_cr_r::fmode_f(functional_mode);
 		octospi.octospi_dlr = octospi_p::octospi_dlr_r(3u); // 4 bytes
-		octospi.octospi_ccr = octospi_p::octospi_ccr_r::imode_f(1)
-		                    | octospi_p::octospi_ccr_r::admode_f(1)
+		octospi.octospi_ccr = octospi_p::octospi_ccr_r::imode_f(lines)
+		                    | octospi_p::octospi_ccr_r::admode_f(lines)
 		                    | octospi_p::octospi_ccr_r::adsize_f(1) // 16 bits
-		                    | octospi_p::octospi_ccr_r::dmode_f(1);
-		octospi.octospi_tcr = octospi_p::octospi_tcr_r(0u);   // no dummy cycle
+		                    | octospi_p::octospi_ccr_r::dmode_f(lines);
+		octospi.octospi_tcr = octospi_p::octospi_tcr_r::dcyc_f(dummy_cycles);
 		octospi.octospi_ir  = octospi_p::octospi_ir_r(instruction);
 	}
 

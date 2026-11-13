@@ -4,7 +4,8 @@
 """Hardware-in-the-loop check for the `esc_probe` test on the Bornier base board.
 
 Listens to SWO through a J-Link and checks the report of the board: the identification registers
-of the LAN9253, read through the OCTOSPI. Run it against both the debug and the release image.
+of the LAN9253 and a write and read back in its EtherCAT core, through the OCTOSPI, in single
+then in quad bus mode. Run it against both the debug and the release image.
 
 The board must already be flashed and running. The script needs the SEGGER J-Link software:
 it runs J-Link SWO Viewer, found on the PATH or given with --viewer.
@@ -27,7 +28,7 @@ def main() -> int:
     parser.add_argument("--device", default="STM32H523VE")
     parser.add_argument("--cpu-hz", type=int, default=250_000_000, help="core clock of the image")
     parser.add_argument("--swo-hz", type=int, default=2_000_000, help="bit rate asked on the SWO pin")
-    parser.add_argument("--seconds", type=float, default=6.0, help="listening time")
+    parser.add_argument("--seconds", type=float, default=7.0, help="listening time")
     args = parser.parse_args()
 
     viewer = find_viewer(args.viewer)
@@ -48,17 +49,23 @@ def main() -> int:
     byte_test_ok = values["byte_test"] == {0x87654321}
     id_ok = bool(values["id_rev"]) and all(value >> 16 == 0x9253 for value in values["id_rev"])
     verdict_ok = len(verdicts) >= 2 and all(text == "verdict PASS" for text in verdicts)
+    modes = {name: (lines.count(f"{name} PASS"), lines.count(f"{name} FAIL")) for name in ("single", "quad")}
+    modes_ok = all(passed >= 2 and failed == 0 for passed, failed in modes.values())
 
     print(f"{'PASS' if byte_test_ok else 'FAIL'}  BYTE_TEST reads {show(values['byte_test'])}, 0x87654321 expected")
     print(f"{'PASS' if id_ok else 'FAIL'}  ID_REV reads {show(values['id_rev'])}, 0x9253 expected in the upper half")
+    for name, (passed, failed) in modes.items():
+        print(f"{'PASS' if passed >= 2 and failed == 0 else 'FAIL'}  {name} mode: {passed} PASS, {failed} FAIL from the board")
     print(f"{'PASS' if verdict_ok else 'FAIL'}  {len(verdicts)} verdicts from the board, "
           f"{verdicts.count('verdict PASS')} PASS")
 
-    if byte_test_ok and id_ok and verdict_ok:
+    if byte_test_ok and id_ok and verdict_ok and modes_ok:
         return 0
     if not lines:
         print("hint: nothing received; the image prints only once its first read has ended: check "
               "that esc_probe is flashed and running, then the OCTOSPI clock and pins", file=sys.stderr)
+    elif modes["single"][1] == 0 and modes["quad"][1] > 0:
+        print("hint: single mode works and quad mode fails; check SIO2 and SIO3", file=sys.stderr)
     elif values["byte_test"] <= {0x00000000, 0xFFFFFFFF}:
         print("hint: the LAN9253 does not answer; check its supply, its 25 MHz clock and that its "
               "reset line is high", file=sys.stderr)

@@ -2,12 +2,14 @@
 // SPDX-FileCopyrightText: 2026 Thomas Legrand
 //
 // On-target test for the Bornier base board: talks to the LAN9253 through the OCTOSPI and prints
-// a report on SWO, once per second.
+// a report on SWO, once per second. The same checks run in both bus modes, single then quad:
 //
 //   byte_test   must read 0x87654321: the bus works and the byte order is right.
 //   id_rev      must read 0x9253 in its upper half: the chip is a LAN9253.
 //   user_ram    two patterns written to the user RAM of the EtherCAT core (0x0F80) must read
 //               back, as 32 bits then as 16 and 8 bits: register writes and core accesses work.
+//
+// Single mode passing and quad mode failing points at SIO2 or SIO3.
 //
 // Printed for information:
 //   hw_cfg         READY (bit 27) stays 0 until the configuration has been loaded from the SII
@@ -65,6 +67,29 @@ bool user_ram_holds(uint32_t pattern)
 	return whole == pattern && upper == pattern >> 16 && byte1 == ((pattern >> 8) & 0xFFu);
 }
 
+// Runs all the checks in the current bus mode.
+bool bus_works()
+{
+	const uint32_t byte_test = esc_bus::read(esc_bus::byte_test);
+	const uint32_t id_rev    = esc_bus::read(esc_bus::id_rev);
+	print_register("byte_test", byte_test);
+	print_register("id_rev", id_rev);
+	print_register("hw_cfg", esc_bus::read(esc_bus::hw_cfg));
+
+	// The core is only reached once the bus itself is proven: a core access polls the chip,
+	// and would never end on a dead bus.
+	if (byte_test != 0x87654321u || (id_rev >> 16) != 0x9253u)
+		return false;
+
+	print_register("core_type", esc_bus::core_read(core_type, 4));
+	print_register("core_product", esc_bus::core_read(core_product, 4));
+	print_register("core_al_event", esc_bus::core_read(core_al_event, 4));
+	print_register("core_eeprom", esc_bus::core_read(core_eeprom, 4));
+	const bool first  = user_ram_holds(0xA5C33C5Au);
+	const bool second = user_ram_holds(0x5A3CC3A5u);
+	return first && second;
+}
+
 } // namespace
 
 opsy::task<1024> prober;
@@ -79,27 +104,17 @@ int main()
 	const bool system_ok = prober.start([]{
 		while (true)
 		{
-			const uint32_t byte_test = esc_bus::read(esc_bus::byte_test);
-			const uint32_t id_rev    = esc_bus::read(esc_bus::id_rev);
-			const uint32_t hw_cfg    = esc_bus::read(esc_bus::hw_cfg);
-			print_register("byte_test", byte_test);
-			print_register("id_rev", id_rev);
-			print_register("hw_cfg", hw_cfg);
+			esc_bus::set_mode(esc_bus::mode::single);
+			trace::write("mode single\r\n");
+			const bool single = bus_works();
+			trace::write(single ? "single PASS\r\n" : "single FAIL\r\n");
 
-			bool pass = byte_test == 0x87654321u && (id_rev >> 16) == 0x9253u;
+			esc_bus::set_mode(esc_bus::mode::quad);
+			trace::write("mode quad\r\n");
+			const bool quad = bus_works();
+			trace::write(quad ? "quad PASS\r\n" : "quad FAIL\r\n");
 
-			// The core is only reached once the bus itself is proven: a core access polls the
-			// chip, and would never end on a dead bus.
-			if (pass)
-			{
-				print_register("core_type", esc_bus::core_read(core_type, 4));
-				print_register("core_product", esc_bus::core_read(core_product, 4));
-				print_register("core_al_event", esc_bus::core_read(core_al_event, 4));
-				print_register("core_eeprom", esc_bus::core_read(core_eeprom, 4));
-				pass = user_ram_holds(0xA5C33C5Au);
-				pass = user_ram_holds(0x5A3CC3A5u) && pass;
-			}
-
+			const bool pass = single && quad;
 			trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
 
 			if (pass)
