@@ -66,4 +66,5 @@ add_subdirectory(examples/blink)
 
 # ── On-target tests ───────────────────────────────────────────────────────────
 add_subdirectory(tests/atomic_mmio)
+add_subdirectory(tests/esc_probe)
 add_subdirectory(tests/step_generator)
