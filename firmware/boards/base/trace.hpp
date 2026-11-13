@@ -45,9 +45,9 @@ public:
 	 */
 	static void init()
 	{
-		dbgmcu.dbgmcu_cr = dbgmcu.dbgmcu_cr.load()
-		                 | dbgmcu_p::dbgmcu_cr_r::trace_ioen_f()
-		                 | dbgmcu_p::dbgmcu_cr_r::trace_en_f();
+		dbgmcu.cr = dbgmcu.cr.load()
+		                 | dbgmcu_p::cr_r::trace_ioen_f()
+		                 | dbgmcu_p::cr_r::trace_en_f();
 	}
 
 	/**

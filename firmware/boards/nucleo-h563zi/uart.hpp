@@ -59,9 +59,9 @@ namespace STM32H563
 {
 
 // The `atomic` postfix tag used in `| atomic` / `|| atomic` lives in
-// opsy::utility — pull it into namespace scope so the BSP register
-// helper expressions read naturally.
-using opsy::utility::atomic;
+// mmio (mmio.hpp of the device) — pull it into namespace scope so the BSP
+// register helper expressions read naturally.
+using mmio::atomic;
 
 /**
  * @brief USART3 VCP driver — 115200 8N1, GPDMA TX/RX, IDLE line detection.
@@ -101,29 +101,29 @@ public:
 	static void init()
 	{
 		// ── 1. Peripheral clocks ───────────────────────────────────────────
-		rcc.rcc_ahb1enr  |= rcc_p::rcc_ahb1enr_r::gpdma1en_f()  | atomic;
-		rcc.rcc_ahb2enr  |= rcc_p::rcc_ahb2enr_r::gpioden_f()   | atomic;
-		rcc.rcc_apb1lenr |= rcc_p::rcc_apb1lenr_r::usart3en_f() | atomic;
+		rcc.ahb1enr  |= rcc_p::ahb1enr_r::gpdma1en_f()  | atomic;
+		rcc.ahb2enr  |= rcc_p::ahb2enr_r::gpioden_f()   | atomic;
+		rcc.apb1lenr |= rcc_p::apb1lenr_r::usart3en_f() | atomic;
 
 		// ── 2. PD8 = TX (AF7), PD9 = RX (AF7) — alternate, high-speed ────
-		gpiod.gpio_moder   <<= gpioc_p::gpio_moder_r::mode8_f(0b10)     || atomic;
-		gpiod.gpio_moder   <<= gpioc_p::gpio_moder_r::mode9_f(0b10)     || atomic;
-		gpiod.gpio_ospeedr <<= gpioc_p::gpio_ospeedr_r::ospeed8_f(0b11) || atomic;
-		gpiod.gpio_ospeedr <<= gpioc_p::gpio_ospeedr_r::ospeed9_f(0b11) || atomic;
-		gpiod.gpio_afrh    <<= gpioc_p::gpio_afrh_r::afsel8_f(7)        || atomic;
-		gpiod.gpio_afrh    <<= gpioc_p::gpio_afrh_r::afsel9_f(7)        || atomic;
+		gpiod.moder   <<= gpio_p::moder_r::mode8_f(0b10)     || atomic;
+		gpiod.moder   <<= gpio_p::moder_r::mode9_f(0b10)     || atomic;
+		gpiod.ospeedr <<= gpio_p::ospeedr_r::ospeed8_f(0b11) || atomic;
+		gpiod.ospeedr <<= gpio_p::ospeedr_r::ospeed9_f(0b11) || atomic;
+		gpiod.afrh    <<= gpio_p::afrh_r::afsel8_f(7)        || atomic;
+		gpiod.afrh    <<= gpio_p::afrh_r::afsel9_f(7)        || atomic;
 
 		// ── 3. USART3 — 115200 8N1, DMA on TX and RX, IDLE interrupt ──────
 		// BRR = PCLK1 / baud = 250 000 000 / 115 200 = 2170 (oversampling ×16)
-		usart3.usart_brr = usart_p::usart_brr_r::brr_f(2170);
+		usart3.brr = usart_p::brr_r::brr_f(2170);
 		// OVRDIS: disable overrun — bytes that arrive when RDR is full are silently
 		// discarded instead of generating ORE. The RDR flush in receive() handles cleanup.
-		usart3.usart_cr3 = usart_p::usart_cr3_r::dmat_f()
-		                 | usart_p::usart_cr3_r::dmar_f()
-		                 | usart_p::usart_cr3_r::ovrdis_f();
-		usart3.usart_cr1_enabled = usart_p::usart_cr1_enabled_r::ue_f()
-		                         | usart_p::usart_cr1_enabled_r::te_f()
-		                         | usart_p::usart_cr1_enabled_r::re_f();
+		usart3.cr3 = usart_p::cr3_r::dmat_f()
+		                 | usart_p::cr3_r::dmar_f()
+		                 | usart_p::cr3_r::ovrdis_f();
+		usart3.cr1_enabled = usart_p::cr1_enabled_r::ue_f()
+		                         | usart_p::cr1_enabled_r::te_f()
+		                         | usart_p::cr1_enabled_r::re_f();
 		// IDLEIE is enabled by arm_rx_dma() just before wait(), while rx_mutex_ is
 		// held (BASEPRI = isr_priority). Enabling it here would fire a spurious
 		// IDLE immediately (line is idle at startup) before DMA is armed.
@@ -153,27 +153,27 @@ public:
 		// Dest, TR1, TR2 are constant across chunks — configure once.
 		// Source: caller buffer (byte, increment) → Dest: USART3 TDR (byte, fixed)
 		// DREQ = 1: destination peripheral paces the transfer.
-		gpdma1.gpdma_c0dar = gpdma_p::gpdma_cxdar_r::da_f(reinterpret_cast<uint32_t>(&usart3.usart_tdr));
-		gpdma1.gpdma_c0tr1 = gpdma_p::gpdma_cxtr1_r::sinc_f(); // src increment, dest fixed (default)
-		gpdma1.gpdma_c0tr2 = gpdma_p::gpdma_cxtr2_r::reqsel_f(26)  // USART3_TX
-		                   | gpdma_p::gpdma_cxtr2_r::dreq_f();       // dest (peripheral) paces
+		gpdma1.c[0].dar = gpdma_p::c_c::dar_r::da_f(reinterpret_cast<uint32_t>(&usart3.tdr));
+		gpdma1.c[0].tr1 = gpdma_p::c_c::tr1_r::sinc_f(); // src increment, dest fixed (default)
+		gpdma1.c[0].tr2 = gpdma_p::c_c::tr2_r::reqsel_f(26)  // USART3_TX
+		                   | gpdma_p::c_c::tr2_r::dreq_f();       // dest (peripheral) paces
 
 		while (!data.empty())
 		{
 			// Clamp to the 16-bit BNDT maximum
 			auto const chunk_size = std::min(data.size(), std::size_t{0xFFFFu});
 
-			gpdma1.gpdma_c0sar = gpdma_p::gpdma_cxsar_r::sa_f(reinterpret_cast<uint32_t>(data.data()));
-			gpdma1.gpdma_c0br1 = gpdma_p::gpdma_cxbr1_r::bndt_f(static_cast<uint16_t>(chunk_size));
+			gpdma1.c[0].sar = gpdma_p::c_c::sar_r::sa_f(reinterpret_cast<uint32_t>(data.data()));
+			gpdma1.c[0].br1 = gpdma_p::c_c::br1_r::bndt_f(static_cast<uint16_t>(chunk_size));
 
 			// Lock masks the TX ISR (priority 0x80) while we enable the channel.
 			// wait(mutex) atomically releases the lock and registers this task as waiter,
 			// eliminating the missed-wakeup race between enable and wait.
 			{
 				std::lock_guard<opsy::isr_lock> guard(tx_mutex_);
-				gpdma1.gpdma_c0fcr = gpdma_p::gpdma_cxfcr_r::tcf_f(); // clear any stale TCF before enabling TCIE
-				gpdma1.gpdma_c0cr = gpdma_p::gpdma_cxcr_r::tcie_f()
-				                  | gpdma_p::gpdma_cxcr_r::en_f();
+				gpdma1.c[0].fcr = gpdma_p::c_c::fcr_r::tcf_f(); // clear any stale TCF before enabling TCIE
+				gpdma1.c[0].cr = gpdma_p::c_c::cr_r::tcie_f()
+				                  | gpdma_p::c_c::cr_r::en_f();
 
 				// If TXFE was already high (TDR empty), the DMA transferred the data
 				// immediately and TCF fired while BASEPRI masked the interrupt.
@@ -181,8 +181,8 @@ public:
 				// PendSV saves the task context: wake_up() writes to a stale
 				// m_stackPointer and corrupts the stack.
 				// Handle the completion here while still holding the mutex instead.
-				if (gpdma1.gpdma_c0sr.load().tcf())
-					gpdma1.gpdma_c0fcr = gpdma_p::gpdma_cxfcr_r::tcf_f();
+				if (gpdma1.c[0].sr.load().tcf())
+					gpdma1.c[0].fcr = gpdma_p::c_c::fcr_r::tcf_f();
 				else
 					tx_done_.wait(tx_mutex_); // releases tx_mutex_ atomically, re-acquires on wake
 			} // guard destructor unlocks the re-acquired mutex
@@ -240,7 +240,7 @@ public:
 	 */
 	static void tx_isr()
 	{
-		gpdma1.gpdma_c0fcr = gpdma_p::gpdma_cxfcr_r::tcf_f();
+		gpdma1.c[0].fcr = gpdma_p::c_c::fcr_r::tcf_f();
 		tx_done_.notify_one();
 	}
 
@@ -256,35 +256,35 @@ public:
 	 */
 	static void rx_isr()
 	{
-		if (!usart3.usart_isr_enabled.load().idle())
+		if (!usart3.isr_enabled.load().idle())
 			return;
 
 		// If EN=0 the DMA channel already stopped (buffer full, TC auto-cleared EN, or
 		// rx_dma_isr() already did RESET). Attempting SUSP + poll IDLEF on a stopped/reset
 		// channel hangs forever — RESET clears all SR flags including IDLEF.
 		// rx_dma_isr() has already handled (or has a pending IRQ to handle) the count.
-		if (!gpdma1.gpdma_c1cr.load().en())
+		if (!gpdma1.c[1].cr.load().en())
 		{
-			usart3.usart_icr = usart_p::usart_icr_r::idlecf_f();
+			usart3.icr = usart_p::icr_r::idlecf_f();
 			return;
 		}
 
 		// Channel is running: suspend — RESET alone has no effect while EN=1.
-		gpdma1.gpdma_c1cr = gpdma_p::gpdma_cxcr_r::susp_f();
-		while (!gpdma1.gpdma_c1sr.load().idlef())
+		gpdma1.c[1].cr = gpdma_p::c_c::cr_r::susp_f();
+		while (!gpdma1.c[1].sr.load().idlef())
 			;
 
 		// Capture remaining count after the channel is suspended
-		auto const remaining = static_cast<std::size_t>(gpdma1.gpdma_c1br1.load().bndt());
+		auto const remaining = static_cast<std::size_t>(gpdma1.c[1].br1.load().bndt());
 		rx_count_[rx_fill_] = rx_buffer_size - remaining;
 
 		// Reset the suspended channel and clear DMA flags
-		gpdma1.gpdma_c1cr  = gpdma_p::gpdma_cxcr_r::reset_f();
-		gpdma1.gpdma_c1fcr = gpdma_p::gpdma_cxfcr_r::tcf_f()
-		                   | gpdma_p::gpdma_cxfcr_r::suspf_f();
+		gpdma1.c[1].cr  = gpdma_p::c_c::cr_r::reset_f();
+		gpdma1.c[1].fcr = gpdma_p::c_c::fcr_r::tcf_f()
+		                   | gpdma_p::c_c::fcr_r::suspf_f();
 
 		// Clear IDLE flag in USART
-		usart3.usart_icr = usart_p::usart_icr_r::idlecf_f();
+		usart3.icr = usart_p::icr_r::idlecf_f();
 
 		rx_done_ = true;
 		rx_idle_.notify_one();
@@ -302,12 +302,12 @@ public:
 	static void rx_dma_isr()
 	{
 		rx_count_[rx_fill_] = rx_buffer_size; // BNDT reached 0: all bytes are in the buffer
-		gpdma1.gpdma_c1cr  = gpdma_p::gpdma_cxcr_r::reset_f();
+		gpdma1.c[1].cr  = gpdma_p::c_c::cr_r::reset_f();
 		// Clear flags AFTER reset: reset itself generates SUSPF (and potentially TCF).
 		// If TCF were left set, enabling Ch1 with TCIE in the next receive() would
 		// trigger an immediate spurious interrupt.
-		gpdma1.gpdma_c1fcr = gpdma_p::gpdma_cxfcr_r::tcf_f()
-		                   | gpdma_p::gpdma_cxfcr_r::suspf_f();
+		gpdma1.c[1].fcr = gpdma_p::c_c::fcr_r::tcf_f()
+		                   | gpdma_p::c_c::fcr_r::suspf_f();
 		rx_done_ = true;
 		rx_idle_.notify_one();
 	}
@@ -324,31 +324,31 @@ private:
 	static void arm_rx_dma()
 	{
 		// Flush any stale byte from RDR and clear error flags.
-		usart3.usart_icr = usart_p::usart_icr_r::orecf_f()
-		                 | usart_p::usart_icr_r::fecf_f()
-		                 | usart_p::usart_icr_r::necf_f();
-		usart3.usart_rqr = usart_p::usart_rqr_r::rxfrq_f();
+		usart3.icr = usart_p::icr_r::orecf_f()
+		                 | usart_p::icr_r::fecf_f()
+		                 | usart_p::icr_r::necf_f();
+		usart3.rqr = usart_p::rqr_r::rxfrq_f();
 
 		// Source: USART3 RDR (byte, fixed) → Dest: rx_buffer_[rx_fill_] (byte, increment)
 		// DREQ = 0: source peripheral paces the transfer.
-		gpdma1.gpdma_c1sar = gpdma_p::gpdma_cxsar_r::sa_f(reinterpret_cast<uint32_t>(&usart3.usart_rdr));
-		gpdma1.gpdma_c1dar = gpdma_p::gpdma_cxdar_r::da_f(reinterpret_cast<uint32_t>(rx_buffer_[rx_fill_]));
-		gpdma1.gpdma_c1br1 = gpdma_p::gpdma_cxbr1_r::bndt_f(static_cast<uint16_t>(rx_buffer_size));
-		gpdma1.gpdma_c1tr1 = gpdma_p::gpdma_cxtr1_r::dinc_f(); // src fixed (default), dest increment
-		gpdma1.gpdma_c1tr2 = gpdma_p::gpdma_cxtr2_r::reqsel_f(25); // USART3_RX, DREQ=0 (src paces)
+		gpdma1.c[1].sar = gpdma_p::c_c::sar_r::sa_f(reinterpret_cast<uint32_t>(&usart3.rdr));
+		gpdma1.c[1].dar = gpdma_p::c_c::dar_r::da_f(reinterpret_cast<uint32_t>(rx_buffer_[rx_fill_]));
+		gpdma1.c[1].br1 = gpdma_p::c_c::br1_r::bndt_f(static_cast<uint16_t>(rx_buffer_size));
+		gpdma1.c[1].tr1 = gpdma_p::c_c::tr1_r::dinc_f(); // src fixed (default), dest increment
+		gpdma1.c[1].tr2 = gpdma_p::c_c::tr2_r::reqsel_f(25); // USART3_RX, DREQ=0 (src paces)
 		// Clear stale flags before enabling: reset_f() generates SUSPF, a leftover TCF
 		// with TCIE would fire a spurious interrupt immediately on enable.
-		gpdma1.gpdma_c1fcr = gpdma_p::gpdma_cxfcr_r::tcf_f()
-		                   | gpdma_p::gpdma_cxfcr_r::suspf_f();
-		gpdma1.gpdma_c1cr  = gpdma_p::gpdma_cxcr_r::tcie_f()
-		                   | gpdma_p::gpdma_cxcr_r::en_f();
+		gpdma1.c[1].fcr = gpdma_p::c_c::fcr_r::tcf_f()
+		                   | gpdma_p::c_c::fcr_r::suspf_f();
+		gpdma1.c[1].cr  = gpdma_p::c_c::cr_r::tcie_f()
+		                   | gpdma_p::c_c::cr_r::en_f();
 
 		// Clear IDLE and enable IDLEIE last, while the caller holds rx_mutex_
 		// (BASEPRI = isr_priority). The ISR cannot fire until wait() atomically
 		// releases the mutex, and the RM guarantees IDLE will not re-assert until
 		// RXNE is set (a real byte is received) — so no spurious trigger is possible.
-		usart3.usart_icr = usart_p::usart_icr_r::idlecf_f();
-		usart3.usart_cr1_enabled |= usart_p::usart_cr1_enabled_r::idleie_f();
+		usart3.icr = usart_p::icr_r::idlecf_f();
+		usart3.cr1_enabled |= usart_p::cr1_enabled_r::idleie_f();
 	}
 
 	static inline uint8_t                 rx_buffer_[2][rx_buffer_size];

@@ -41,9 +41,9 @@ namespace STM32H563
 {
 
 // The `atomic` postfix tag used in `| atomic` / `|| atomic` lives in
-// opsy::utility — pull it into namespace scope so the BSP register
-// helper expressions read naturally.
-using opsy::utility::atomic;
+// mmio (mmio.hpp of the device) — pull it into namespace scope so the BSP
+// register helper expressions read naturally.
+using mmio::atomic;
 
 /**
  * @brief System clock initialisation for STM32H563.
@@ -77,25 +77,25 @@ public:
 		// The reset value is 0b00 (Scale 3), so we must set it to 0b11 explicitly and
 		// wait for VOSRDY to guarantee the regulator has settled before we
 		// increase the frequency.
-		pwr.pwr_voscr = pwr_p::pwr_voscr_r::vos_f(3); // VOS0 = Scale 0 = 0b11 (supports 250 MHz)
-		while (!pwr.pwr_vossr.load().vosrdy()) {}
+		pwr.voscr = pwr_p::voscr_r::vos_f(3); // VOS0 = Scale 0 = 0b11 (supports 250 MHz)
+		while (!pwr.vossr.load().vosrdy()) {}
 
 		// ── 2. Flash access latency and prefetch ──────────────────────────
 		// At 250 MHz with VOS0: 5 wait states, WRHIGHFREQ = 2.
 		// Must be programmed *before* the clock frequency is increased.
 		// PRFTEN: smart prefetch, recommended as soon as there is a wait state;
 		// read back so that it is taken into account before going on.
-		flash.flash_acr = flash_p::flash_acr_r::latency_f(5)
-		                | flash_p::flash_acr_r::wrhighfreq_f(2)
-		                | flash_p::flash_acr_r::prften_f();
-		(void)flash.flash_acr.load();
+		flash.acr = flash_p::acr_r::latency_f(5)
+		                | flash_p::acr_r::wrhighfreq_f(2)
+		                | flash_p::acr_r::prften_f();
+		(void)flash.acr.load();
 
 		// ── 3. HSE in digital bypass ──────────────────────────────────────
 		// The ST-LINK MCO is a digital square wave: bypass the oscillator
 		// (HSEBYP) in digital mode (HSEEXT, written while HSE is off).
-		rcc.rcc_cr = rcc.rcc_cr.load() | rcc_p::rcc_cr_r::hsebyp_f() | rcc_p::rcc_cr_r::hseext_f();
-		rcc.rcc_cr = rcc.rcc_cr.load() | rcc_p::rcc_cr_r::hseon_f();
-		while (!rcc.rcc_cr.load().hserdy()) {}
+		rcc.cr = rcc.cr.load() | rcc_p::cr_r::hsebyp_f() | rcc_p::cr_r::hseext_f();
+		rcc.cr = rcc.cr.load() | rcc_p::cr_r::hseon_f();
+		while (!rcc.cr.load().hserdy()) {}
 
 		// ── 4. PLL1 configuration ─────────────────────────────────────────
 		// HSE (8 MHz) / DIVM1(2) = 4 MHz → × DIVN1(125) = 500 MHz VCO
@@ -105,39 +105,39 @@ public:
 		// PLL1RGE = 10: 4–8 MHz input range
 		// VCOSEL  =  0: wide VCO (128–560 MHz) — default, not written
 		// P output enabled; Q and R outputs left disabled
-		rcc.rcc_pll1cfgr = rcc_p::rcc_pll1cfgr_r::pll1src_f(0b11)
-		                 | rcc_p::rcc_pll1cfgr_r::pll1rge_f(0b10)
-		                 | rcc_p::rcc_pll1cfgr_r::divm1_f(2)
-		                 | rcc_p::rcc_pll1cfgr_r::pll1pen_f()
-		                 | rcc_p::rcc_pll1cfgr_r::pll1fracen_f();
+		rcc.pll1cfgr = rcc_p::pll1cfgr_r::pll1src_f(0b11)
+		                 | rcc_p::pll1cfgr_r::pll1rge_f(0b10)
+		                 | rcc_p::pll1cfgr_r::divm1_f(2)
+		                 | rcc_p::pll1cfgr_r::pll1pen_f()
+		                 | rcc_p::pll1cfgr_r::pll1fracen_f();
 
-		rcc.rcc_pll1divr = rcc_p::rcc_pll1divr_r::pll1n_f(124)  // N-1 encoding: register 124 → actual ×125
-		                 | rcc_p::rcc_pll1divr_r::pll1p_f(1);   // P-1 encoding: register 1   → actual ÷2
+		rcc.pll1divr = rcc_p::pll1divr_r::pll1n_f(124)  // N-1 encoding: register 124 → actual ×125
+		                 | rcc_p::pll1divr_r::pll1p_f(1);   // P-1 encoding: register 1   → actual ÷2
 
 		// ── 5. Enable PLL1 and wait for lock ─────────────────────────────
-		rcc.rcc_cr = rcc.rcc_cr.load() | rcc_p::rcc_cr_r::pll1on_f();
-		while (!rcc.rcc_cr.load().pll1rdy()) {}
+		rcc.cr = rcc.cr.load() | rcc_p::cr_r::pll1on_f();
+		while (!rcc.cr.load().pll1rdy()) {}
 
 		// ── 6. Bus prescalers ─────────────────────────────────────────────
 		// HPRE  = 0 → AHB  = SYSCLK / 1 = 250 MHz
 		// PPREx = 0 → APBx = HCLK  / 1 = 250 MHz
-		rcc.rcc_cfgr2 = rcc_p::rcc_cfgr2_r::hpre_f(0)
-		              | rcc_p::rcc_cfgr2_r::ppre1_f(0)
-		              | rcc_p::rcc_cfgr2_r::ppre2_f(0)
-		              | rcc_p::rcc_cfgr2_r::ppre3_f(0);
+		rcc.cfgr2 = rcc_p::cfgr2_r::hpre_f(0)
+		              | rcc_p::cfgr2_r::ppre1_f(0)
+		              | rcc_p::cfgr2_r::ppre2_f(0)
+		              | rcc_p::cfgr2_r::ppre3_f(0);
 
 		// ── 7. Switch SYSCLK to PLL1P and wait for confirmation ──────────
 		// SW = 011: PLL1 P-output as system clock source
-		rcc.rcc_cfgr1 = rcc_p::rcc_cfgr1_r::sw_f(0b011);
-		while (static_cast<uint8_t>(rcc.rcc_cfgr1.load().sws()) != 0b011u) {}
+		rcc.cfgr1 = rcc_p::cfgr1_r::sw_f(0b011);
+		while (static_cast<uint8_t>(rcc.cfgr1.load().sws()) != 0b011u) {}
 
 		// ── 8. Instruction cache ─────────────────────────────────────────
 		// Code runs from flash with 5 wait states: without the cache, every
 		// fetch outside the prefetch buffer stalls. The invalidation started
 		// at reset must be over (BUSYF = 0) before the cache is enabled,
 		// otherwise accesses stay non-cacheable until it ends.
-		while (icache.icache_sr.load().busyf()) {}
-		icache.icache_cr = icache.icache_cr.load() | icache_p::icache_cr_r::en_f();
+		while (icache.sr.load().busyf()) {}
+		icache.cr = icache.cr.load() | icache_p::cr_r::en_f();
 	}
 };
 

@@ -63,7 +63,7 @@ void* _sbrk(std::ptrdiff_t);
  *        by @c Default_Handler.
  */
 __attribute__((section(".isr_vector"), used))
-constexpr auto g_vectors = opsy::utility::interrupt_vector<irq_count>(
+constexpr auto g_vectors = opsy::utility::interrupt_vector<STM32H523::irq_count>(
     &_estack,
     Reset_Handler,
     SysTick_Handler,

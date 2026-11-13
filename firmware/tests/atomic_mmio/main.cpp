@@ -3,7 +3,7 @@
 //
 // On-target test of exclusive accesses (LDREX/STREX) to peripheral registers.
 //
-// OpSy's `| atomic` / `|| atomic` register updates compile to LDREX/STREX loops. ARMv8-M treats
+// The `| atomic` / `|| atomic` register updates of the generated headers compile to LDREX/STREX loops. ARMv8-M treats
 // Device memory as shareable and leaves the global exclusive monitor to the SoC, so whether
 // these loops are safe on peripheral registers is a property of the chip, not of the language.
 // This test measures it on the STM32H563.
@@ -17,7 +17,7 @@
 //   dma    GPDMA toggles B (another bus master, no exception): only a global monitor can make
 //          STREX fail. Informative: the firmware never shares a register with a DMA writer.
 //
-// Phase 2, stress: the OpSy operators run in a tight loop on bit A while a timer interrupt
+// Phase 2, stress: these operators run in a tight loop on bit A while a timer interrupt
 // (about 450 kHz, jittered period) toggles bit B and checks that its previous toggle survived.
 // The plain (non-atomic) operator must lose updates, which proves the detector works; the
 // atomic ones must not.
@@ -46,7 +46,7 @@
 #include <span>
 
 using namespace STM32H563;
-using opsy::utility::atomic;
+using mmio::atomic;
 
 namespace {
 
@@ -68,9 +68,9 @@ std::array<target, 4> make_targets()
 {
 	return {{
 		{ "sram",        reinterpret_cast<std::uint32_t>(&sram_word),          1u << 0, 1u << 1 },
-		{ "tim2_ccr1",   reinterpret_cast<std::uint32_t>(&tim2.tim2_ccr1),     1u << 0, 1u << 1 }, // APB1
-		{ "gpioe_odr",   reinterpret_cast<std::uint32_t>(&gpioe.gpio_odr),     1u << 0, 1u << 1 }, // AHB2, pins left in analog mode
-		{ "rcc_ahb2enr", reinterpret_cast<std::uint32_t>(&rcc.rcc_ahb2enr),    1u << 7, 1u << 8 }, // AHB3, GPIOH/GPIOI clocks (unused)
+		{ "tim2_ccr1",   reinterpret_cast<std::uint32_t>(&tim2.ccr1),     1u << 0, 1u << 1 }, // APB1
+		{ "gpioe_odr",   reinterpret_cast<std::uint32_t>(&gpioe.odr),     1u << 0, 1u << 1 }, // AHB2, pins left in analog mode
+		{ "rcc_ahb2enr", reinterpret_cast<std::uint32_t>(&rcc.ahb2enr),    1u << 7, 1u << 8 }, // AHB3, GPIOH/GPIOI clocks (unused)
 	}};
 }
 
@@ -122,11 +122,11 @@ std::uint32_t jitter_state = 0xACE1u; ///< Only touched by tim6_isr
 /// test and always hit the same instruction: each period is drawn between 300 and 811 cycles.
 void tim6_isr()
 {
-	tim6.tim6_sr = tim6_p::tim6_sr_r::uif_f(false);
+	tim6.sr = tim6_p::sr_r::uif_f(false);
 	jitter_state ^= jitter_state << 13; // xorshift32
 	jitter_state ^= jitter_state >> 17;
 	jitter_state ^= jitter_state << 5;
-	tim6.tim6_arr = tim6_p::tim6_arr_r::arr_f(300u + (jitter_state & 511u));
+	tim6.arr = tim6_p::arr_r::arr_f(300u + (jitter_state & 511u));
 	toggle_from_isr();
 }
 
@@ -148,22 +148,22 @@ alignas(1024) std::array<opsy::cortex_m::isr_handler_t, opsy::cortex_m::system_i
 
 void init_test_hardware()
 {
-	rcc.rcc_ahb2enr  |= rcc_p::rcc_ahb2enr_r::gpioeen_f() | atomic;
-	rcc.rcc_apb1lenr |= (rcc_p::rcc_apb1lenr_r::tim2en_f()
-	                   | rcc_p::rcc_apb1lenr_r::tim6en_f()
-	                   | rcc_p::rcc_apb1lenr_r::tim7en_f()) | atomic;
+	rcc.ahb2enr  |= rcc_p::ahb2enr_r::gpioeen_f() | atomic;
+	rcc.apb1lenr |= (rcc_p::apb1lenr_r::tim2en_f()
+	                   | rcc_p::apb1lenr_r::tim6en_f()
+	                   | rcc_p::apb1lenr_r::tim7en_f()) | atomic;
 
 	// TIM6: update interrupt, period set by tim6_isr, started by the stress phase
-	tim6.tim6_psc  = tim6_p::tim6_psc_r::psc_f(0);
-	tim6.tim6_arr  = tim6_p::tim6_arr_r::arr_f(499);
-	tim6.tim6_egr  = tim6_p::tim6_egr_r::ug_f();
-	tim6.tim6_sr   = tim6_p::tim6_sr_r::uif_f(false);
-	tim6.tim6_dier = tim6_p::tim6_dier_r::uie_f();
+	tim6.psc  = tim6_p::psc_r::psc_f(0);
+	tim6.arr  = tim6_p::arr_r::arr_f(499);
+	tim6.egr  = tim6_p::egr_r::ug_f();
+	tim6.sr   = tim6_p::sr_r::uif_f(false);
+	tim6.dier = tim6_p::dier_r::uie_f();
 
 	// GPDMA1 channel 2: one word, memory to register, software request
-	gpdma1.gpdma_c2tr1 = gpdma_p::gpdma_cxtr1_r::sdw_log2_f(2)
-	                   | gpdma_p::gpdma_cxtr1_r::ddw_log2_f(2);
-	gpdma1.gpdma_c2tr2 = gpdma_p::gpdma_cxtr2_r::swreq_f();
+	gpdma1.c[2].tr1 = gpdma_p::c_c::tr1_r::sdw_log2_f(2)
+	                   | gpdma_p::c_c::tr1_r::ddw_log2_f(2);
+	gpdma1.c[2].tr2 = gpdma_p::c_c::tr2_r::swreq_f();
 
 	opsy::cortex_m::move_vtor(ram_vectors.data(), ram_vectors.size());
 	opsy::cortex_m::set_isr_handler(TIM6_IRQn, tim6_isr);
@@ -176,7 +176,7 @@ void init_test_hardware()
 
 void release_test_hardware()
 {
-	tim6.tim6_cr1 = tim6_p::tim6_cr1_r::cen_f(false);
+	tim6.cr1 = tim6_p::cr1_r::cen_f(false);
 	opsy::cortex_m::disable_interrupt(TIM6_IRQn);
 	opsy::cortex_m::disable_interrupt(TIM7_IRQn);
 }
@@ -227,21 +227,21 @@ volatile std::uint32_t dma_source;
 std::uint32_t probe_dma(std::uint32_t address, std::uint32_t a, std::uint32_t b, bool& timed_out)
 {
 	dma_source = read(address) ^ b;
-	gpdma1.gpdma_c2fcr = gpdma_p::gpdma_cxfcr_r::tcf_f()
-	                   | gpdma_p::gpdma_cxfcr_r::htf_f()
-	                   | gpdma_p::gpdma_cxfcr_r::dtef_f()
-	                   | gpdma_p::gpdma_cxfcr_r::ulef_f()
-	                   | gpdma_p::gpdma_cxfcr_r::usef_f()
-	                   | gpdma_p::gpdma_cxfcr_r::suspf_f()
-	                   | gpdma_p::gpdma_cxfcr_r::tof_f();
-	gpdma1.gpdma_c2sar = gpdma_p::gpdma_cxsar_r::sa_f(reinterpret_cast<std::uint32_t>(&dma_source));
-	gpdma1.gpdma_c2dar = gpdma_p::gpdma_cxdar_r::da_f(address);
-	gpdma1.gpdma_c2br1 = gpdma_p::gpdma_cxbr1_r::bndt_f(4);
+	gpdma1.c[2].fcr = gpdma_p::c_c::fcr_r::tcf_f()
+	                   | gpdma_p::c_c::fcr_r::htf_f()
+	                   | gpdma_p::c_c::fcr_r::dtef_f()
+	                   | gpdma_p::c_c::fcr_r::ulef_f()
+	                   | gpdma_p::c_c::fcr_r::usef_f()
+	                   | gpdma_p::c_c::fcr_r::suspf_f()
+	                   | gpdma_p::c_c::fcr_r::tof_f();
+	gpdma1.c[2].sar = gpdma_p::c_c::sar_r::sa_f(reinterpret_cast<std::uint32_t>(&dma_source));
+	gpdma1.c[2].dar = gpdma_p::c_c::dar_r::da_f(address);
+	gpdma1.c[2].br1 = gpdma_p::c_c::br1_r::bndt_f(4);
 
-	auto const cr = reinterpret_cast<std::uint32_t>(&gpdma1.gpdma_c2cr);
-	auto const sr = reinterpret_cast<std::uint32_t>(&gpdma1.gpdma_c2sr);
-	std::uint32_t const enable = gpdma_p::gpdma_cxcr_r::en_f::mask;
-	std::uint32_t const tcf = gpdma_p::gpdma_cxsr_r::tcf_f::mask;
+	auto const cr = reinterpret_cast<std::uint32_t>(&gpdma1.c[2].cr);
+	auto const sr = reinterpret_cast<std::uint32_t>(&gpdma1.c[2].sr);
+	std::uint32_t const enable = gpdma_p::c_c::cr_r::en_f::mask;
+	std::uint32_t const tcf = gpdma_p::c_c::sr_r::tcf_f::mask;
 	std::uint32_t remaining = 100000;
 	std::uint32_t value;
 	std::uint32_t status;
@@ -261,7 +261,7 @@ std::uint32_t probe_dma(std::uint32_t address, std::uint32_t a, std::uint32_t b,
 		: [value] "=&r"(value), [status] "=&r"(status), [flags] "=&r"(flags), [remaining] "+r"(remaining)
 		: [address] "r"(address), [a] "r"(a), [cr] "r"(cr), [sr] "r"(sr), [enable] "r"(enable), [tcf] "r"(tcf)
 		: "cc", "memory");
-	timed_out = remaining == 0 || gpdma1.gpdma_c2sr.load().dtef();
+	timed_out = remaining == 0 || gpdma1.c[2].sr.load().dtef();
 	return status;
 }
 
@@ -335,15 +335,15 @@ struct stress_result
 constexpr std::uint32_t stress_iterations = 200000;
 
 template<typename TInt, typename TReg>
-stress_result run_stress(opsy::utility::memory<TInt, TReg>& reg, target const& t, update mode)
+stress_result run_stress(mmio::memory<TInt, TReg>& reg, target const& t, update mode)
 {
 	stress_result r;
 	auto const a = TReg{static_cast<TInt>(t.a)};
 	auto const none = TReg{static_cast<TInt>(0)};
 
 	arm_isr(t.address, t.b);
-	tim6.tim6_cnt = tim6_p::tim6_cnt_r::cnt_f(0);
-	tim6.tim6_cr1 = tim6_p::tim6_cr1_r::cen_f();
+	tim6.cnt = tim6_p::cnt_r::cnt_f(0);
+	tim6.cr1 = tim6_p::cr1_r::cen_f();
 
 	for (std::uint32_t i = 0; i < stress_iterations; ++i)
 	{
@@ -351,11 +351,11 @@ stress_result run_stress(opsy::utility::memory<TInt, TReg>& reg, target const& t
 		{
 		case update::plain:            reg ^= a; break;
 		case update::fetch_xor:        reg ^= a | atomic; break;
-		case update::compare_exchange: reg <<= opsy::utility::clear_set<TReg>(a, (i % 2u == 0u) ? a : none) || atomic; break;
+		case update::compare_exchange: reg <<= mmio::clear_set<TReg>(a, (i % 2u == 0u) ? a : none) || atomic; break;
 		}
 	}
 
-	tim6.tim6_cr1 = tim6_p::tim6_cr1_r::cen_f(false);
+	tim6.cr1 = tim6_p::cr1_r::cen_f(false);
 	disarm_isr();
 	// A write undone after the last interrupt is not seen by the ISR: check it here.
 	auto const final_lost = (static_cast<std::uint32_t>(reg.load().value()) & t.b) != isr_shadow.load(std::memory_order_relaxed);
@@ -387,9 +387,9 @@ void run_all()
 	constexpr std::array modes{ update::plain, update::fetch_xor, update::compare_exchange };
 	for (std::size_t m = 0; m < modes.size(); ++m)
 	{
-		stresses[1][m] = run_stress(tim2.tim2_ccr1, targets[1], modes[m]);
-		stresses[2][m] = run_stress(gpioe.gpio_odr, targets[2], modes[m]);
-		stresses[3][m] = run_stress(rcc.rcc_ahb2enr, targets[3], modes[m]);
+		stresses[1][m] = run_stress(tim2.ccr1, targets[1], modes[m]);
+		stresses[2][m] = run_stress(gpioe.odr, targets[2], modes[m]);
+		stresses[3][m] = run_stress(rcc.ahb2enr, targets[3], modes[m]);
 	}
 }
 

@@ -28,14 +28,14 @@
 #include <cstdint>
 #include <optional>
 
-#include <STM32H523/gpiod.hpp>
+#include <STM32H523/gpio.hpp>
 #include <STM32H523/rcc.hpp>
 #include <STM32H523/usart.hpp>
 
 namespace STM32H523
 {
 
-using opsy::utility::atomic;
+using mmio::atomic;
 
 /**
  * @brief Isolated RS-485 port, on USART2.
@@ -58,35 +58,35 @@ public:
 	/** @brief Configures the pins and USART2. */
 	static void init()
 	{
-		rcc.rcc_ahb2enr  |= rcc_p::rcc_ahb2enr_r::gpioden_f() | atomic;
-		rcc.rcc_apb1lenr |= rcc_p::rcc_apb1lenr_r::usart2en_f() | atomic;
+		rcc.ahb2enr  |= rcc_p::ahb2enr_r::gpioden_f() | atomic;
+		rcc.apb1lenr |= rcc_p::apb1lenr_r::usart2en_f() | atomic;
 
-		gpiod.gpiod_afrl <<= gpiod_p::gpiod_afrl_r::afsel4_f(7) || atomic;
-		gpiod.gpiod_afrl <<= gpiod_p::gpiod_afrl_r::afsel5_f(7) || atomic;
-		gpiod.gpiod_afrl <<= gpiod_p::gpiod_afrl_r::afsel6_f(7) || atomic;
-		gpiod.gpiod_moder <<= gpiod_p::gpiod_moder_r::mode4_f(0b10) || atomic;
-		gpiod.gpiod_moder <<= gpiod_p::gpiod_moder_r::mode5_f(0b10) || atomic;
-		gpiod.gpiod_moder <<= gpiod_p::gpiod_moder_r::mode6_f(0b10) || atomic;
+		gpiod.afrl <<= gpio_p::afrl_r::afsel4_f(7) || atomic;
+		gpiod.afrl <<= gpio_p::afrl_r::afsel5_f(7) || atomic;
+		gpiod.afrl <<= gpio_p::afrl_r::afsel6_f(7) || atomic;
+		gpiod.moder <<= gpio_p::moder_r::mode4_f(0b10) || atomic;
+		gpiod.moder <<= gpio_p::moder_r::mode5_f(0b10) || atomic;
+		gpiod.moder <<= gpio_p::moder_r::mode6_f(0b10) || atomic;
 
-		usart2.usart_brr = usart_p::usart_brr_r(clock_hz / baud_rate);
+		usart2.brr = usart_p::brr_r(clock_hz / baud_rate);
 
 		// DEM: DE driven by the USART, active high.
-		usart2.usart_cr3 = usart_p::usart_cr3_r::dem_f();
+		usart2.cr3 = usart_p::cr3_r::dem_f();
 
 		// DEAT, DEDT: DE rises 8 sample times (half a bit) before the start bit and falls as
 		// long after the stop bit.
-		usart2.usart_cr1 = usart_p::usart_cr1_r::deat_f(8)
-		                 | usart_p::usart_cr1_r::dedt_f(8)
-		                 | usart_p::usart_cr1_r::te_f()
-		                 | usart_p::usart_cr1_r::re_f()
-		                 | usart_p::usart_cr1_r::ue_f();
+		usart2.cr1 = usart_p::cr1_r::deat_f(8)
+		                 | usart_p::cr1_r::dedt_f(8)
+		                 | usart_p::cr1_r::te_f()
+		                 | usart_p::cr1_r::re_f()
+		                 | usart_p::cr1_r::ue_f();
 	}
 
 	/** @brief Sends one byte, once the previous one has left the transmit register. */
 	static void send(uint8_t byte)
 	{
-		while (!usart2.usart_isr.load().txfnf()) {}
-		usart2.usart_tdr = usart_p::usart_tdr_r(byte);
+		while (!usart2.isr.load().txfnf()) {}
+		usart2.tdr = usart_p::tdr_r(byte);
 	}
 
 	/**
@@ -98,20 +98,20 @@ public:
 	static std::optional<uint8_t> receive(uint32_t polls)
 	{
 		for (; polls > 0; --polls)
-			if (usart2.usart_isr.load().rxfne())
-				return static_cast<uint8_t>(usart2.usart_rdr.load().value());
+			if (usart2.isr.load().rxfne())
+				return static_cast<uint8_t>(usart2.rdr.load().value());
 		return std::nullopt;
 	}
 
 	/** @brief Tells whether the receiver sees the line idle, between two frames. */
-	static bool line_idle() { return !usart2.usart_isr.load().busy(); }
+	static bool line_idle() { return !usart2.isr.load().busy(); }
 
 	/** @brief Returns the line errors seen since the last call, and clears them. */
 	static errors take_errors()
 	{
-		const auto status = usart2.usart_isr.load();
+		const auto status = usart2.isr.load();
 		const errors seen{status.fe(), status.ne(), status.ore()};
-		usart2.usart_icr = usart_p::usart_icr_r::fecf_f() | usart_p::usart_icr_r::necf_f() | usart_p::usart_icr_r::orecf_f();
+		usart2.icr = usart_p::icr_r::fecf_f() | usart_p::icr_r::necf_f() | usart_p::icr_r::orecf_f();
 		return seen;
 	}
 

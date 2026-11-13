@@ -6,6 +6,13 @@ path = ["firmware/devices/STM32H563/*.hpp", "firmware/devices/STM32H523/*.hpp"]
 SPDX-FileCopyrightText = "2025 STMicroelectronics"
 SPDX-License-Identifier = "Apache-2.0"
 
+# Register building blocks written by SvdGenerator next to the headers above.
+[[annotations]]
+path = ["firmware/devices/STM32H563/mmio.hpp", "firmware/devices/STM32H523/mmio.hpp"]
+precedence = "override"
+SPDX-FileCopyrightText = "2019-2026 Thomas Legrand"
+SPDX-License-Identifier = "MIT"
+
 [[annotations]]
 path = ["CMakePresets.json", ".gitignore", ".gitmodules"]
 SPDX-FileCopyrightText = "2026 Thomas Legrand"

@@ -77,7 +77,7 @@
 namespace STM32H563
 {
 
-using opsy::utility::atomic;
+using mmio::atomic;
 
 class step_generator
 {
@@ -294,33 +294,33 @@ public:
 		opsy::cortex_m::enable_interrupt(TIM5_IRQn);
 
 		// TIM1 is started by the first SYNC0 (trigger mode sets CEN)
-		tim5.tim5_cr1 = tim5_p::tim5_cr1_r::urs_f() | tim5_p::tim5_cr1_r::cen_f();
+		tim5.cr1 = tim2_p::cr1_r::urs_f() | tim2_p::cr1_r::cen_f();
 	}
 
 	/// Stops the timers and the DMA channels, outputs low.
 	static void stop()
 	{
 		opsy::cortex_m::disable_interrupt(TIM5_IRQn);
-		if (rcc.rcc_apb2enr.load().tim1en())
+		if (rcc.apb2enr.load().tim1en())
 		{
-			tim1.tim1_cr1 = tim1_p::tim1_cr1_r::cen_f(false);
-			tim1.tim1_dier = tim1_p::tim1_dier_r::ude_f(false);
-			tim1.tim1_ccr1 = tim1_p::tim1_ccr1_r(0);
-			tim1.tim1_ccr2 = tim1_p::tim1_ccr2_r(0);
-			tim1.tim1_ccr3 = tim1_p::tim1_ccr3_r(0);
-			tim1.tim1_ccr4 = tim1_p::tim1_ccr4_r(0);
-			tim1.tim1_egr = tim1_p::tim1_egr_r::ug_f();
+			tim1.cr1 = tim1_p::cr1_r::cen_f(false);
+			tim1.dier = tim1_p::dier_r::ude_f(false);
+			tim1.ccr1 = tim1_p::ccr1_r(0);
+			tim1.ccr2 = tim1_p::ccr2_r(0);
+			tim1.ccr3 = tim1_p::ccr3_r(0);
+			tim1.ccr4 = tim1_p::ccr4_r(0);
+			tim1.egr = tim1_p::egr_r::ug_f();
 		}
-		if (rcc.rcc_apb1lenr.load().tim5en())
+		if (rcc.apb1lenr.load().tim5en())
 		{
-			tim5.tim5_cr1 = tim5_p::tim5_cr1_r::cen_f(false);
-			tim5.tim5_dier = tim5_p::tim5_dier_r(0);
+			tim5.cr1 = tim2_p::cr1_r::cen_f(false);
+			tim5.dier = tim2_p::dier_r(0);
 		}
-		if (rcc.rcc_ahb1enr.load().gpdma1en())
+		if (rcc.ahb1enr.load().gpdma1en())
 		{
-			abort_channel(gpdma1.gpdma_c2cr, gpdma1.gpdma_c2sr);
-			abort_channel(gpdma1.gpdma_c3cr, gpdma1.gpdma_c3sr);
-			abort_channel(gpdma1.gpdma_c4cr, gpdma1.gpdma_c4sr);
+			abort_channel(gpdma1.c[2].cr, gpdma1.c[2].sr);
+			abort_channel(gpdma1.c[3].cr, gpdma1.c[3].sr);
+			abort_channel(gpdma1.c[4].cr, gpdma1.c[4].sr);
 		}
 	}
 
@@ -336,8 +336,8 @@ public:
 	template<typename TTargets>
 	static bool fill(TTargets&& targets)
 	{
-		auto const sr = tim5.tim5_sr.load();
-		tim5.tim5_sr = ~tim5_p::tim5_sr_r(tim5_p::tim5_sr_r::cc2if_f() | tim5_p::tim5_sr_r::tif_f());
+		auto const sr = tim5.sr.load();
+		tim5.sr = ~tim2_p::sr_r(tim2_p::sr_r::cc2if_f() | tim2_p::sr_r::tif_f());
 		if (!sr.tif())
 		{
 			++stats_.unsynced;
@@ -386,7 +386,7 @@ public:
 			stats_.fill_max_steps = steps;
 		}
 		stats_.fill_cycles_sum += elapsed;
-		stats_.fill_end_max = std::max(stats_.fill_end_max, static_cast<uint32_t>(tim5.tim5_cnt.load().cnt()));
+		stats_.fill_end_max = std::max(stats_.fill_end_max, static_cast<uint32_t>(tim5.cnt.load().cnt()));
 		return true;
 	}
 
@@ -550,135 +550,135 @@ private:
 
 	static void enable_clocks()
 	{
-		rcc.rcc_ahb1enr |= rcc_p::rcc_ahb1enr_r::gpdma1en_f() | atomic;
-		rcc.rcc_ahb2enr |= (rcc_p::rcc_ahb2enr_r::gpioaen_f() | rcc_p::rcc_ahb2enr_r::gpioeen_f()) | atomic;
-		rcc.rcc_apb1lenr |= rcc_p::rcc_apb1lenr_r::tim5en_f() | atomic;
-		rcc.rcc_apb2enr |= rcc_p::rcc_apb2enr_r::tim1en_f() | atomic;
+		rcc.ahb1enr |= rcc_p::ahb1enr_r::gpdma1en_f() | atomic;
+		rcc.ahb2enr |= (rcc_p::ahb2enr_r::gpioaen_f() | rcc_p::ahb2enr_r::gpioeen_f()) | atomic;
+		rcc.apb1lenr |= rcc_p::apb1lenr_r::tim5en_f() | atomic;
+		rcc.apb2enr |= rcc_p::apb2enr_r::tim1en_f() | atomic;
 	}
 
 	static void configure_pins()
 	{
 		// DIR: outputs, forward until the first change
-		gpioe.gpio_bsrr = gpioc_p::gpio_bsrr_r(dir_word());
+		gpioe.bsrr = gpio_p::bsrr_r(dir_word());
 		for (auto const pin : dir_pin)
 		{
-			gpioe.gpio_moder <<= opsy::utility::clear_set<gpioc_p::gpio_moder_r>(
-				gpioc_p::gpio_moder_r(0b11u << (2 * pin)), gpioc_p::gpio_moder_r(0b01u << (2 * pin))) || atomic;
-			gpioe.gpio_ospeedr |= gpioc_p::gpio_ospeedr_r(0b11u << (2 * pin)) | atomic;
+			gpioe.moder <<= mmio::clear_set<gpio_p::moder_r>(
+				gpio_p::moder_r(0b11u << (2 * pin)), gpio_p::moder_r(0b01u << (2 * pin))) || atomic;
+			gpioe.ospeedr |= gpio_p::ospeedr_r(0b11u << (2 * pin)) | atomic;
 		}
 		// STEP: TIM1_CH1..CH4, AF1
-		gpioe.gpio_afrh <<= (gpioc_p::gpio_afrh_r::afsel9_f(1)
-		                  || gpioc_p::gpio_afrh_r::afsel11_f(1)
-		                  || gpioc_p::gpio_afrh_r::afsel13_f(1)
-		                  || gpioc_p::gpio_afrh_r::afsel14_f(1)) || atomic;
-		gpioe.gpio_ospeedr |= (gpioc_p::gpio_ospeedr_r::ospeed9_f(0b11)
-		                    | gpioc_p::gpio_ospeedr_r::ospeed11_f(0b11)
-		                    | gpioc_p::gpio_ospeedr_r::ospeed13_f(0b11)
-		                    | gpioc_p::gpio_ospeedr_r::ospeed14_f(0b11)) | atomic;
-		gpioe.gpio_moder <<= (gpioc_p::gpio_moder_r::mode9_f(0b10)
-		                   || gpioc_p::gpio_moder_r::mode11_f(0b10)
-		                   || gpioc_p::gpio_moder_r::mode13_f(0b10)
-		                   || gpioc_p::gpio_moder_r::mode14_f(0b10)) || atomic;
+		gpioe.afrh <<= (gpio_p::afrh_r::afsel9_f(1)
+		                  || gpio_p::afrh_r::afsel11_f(1)
+		                  || gpio_p::afrh_r::afsel13_f(1)
+		                  || gpio_p::afrh_r::afsel14_f(1)) || atomic;
+		gpioe.ospeedr |= (gpio_p::ospeedr_r::ospeed9_f(0b11)
+		                    | gpio_p::ospeedr_r::ospeed11_f(0b11)
+		                    | gpio_p::ospeedr_r::ospeed13_f(0b11)
+		                    | gpio_p::ospeedr_r::ospeed14_f(0b11)) | atomic;
+		gpioe.moder <<= (gpio_p::moder_r::mode9_f(0b10)
+		                   || gpio_p::moder_r::mode11_f(0b10)
+		                   || gpio_p::moder_r::mode13_f(0b10)
+		                   || gpio_p::moder_r::mode14_f(0b10)) || atomic;
 		// SYNC0: PA4, TIM5_ETR, AF2, pull-down as on the board
-		gpioa.gpioa_pupdr <<= gpioa_p::gpioa_pupdr_r::pupd4_f(0b10) || atomic;
-		gpioa.gpioa_afrl <<= gpioa_p::gpioa_afrl_r::afsel4_f(2) || atomic;
-		gpioa.gpioa_moder <<= gpioa_p::gpioa_moder_r::mode4_f(0b10) || atomic;
+		gpioa.pupdr <<= gpio_p::pupdr_r::pupd4_f(0b10) || atomic;
+		gpioa.afrl <<= gpio_p::afrl_r::afsel4_f(2) || atomic;
+		gpioa.moder <<= gpio_p::moder_r::mode4_f(0b10) || atomic;
 	}
 
 	static void configure_tim1()
 	{
 		using r = tim1_p;
-		tim1.tim1_cr1 = r::tim1_cr1_r::urs_f() | r::tim1_cr1_r::arpe_f();
-		tim1.tim1_psc = r::tim1_psc_r::psc_f(static_cast<uint16_t>(d_.prescaler - 1));
-		tim1.tim1_arr = r::tim1_arr_r::arr_f(d_.slot_ticks - 1);
-		tim1.tim1_ccr1 = r::tim1_ccr1_r(0);
-		tim1.tim1_ccr2 = r::tim1_ccr2_r(0);
-		tim1.tim1_ccr3 = r::tim1_ccr3_r(0);
-		tim1.tim1_ccr4 = r::tim1_ccr4_r(0);
+		tim1.cr1 = r::cr1_r::urs_f() | r::cr1_r::arpe_f();
+		tim1.psc = r::psc_r::psc_f(static_cast<uint16_t>(d_.prescaler - 1));
+		tim1.arr = r::arr_r::arr_f(d_.slot_ticks - 1);
+		tim1.ccr1 = r::ccr1_r(0);
+		tim1.ccr2 = r::ccr2_r(0);
+		tim1.ccr3 = r::ccr3_r(0);
+		tim1.ccr4 = r::ccr4_r(0);
 		// PWM mode 1 (0110), preload on, all four channels
-		tim1.tim1_ccmr1_output = r::tim1_ccmr1_output_r::oc1m_f(0b110) | r::tim1_ccmr1_output_r::oc1pe_f()
-		                       | r::tim1_ccmr1_output_r::oc2m_f(0b110) | r::tim1_ccmr1_output_r::oc2pe_f();
-		tim1.tim1_ccmr2_output = r::tim1_ccmr2_output_r::oc3m_f(0b110) | r::tim1_ccmr2_output_r::oc3pe_f()
-		                       | r::tim1_ccmr2_output_r::oc4m_f(0b110) | r::tim1_ccmr2_output_r::oc4pe_f();
-		tim1.tim1_ccer = r::tim1_ccer_r::cc1e_f() | r::tim1_ccer_r::cc2e_f()
-		               | r::tim1_ccer_r::cc3e_f() | r::tim1_ccer_r::cc4e_f();
-		tim1.tim1_bdtr = r::tim1_bdtr_r::moe_f();
+		tim1.ccmr1_output = r::ccmr1_output_r::oc1m_f(0b110) | r::ccmr1_output_r::oc1pe_f()
+		                       | r::ccmr1_output_r::oc2m_f(0b110) | r::ccmr1_output_r::oc2pe_f();
+		tim1.ccmr2_output = r::ccmr2_output_r::oc3m_f(0b110) | r::ccmr2_output_r::oc3pe_f()
+		                       | r::ccmr2_output_r::oc4m_f(0b110) | r::ccmr2_output_r::oc4pe_f();
+		tim1.ccer = r::ccer_r::cc1e_f() | r::ccer_r::cc2e_f()
+		               | r::ccer_r::cc3e_f() | r::ccer_r::cc4e_f();
+		tim1.bdtr = r::bdtr_r::moe_f();
 		// Load PSC, ARR and the zero CCRs; URS = 1, so no DMA request for it
-		tim1.tim1_egr = r::tim1_egr_r::ug_f();
-		tim1.tim1_sr = r::tim1_sr_r(0);
+		tim1.egr = r::egr_r::ug_f();
+		tim1.sr = r::sr_r(0);
 		// Trigger mode (0110) on tim_itr4 = tim5_trgo, TS[4:0] = 01000: the first SYNC0 starts the
 		// counter, later ones are ignored
-		tim1.tim1_smcr = r::tim1_smcr_r::sms_f(0b110) | r::tim1_smcr_r::ts_f(0b000) | r::tim1_smcr_r::ts_1_f(0b01);
+		tim1.smcr = r::smcr_r::sms_f(0b110) | r::smcr_r::ts_f(0b000) | r::smcr_r::ts_1_f(0b01);
 		// Burst of 6 transfers from ARR (offset 0x2C = 11 words): ARR, RCR, CCR1..CCR4, on update
-		tim1.tim1_dcr = r::tim1_dcr_r::dba_f(11) | r::tim1_dcr_r::dbl_f(5) | r::tim1_dcr_r::dbss_f(1);
-		tim1.tim1_dier = r::tim1_dier_r::ude_f();
+		tim1.dcr = r::dcr_r::dba_f(11) | r::dcr_r::dbl_f(5) | r::dcr_r::dbss_f(1);
+		tim1.dier = r::dier_r::ude_f();
 	}
 
 	static void configure_tim5()
 	{
-		using r = tim5_p;
-		tim5.tim5_cr1 = r::tim5_cr1_r::urs_f();
-		tim5.tim5_psc = r::tim5_psc_r::psc_f(0);
-		tim5.tim5_arr = r::tim5_arr_r::arr_f(0xFFFF'FFFFu);
-		tim5.tim5_ccr1 = r::tim5_ccr1_r::ccr1_f(d_.dir_ticks);
-		tim5.tim5_ccr2 = r::tim5_ccr2_r::ccr2_f(d_.fill_ticks);
-		tim5.tim5_egr = r::tim5_egr_r::ug_f();
+		using r = tim2_p;
+		tim5.cr1 = r::cr1_r::urs_f();
+		tim5.psc = r::psc_r::psc_f(0);
+		tim5.arr = r::arr_r::arr_f(0xFFFF'FFFFu);
+		tim5.ccr1 = r::ccr1_r::ccr1_f(d_.dir_ticks);
+		tim5.ccr2 = r::ccr2_r::ccr2_f(d_.fill_ticks);
+		tim5.egr = r::egr_r::ug_f();
 		// TRGO on reset (MMS = 000); ETR = TIM5_ETR pin, rising edge. Filter ETF = 0011: 8
 		// samples at 250 MHz, so that a glitch under 32 ns (crosstalk) is not taken for SYNC0
-		tim5.tim5_cr2 = r::tim5_cr2_r(0);
-		tim5.tim5_af1 = r::tim5_af1_r::etrsel_f(0);
+		tim5.cr2 = r::cr2_r(0);
+		tim5.af1 = r::af1_r::etrsel_f(0);
 		// Reset mode on tim_etrf: TS[4:0] = 00111
-		tim5.tim5_smcr = r::tim5_smcr_r::sms_f(0b100) | r::tim5_smcr_r::ts_f(0b111) | r::tim5_smcr_r::etf_f(0b0011);
-		tim5.tim5_sr = r::tim5_sr_r(0);
-		tim5.tim5_dier = r::tim5_dier_r::cc1de_f() | r::tim5_dier_r::cc2ie_f();
+		tim5.smcr = r::smcr_r::sms_f(0b100) | r::smcr_r::ts_f(0b111) | r::smcr_r::etf_f(0b0011);
+		tim5.sr = r::sr_r(0);
+		tim5.dier = r::dier_r::cc1de_f() | r::dier_r::cc2ie_f();
 	}
 
 	static void configure_dma()
 	{
-		using r = gpdma_p;
+		using r = gpdma_p::c_c;
 		auto const address = [](auto const* p) { return reinterpret_cast<uint32_t>(p); };
 
 		// Channel 2: slot bytes → TIM1_DMAR, one byte read and one word written per request
 		uint32_t const ring_bytes = ring_slots * slot_bytes;
 		step_lli_ = { ring_bytes, address(ring_.data()) };
 		static_assert(sizeof(ring_) == ring_slots * slot_bytes);
-		gpdma1.gpdma_c2tr1 = r::gpdma_cxtr1_r::sdw_log2_f(0) | r::gpdma_cxtr1_r::sinc_f()
-		                   | r::gpdma_cxtr1_r::pam_f(0) | r::gpdma_cxtr1_r::ddw_log2_f(2);
-		gpdma1.gpdma_c2tr2 = r::gpdma_cxtr2_r::reqsel_f(62) | r::gpdma_cxtr2_r::dreq_f(); // tim1_upd_dma
-		gpdma1.gpdma_c2br1 = r::gpdma_cxbr1_r::bndt_f(static_cast<uint16_t>(ring_bytes));
-		gpdma1.gpdma_c2sar = r::gpdma_cxsar_r::sa_f(address(ring_.data()));
-		gpdma1.gpdma_c2dar = r::gpdma_cxdar_r::da_f(address(&tim1.tim1_dmar));
-		gpdma1.gpdma_c2lbar = r::gpdma_cxlbar_r::lba_f(static_cast<uint16_t>(address(&step_lli_) >> 16));
-		gpdma1.gpdma_c2llr = r::gpdma_cxllr_r::ub1_f() | r::gpdma_cxllr_r::usa_f()
-		                   | r::gpdma_cxllr_r::la_f(static_cast<uint16_t>((address(&step_lli_) & 0xFFFFu) >> 2));
-		gpdma1.gpdma_c2cr = r::gpdma_cxcr_r::prio_f(3) | r::gpdma_cxcr_r::en_f();
+		gpdma1.c[2].tr1 = r::tr1_r::sdw_log2_f(0) | r::tr1_r::sinc_f()
+		                   | r::tr1_r::pam_f(0) | r::tr1_r::ddw_log2_f(2);
+		gpdma1.c[2].tr2 = r::tr2_r::reqsel_f(62) | r::tr2_r::dreq_f(); // tim1_upd_dma
+		gpdma1.c[2].br1 = r::br1_r::bndt_f(static_cast<uint16_t>(ring_bytes));
+		gpdma1.c[2].sar = r::sar_r::sa_f(address(ring_.data()));
+		gpdma1.c[2].dar = r::dar_r::da_f(address(&tim1.dmar));
+		gpdma1.c[2].lbar = r::lbar_r::lba_f(static_cast<uint16_t>(address(&step_lli_) >> 16));
+		gpdma1.c[2].llr = r::llr_r::ub1_f() | r::llr_r::usa_f()
+		                   | r::llr_r::la_f(static_cast<uint16_t>((address(&step_lli_) & 0xFFFFu) >> 2));
+		gpdma1.c[2].cr = r::cr_r::prio_f(3) | r::cr_r::en_f();
 
 		// Channel 3: one dummy word per TIM5 CC1; its transfer complete triggers channel 4
 		dummy_lli_ = { 4, 0 };
-		gpdma1.gpdma_c3tr1 = r::gpdma_cxtr1_r::sdw_log2_f(2) | r::gpdma_cxtr1_r::ddw_log2_f(2);
-		gpdma1.gpdma_c3tr2 = r::gpdma_cxtr2_r::reqsel_f(88) | r::gpdma_cxtr2_r::dreq_f(); // tim5_cc1_dma
-		gpdma1.gpdma_c3br1 = r::gpdma_cxbr1_r::bndt_f(4);
-		gpdma1.gpdma_c3sar = r::gpdma_cxsar_r::sa_f(address(&dummy_source_));
-		gpdma1.gpdma_c3dar = r::gpdma_cxdar_r::da_f(address(&dummy_destination_));
-		gpdma1.gpdma_c3lbar = r::gpdma_cxlbar_r::lba_f(static_cast<uint16_t>(address(&dummy_lli_) >> 16));
-		gpdma1.gpdma_c3llr = r::gpdma_cxllr_r::ub1_f()
-		                   | r::gpdma_cxllr_r::la_f(static_cast<uint16_t>((address(&dummy_lli_) & 0xFFFFu) >> 2));
-		gpdma1.gpdma_c3cr = r::gpdma_cxcr_r::prio_f(3) | r::gpdma_cxcr_r::en_f();
+		gpdma1.c[3].tr1 = r::tr1_r::sdw_log2_f(2) | r::tr1_r::ddw_log2_f(2);
+		gpdma1.c[3].tr2 = r::tr2_r::reqsel_f(88) | r::tr2_r::dreq_f(); // tim5_cc1_dma
+		gpdma1.c[3].br1 = r::br1_r::bndt_f(4);
+		gpdma1.c[3].sar = r::sar_r::sa_f(address(&dummy_source_));
+		gpdma1.c[3].dar = r::dar_r::da_f(address(&dummy_destination_));
+		gpdma1.c[3].lbar = r::lbar_r::lba_f(static_cast<uint16_t>(address(&dummy_lli_) >> 16));
+		gpdma1.c[3].llr = r::llr_r::ub1_f()
+		                   | r::llr_r::la_f(static_cast<uint16_t>((address(&dummy_lli_) & 0xFFFFu) >> 2));
+		gpdma1.c[3].cr = r::cr_r::prio_f(3) | r::cr_r::en_f();
 
 		// Channel 4: DIR words → GPIOE_BSRR, each read gated by gpdma1_ch3_tc (trigger 21)
 		uint32_t const dir_bytes = dir_ring_words * 4;
 		dir_lli_ = { dir_bytes, address(dir_ring_.data()) };
-		gpdma1.gpdma_c4tr1 = r::gpdma_cxtr1_r::sdw_log2_f(2) | r::gpdma_cxtr1_r::sinc_f()
-		                   | r::gpdma_cxtr1_r::ddw_log2_f(2);
-		gpdma1.gpdma_c4tr2 = r::gpdma_cxtr2_r::swreq_f() | r::gpdma_cxtr2_r::trigm_f(0b11)
-		                   | r::gpdma_cxtr2_r::trigsel_f(21) | r::gpdma_cxtr2_r::trigpol_f(0b01);
-		gpdma1.gpdma_c4br1 = r::gpdma_cxbr1_r::bndt_f(static_cast<uint16_t>(dir_bytes));
-		gpdma1.gpdma_c4sar = r::gpdma_cxsar_r::sa_f(address(dir_ring_.data()));
-		gpdma1.gpdma_c4dar = r::gpdma_cxdar_r::da_f(address(&gpioe.gpio_bsrr));
-		gpdma1.gpdma_c4lbar = r::gpdma_cxlbar_r::lba_f(static_cast<uint16_t>(address(&dir_lli_) >> 16));
-		gpdma1.gpdma_c4llr = r::gpdma_cxllr_r::ub1_f() | r::gpdma_cxllr_r::usa_f()
-		                   | r::gpdma_cxllr_r::la_f(static_cast<uint16_t>((address(&dir_lli_) & 0xFFFFu) >> 2));
-		gpdma1.gpdma_c4cr = r::gpdma_cxcr_r::prio_f(3) | r::gpdma_cxcr_r::en_f();
+		gpdma1.c[4].tr1 = r::tr1_r::sdw_log2_f(2) | r::tr1_r::sinc_f()
+		                   | r::tr1_r::ddw_log2_f(2);
+		gpdma1.c[4].tr2 = r::tr2_r::swreq_f() | r::tr2_r::trigm_f(0b11)
+		                   | r::tr2_r::trigsel_f(21) | r::tr2_r::trigpol_f(0b01);
+		gpdma1.c[4].br1 = r::br1_r::bndt_f(static_cast<uint16_t>(dir_bytes));
+		gpdma1.c[4].sar = r::sar_r::sa_f(address(dir_ring_.data()));
+		gpdma1.c[4].dar = r::dar_r::da_f(address(&gpioe.bsrr));
+		gpdma1.c[4].lbar = r::lbar_r::lba_f(static_cast<uint16_t>(address(&dir_lli_) >> 16));
+		gpdma1.c[4].llr = r::llr_r::ub1_f() | r::llr_r::usa_f()
+		                   | r::llr_r::la_f(static_cast<uint16_t>((address(&dir_lli_) & 0xFFFFu) >> 2));
+		gpdma1.c[4].cr = r::cr_r::prio_f(3) | r::cr_r::en_f();
 	}
 
 	template<typename TCr, typename TSr>
@@ -686,26 +686,26 @@ private:
 	{
 		if (!cr.load().en())
 			return;
-		cr = gpdma_p::gpdma_cxcr_r::susp_f();
+		cr = gpdma_p::c_c::cr_r::susp_f();
 		// A channel waiting for a request suspends at once; bounded anyway
 		for (uint32_t i = 0; i < 100'000 && !sr.load().suspf(); ++i) {}
-		cr = gpdma_p::gpdma_cxcr_r::reset_f();
+		cr = gpdma_p::c_c::cr_r::reset_f();
 	}
 
 	static void check_dma_errors()
 	{
 		// The field accessors overload || (field combination): test the raw value
-		uint32_t const errors = gpdma_p::gpdma_cxsr_r::dtef_f::mask | gpdma_p::gpdma_cxsr_r::ulef_f::mask
-		                      | gpdma_p::gpdma_cxsr_r::usef_f::mask;
-		if (((gpdma1.gpdma_c2sr.load().value() | gpdma1.gpdma_c3sr.load().value()
-		      | gpdma1.gpdma_c4sr.load().value()) & errors) != 0)
+		uint32_t const errors = gpdma_p::c_c::sr_r::dtef_f::mask | gpdma_p::c_c::sr_r::ulef_f::mask
+		                      | gpdma_p::c_c::sr_r::usef_f::mask;
+		if (((gpdma1.c[2].sr.load().value() | gpdma1.c[3].sr.load().value()
+		      | gpdma1.c[4].sr.load().value()) & errors) != 0)
 		{
 			++stats_.dma_errors;
-			auto const clear = gpdma_p::gpdma_cxfcr_r::dtef_f() | gpdma_p::gpdma_cxfcr_r::ulef_f()
-			                 | gpdma_p::gpdma_cxfcr_r::usef_f();
-			gpdma1.gpdma_c2fcr = clear;
-			gpdma1.gpdma_c3fcr = clear;
-			gpdma1.gpdma_c4fcr = clear;
+			auto const clear = gpdma_p::c_c::fcr_r::dtef_f() | gpdma_p::c_c::fcr_r::ulef_f()
+			                 | gpdma_p::c_c::fcr_r::usef_f();
+			gpdma1.c[2].fcr = clear;
+			gpdma1.c[3].fcr = clear;
+			gpdma1.c[4].fcr = clear;
 		}
 	}
 
@@ -735,13 +735,13 @@ private:
 		// only when both TIM1 values are close, their middle facing the TIM5 value.
 		for (uint32_t attempt = 0; attempt < 64; ++attempt)
 		{
-			uint32_t const fifo = gpdma1.gpdma_c2sr.load().fifol();
-			uint32_t const remaining = gpdma1.gpdma_c2br1.load().bndt();
-			uint32_t const before = tim1.tim1_cnt.load().cnt();
-			since_sync = tim5.tim5_cnt.load().cnt();
-			uint32_t const after = tim1.tim1_cnt.load().cnt();
-			bool const stable = fifo == gpdma1.gpdma_c2sr.load().fifol()
-			                 && remaining == gpdma1.gpdma_c2br1.load().bndt();
+			uint32_t const fifo = gpdma1.c[2].sr.load().fifol();
+			uint32_t const remaining = gpdma1.c[2].br1.load().bndt();
+			uint32_t const before = tim1.cnt.load().cnt();
+			since_sync = tim5.cnt.load().cnt();
+			uint32_t const after = tim1.cnt.load().cnt();
+			bool const stable = fifo == gpdma1.c[2].sr.load().fifol()
+			                 && remaining == gpdma1.c[2].br1.load().bndt();
 			written = (2 * ring_bytes - remaining - fifo) % ring_bytes;
 			tim1_count = (before + after) / 2;
 			if (stable && written % slot_bytes == 0 && after >= before && (after - before) * d_.prescaler <= 48
@@ -1057,7 +1057,7 @@ private:
 	/// Index of the DIR word the channel writes next.
 	static std::size_t dir_index()
 	{
-		uint32_t const remaining = gpdma1.gpdma_c4br1.load().bndt();
+		uint32_t const remaining = gpdma1.c[4].br1.load().bndt();
 		uint32_t const consumed = (dir_ring_words * 4 - remaining) % (dir_ring_words * 4);
 		return consumed / 4;
 	}

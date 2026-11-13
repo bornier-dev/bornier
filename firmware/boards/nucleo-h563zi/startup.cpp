@@ -65,7 +65,7 @@ void* _sbrk(std::ptrdiff_t);
  *        by @c Default_Handler.
  */
 __attribute__((section(".isr_vector"), used))
-constexpr auto g_vectors = opsy::utility::interrupt_vector<irq_count>(
+constexpr auto g_vectors = opsy::utility::interrupt_vector<STM32H563::irq_count>(
     &_estack,
     Reset_Handler,
     SysTick_Handler,
@@ -78,9 +78,9 @@ constexpr auto g_vectors = opsy::utility::interrupt_vector<irq_count>(
     Default_Handler,  // UsageFault
     Default_Handler   // DebugMonitor
 )
-    .with_handler<GPDMA1_CH0_IRQn, STM32H563::uart::tx_isr>()
-    .with_handler<GPDMA1_CH1_IRQn, STM32H563::uart::rx_dma_isr>()
-    .with_handler<USART3_IRQn,     STM32H563::uart::rx_isr>();
+    .with_handler<STM32H563::GPDMA1_CH0_IRQn, STM32H563::uart::tx_isr>()
+    .with_handler<STM32H563::GPDMA1_CH1_IRQn, STM32H563::uart::rx_dma_isr>()
+    .with_handler<STM32H563::USART3_IRQn,     STM32H563::uart::rx_isr>();
 
 // ── Default_Handler ───────────────────────────────────────────────────────────
 /**

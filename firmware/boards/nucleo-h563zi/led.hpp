@@ -27,9 +27,9 @@ namespace STM32H563
 {
 
 // The `atomic` postfix tag used in `| atomic` / `|| atomic` lives in
-// opsy::utility — pull it into namespace scope so the BSP register
-// helper expressions read naturally.
-using opsy::utility::atomic;
+// mmio (mmio.hpp of the device) — pull it into namespace scope so the BSP
+// register helper expressions read naturally.
+using mmio::atomic;
 
 /**
  * @brief Driver for the three user LEDs on NUCLEO-H563ZI.
@@ -61,16 +61,16 @@ public:
 	{
 		// Enable GPIOB (LD1), GPIOF (LD2), GPIOG (LD3) clocks on AHB2.
 		// fetch_or via |= … | atomic — safe if called from multiple contexts.
-		rcc.rcc_ahb2enr |= (rcc_p::rcc_ahb2enr_r::gpioben_f()
-		                  | rcc_p::rcc_ahb2enr_r::gpiofen_f()
-		                  | rcc_p::rcc_ahb2enr_r::gpiogen_f()) | atomic;
+		rcc.ahb2enr |= (rcc_p::ahb2enr_r::gpioben_f()
+		                  | rcc_p::ahb2enr_r::gpiofen_f()
+		                  | rcc_p::ahb2enr_r::gpiogen_f()) | atomic;
 
 		// Set pins to general-purpose output mode (MODER field = 0b01).
 		// CAS-loop via <<= … || atomic — clears the 2-bit field and sets the
 		// new value without disturbing any other pin's configuration.
-		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode0_f(0b01) || atomic; // PB0
-		gpiof.gpio_moder  <<= gpioc_p::gpio_moder_r::mode4_f(0b01)  || atomic; // PF4
-		gpiog.gpio_moder  <<= gpioc_p::gpio_moder_r::mode4_f(0b01)  || atomic; // PG4
+		gpiob.moder <<= gpio_p::moder_r::mode0_f(0b01) || atomic; // PB0
+		gpiof.moder  <<= gpio_p::moder_r::mode4_f(0b01)  || atomic; // PF4
+		gpiog.moder  <<= gpio_p::moder_r::mode4_f(0b01)  || atomic; // PG4
 	}
 
 	/**
@@ -85,9 +85,9 @@ public:
 	{
 		switch (which)
 		{
-		case led::ld1: gpiob.gpiob_bsrr = gpiob_p::gpiob_bsrr_r::bs0_f(); break;
-		case led::ld2: gpiof.gpio_bsrr  = gpioc_p::gpio_bsrr_r::bs4_f();  break;
-		case led::ld3: gpiog.gpio_bsrr  = gpioc_p::gpio_bsrr_r::bs4_f();  break;
+		case led::ld1: gpiob.bsrr = gpio_p::bsrr_r::bs0_f(); break;
+		case led::ld2: gpiof.bsrr  = gpio_p::bsrr_r::bs4_f();  break;
+		case led::ld3: gpiog.bsrr  = gpio_p::bsrr_r::bs4_f();  break;
 		}
 	}
 
@@ -100,9 +100,9 @@ public:
 	{
 		switch (which)
 		{
-		case led::ld1: gpiob.gpiob_bsrr = gpiob_p::gpiob_bsrr_r::br0_f(); break;
-		case led::ld2: gpiof.gpio_bsrr  = gpioc_p::gpio_bsrr_r::br4_f();  break;
-		case led::ld3: gpiog.gpio_bsrr  = gpioc_p::gpio_bsrr_r::br4_f();  break;
+		case led::ld1: gpiob.bsrr = gpio_p::bsrr_r::br0_f(); break;
+		case led::ld2: gpiof.bsrr  = gpio_p::bsrr_r::br4_f();  break;
+		case led::ld3: gpiog.bsrr  = gpio_p::bsrr_r::br4_f();  break;
 		}
 	}
 };

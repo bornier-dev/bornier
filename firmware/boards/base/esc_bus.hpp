@@ -40,15 +40,14 @@
 
 #include <cstdint>
 
-#include <STM32H523/gpioa.hpp>
-#include <STM32H523/gpiob.hpp>
+#include <STM32H523/gpio.hpp>
 #include <STM32H523/octospi.hpp>
 #include <STM32H523/rcc.hpp>
 
 namespace STM32H523
 {
 
-using opsy::utility::atomic;
+using mmio::atomic;
 
 /**
  * @brief Register access to the LAN9253 through the OCTOSPI.
@@ -83,37 +82,37 @@ public:
 	 */
 	static void init()
 	{
-		rcc.rcc_ahb2enr |= (rcc_p::rcc_ahb2enr_r::gpioaen_f() | rcc_p::rcc_ahb2enr_r::gpioben_f()) | atomic;
-		rcc.rcc_ahb4enr |= rcc_p::rcc_ahb4enr_r::octospi1en_f() | atomic;
+		rcc.ahb2enr |= (rcc_p::ahb2enr_r::gpioaen_f() | rcc_p::ahb2enr_r::gpioben_f()) | atomic;
+		rcc.ahb4enr |= rcc_p::ahb4enr_r::octospi1en_f() | atomic;
 
-		gpioa.gpioa_afrl <<= gpioa_p::gpioa_afrl_r::afsel6_f(6) || atomic;  // PA6  IO3
-		gpioa.gpioa_afrl <<= gpioa_p::gpioa_afrl_r::afsel7_f(10) || atomic; // PA7  IO2
-		gpiob.gpiob_afrl <<= gpiob_p::gpiob_afrl_r::afsel0_f(6) || atomic;  // PB0  IO1
-		gpiob.gpiob_afrl <<= gpiob_p::gpiob_afrl_r::afsel1_f(6) || atomic;  // PB1  IO0
-		gpiob.gpiob_afrl <<= gpiob_p::gpiob_afrl_r::afsel2_f(9) || atomic;  // PB2  CLK
-		gpiob.gpiob_afrh <<= gpiob_p::gpiob_afrh_r::afsel10_f(9) || atomic; // PB10 NCS
+		gpioa.afrl <<= gpio_p::afrl_r::afsel6_f(6) || atomic;  // PA6  IO3
+		gpioa.afrl <<= gpio_p::afrl_r::afsel7_f(10) || atomic; // PA7  IO2
+		gpiob.afrl <<= gpio_p::afrl_r::afsel0_f(6) || atomic;  // PB0  IO1
+		gpiob.afrl <<= gpio_p::afrl_r::afsel1_f(6) || atomic;  // PB1  IO0
+		gpiob.afrl <<= gpio_p::afrl_r::afsel2_f(9) || atomic;  // PB2  CLK
+		gpiob.afrh <<= gpio_p::afrh_r::afsel10_f(9) || atomic; // PB10 NCS
 
 		// High speed (0b10) on the six pins, then alternate function mode (0b10).
-		gpioa.gpioa_ospeedr <<= gpioa_p::gpioa_ospeedr_r::ospeed6_f(0b10) || atomic;
-		gpioa.gpioa_ospeedr <<= gpioa_p::gpioa_ospeedr_r::ospeed7_f(0b10) || atomic;
-		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed0_f(0b10) || atomic;
-		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed1_f(0b10) || atomic;
-		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed2_f(0b10) || atomic;
-		gpiob.gpiob_ospeedr <<= gpiob_p::gpiob_ospeedr_r::ospeed10_f(0b10) || atomic;
-		gpioa.gpioa_moder <<= gpioa_p::gpioa_moder_r::mode6_f(0b10) || atomic;
-		gpioa.gpioa_moder <<= gpioa_p::gpioa_moder_r::mode7_f(0b10) || atomic;
-		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode0_f(0b10) || atomic;
-		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode1_f(0b10) || atomic;
-		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode2_f(0b10) || atomic;
-		gpiob.gpiob_moder <<= gpiob_p::gpiob_moder_r::mode10_f(0b10) || atomic;
+		gpioa.ospeedr <<= gpio_p::ospeedr_r::ospeed6_f(0b10) || atomic;
+		gpioa.ospeedr <<= gpio_p::ospeedr_r::ospeed7_f(0b10) || atomic;
+		gpiob.ospeedr <<= gpio_p::ospeedr_r::ospeed0_f(0b10) || atomic;
+		gpiob.ospeedr <<= gpio_p::ospeedr_r::ospeed1_f(0b10) || atomic;
+		gpiob.ospeedr <<= gpio_p::ospeedr_r::ospeed2_f(0b10) || atomic;
+		gpiob.ospeedr <<= gpio_p::ospeedr_r::ospeed10_f(0b10) || atomic;
+		gpioa.moder <<= gpio_p::moder_r::mode6_f(0b10) || atomic;
+		gpioa.moder <<= gpio_p::moder_r::mode7_f(0b10) || atomic;
+		gpiob.moder <<= gpio_p::moder_r::mode0_f(0b10) || atomic;
+		gpiob.moder <<= gpio_p::moder_r::mode1_f(0b10) || atomic;
+		gpiob.moder <<= gpio_p::moder_r::mode2_f(0b10) || atomic;
+		gpiob.moder <<= gpio_p::moder_r::mode10_f(0b10) || atomic;
 
 		// DEVSIZE 15: 64 KB address space, the 16-bit addresses of the LAN9253.
 		// CSHT 7: SCS# stays high 8 clock cycles between two commands (50 ns needed).
 		// CKMODE 0: clock low while SCS# is high (SPI mode 0).
-		octospi.octospi_dcr1 = octospi_p::octospi_dcr1_r::devsize_f(15)
-		                     | octospi_p::octospi_dcr1_r::csht_f(7);
-		octospi.octospi_dcr2 = octospi_p::octospi_dcr2_r::prescaler_f(prescaler_single);
-		octospi.octospi_cr   = octospi_p::octospi_cr_r::en_f();
+		octospi.dcr1 = octospi_p::dcr1_r::devsize_f(15)
+		                     | octospi_p::dcr1_r::csht_f(7);
+		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler_single);
+		octospi.cr   = octospi_p::cr_r::en_f();
 
 		command(lines_quad, reset_quad);
 		quad_ = false;
@@ -136,7 +135,7 @@ public:
 			command(lines_single, enable_quad);
 		else
 			command(lines_quad, reset_quad);
-		octospi.octospi_dcr2 = octospi_p::octospi_dcr2_r::prescaler_f(quad ? prescaler_quad : prescaler_single);
+		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(quad ? prescaler_quad : prescaler_single);
 		quad_ = quad;
 	}
 
@@ -152,10 +151,10 @@ public:
 	static uint32_t read(uint16_t address)
 	{
 		start(0b01, quad_ ? fast_read_instruction : read_instruction, quad_ ? fast_read_dummy_cycles : 0);
-		octospi.octospi_ar = octospi_p::octospi_ar_r(address); // starts the transfer
+		octospi.ar = octospi_p::ar_r(address); // starts the transfer
 
-		while (!octospi.octospi_sr.load().tcf()) {}
-		const uint32_t value = octospi.octospi_dr.load().value();
+		while (!octospi.sr.load().tcf()) {}
+		const uint32_t value = octospi.dr.load().value();
 		finish();
 		return value;
 	}
@@ -172,10 +171,10 @@ public:
 	static void write(uint16_t address, uint32_t value)
 	{
 		start(0b00, write_instruction, 0);
-		octospi.octospi_ar = octospi_p::octospi_ar_r(address);
-		octospi.octospi_dr = octospi_p::octospi_dr_r(value); // starts the transfer
+		octospi.ar = octospi_p::ar_r(address);
+		octospi.dr = octospi_p::dr_r(value); // starts the transfer
 
-		while (!octospi.octospi_sr.load().tcf()) {}
+		while (!octospi.sr.load().tcf()) {}
 		finish();
 	}
 
@@ -241,12 +240,12 @@ private:
 	/// Sends an instruction alone, on the given lines, and returns once the OCTOSPI is idle.
 	static void command(uint8_t lines, uint32_t instruction)
 	{
-		octospi.octospi_cr  = octospi_p::octospi_cr_r::en_f(); // indirect write
-		octospi.octospi_ccr = octospi_p::octospi_ccr_r::imode_f(lines);
-		octospi.octospi_tcr = octospi_p::octospi_tcr_r(0u);
-		octospi.octospi_ir  = octospi_p::octospi_ir_r(instruction); // starts the transfer
+		octospi.cr  = octospi_p::cr_r::en_f(); // indirect write
+		octospi.ccr = octospi_p::ccr_r::imode_f(lines);
+		octospi.tcr = octospi_p::tcr_r(0u);
+		octospi.ir  = octospi_p::ir_r(instruction); // starts the transfer
 
-		while (!octospi.octospi_sr.load().tcf()) {}
+		while (!octospi.sr.load().tcf()) {}
 		finish();
 	}
 
@@ -254,24 +253,24 @@ private:
 	static void start(uint8_t functional_mode, uint32_t instruction, uint8_t dummy_cycles)
 	{
 		const uint8_t lines = quad_ ? lines_quad : lines_single;
-		octospi.octospi_cr  = octospi_p::octospi_cr_r::en_f() | octospi_p::octospi_cr_r::fmode_f(functional_mode);
-		octospi.octospi_dlr = octospi_p::octospi_dlr_r(3u); // 4 bytes
-		octospi.octospi_ccr = octospi_p::octospi_ccr_r::imode_f(lines)
-		                    | octospi_p::octospi_ccr_r::admode_f(lines)
-		                    | octospi_p::octospi_ccr_r::adsize_f(1) // 16 bits
-		                    | octospi_p::octospi_ccr_r::dmode_f(lines);
-		octospi.octospi_tcr = octospi_p::octospi_tcr_r::dcyc_f(dummy_cycles);
-		octospi.octospi_ir  = octospi_p::octospi_ir_r(instruction);
+		octospi.cr  = octospi_p::cr_r::en_f() | octospi_p::cr_r::fmode_f(functional_mode);
+		octospi.dlr = octospi_p::dlr_r(3u); // 4 bytes
+		octospi.ccr = octospi_p::ccr_r::imode_f(lines)
+		                    | octospi_p::ccr_r::admode_f(lines)
+		                    | octospi_p::ccr_r::adsize_f(1) // 16 bits
+		                    | octospi_p::ccr_r::dmode_f(lines);
+		octospi.tcr = octospi_p::tcr_r::dcyc_f(dummy_cycles);
+		octospi.ir  = octospi_p::ir_r(instruction);
 	}
 
 	/// Ends a transfer and leaves the OCTOSPI ready for the next one.
 	static void finish()
 	{
-		octospi.octospi_fcr = octospi_p::octospi_fcr_r::ctcf_f();
+		octospi.fcr = octospi_p::fcr_r::ctcf_f();
 
 		// The OCTOSPI stays busy after the last data bit, until SCS# has been high long enough.
 		// Meanwhile it ignores the writes that set up the next command, which would never start.
-		while (octospi.octospi_sr.load().busy()) {}
+		while (octospi.sr.load().busy()) {}
 	}
 };
 

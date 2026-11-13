@@ -18,13 +18,13 @@
 
 #pragma once
 
-#include <STM32H523/gpioc.hpp>
+#include <STM32H523/gpio.hpp>
 #include <STM32H523/rcc.hpp>
 
 namespace STM32H523
 {
 
-using opsy::utility::atomic;
+using mmio::atomic;
 
 /**
  * @brief Driver for the MCU LED of the Bornier base board.
@@ -44,18 +44,18 @@ public:
 	 */
 	static void init()
 	{
-		rcc.rcc_ahb2enr |= rcc_p::rcc_ahb2enr_r::gpiocen_f() | atomic;
+		rcc.ahb2enr |= rcc_p::ahb2enr_r::gpiocen_f() | atomic;
 
 		// Pin high before it becomes an output: the LED stays off.
 		off();
-		gpioc.gpioc_moder <<= gpioc_p::gpioc_moder_r::mode13_f(0b01) || atomic;
+		gpioc.moder <<= gpio_p::moder_r::mode13_f(0b01) || atomic;
 	}
 
 	/** @brief Turns the LED on (pin low). BSRR is write-only: the write is atomic by nature. */
-	static void on() { gpioc.gpioc_bsrr = gpioc_p::gpioc_bsrr_r::br13_f(); }
+	static void on() { gpioc.bsrr = gpio_p::bsrr_r::br13_f(); }
 
 	/** @brief Turns the LED off (pin high). */
-	static void off() { gpioc.gpioc_bsrr = gpioc_p::gpioc_bsrr_r::bs13_f(); }
+	static void off() { gpioc.bsrr = gpio_p::bsrr_r::bs13_f(); }
 };
 
 } // namespace STM32H523
