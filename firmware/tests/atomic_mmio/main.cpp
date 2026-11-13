@@ -6,7 +6,7 @@
 // The `| atomic` / `|| atomic` register updates of the generated headers compile to LDREX/STREX loops. ARMv8-M treats
 // Device memory as shareable and leaves the global exclusive monitor to the SoC, so whether
 // these loops are safe on peripheral registers is a property of the chip, not of the language.
-// This test measures it on the STM32H563.
+// This test measures it on the STM32H523 of the Bornier base board.
 //
 // Phase 1, probes: hand-written LDREX ... STREX sequences, with a write to the same register
 // forced in between. Each probe toggles bit A with the exclusive pair; the interference toggles
@@ -22,30 +22,32 @@
 // The plain (non-atomic) operator must lose updates, which proves the detector works; the
 // atomic ones must not.
 //
-// Results are printed on the ST-LINK virtual COM port (115200 8N1) each time a byte is received.
+// The test runs once at boot. Its report is printed on SWO every two seconds.
 // Host side: tools/hil/atomic_mmio.py.
 
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
 #include <clock.hpp>
-#include <uart.hpp>
-#include <STM32H563/gpdma.hpp>
-#include <STM32H563/gpio.hpp>
-#include <STM32H563/interrupts.hpp>
-#include <STM32H563/rcc.hpp>
-#include <STM32H563/tim.hpp>
+#include <trace.hpp>
+#include <STM32H523/gpdma.hpp>
+#include <STM32H523/gpio.hpp>
+#include <STM32H523/interrupts.hpp>
+#include <STM32H523/rcc.hpp>
+#include <STM32H523/tim.hpp>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cinttypes>
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <iterator>
-#include <span>
+#include <string_view>
 
-using namespace STM32H563;
+using namespace std::chrono_literals;
+using namespace STM32H523;
 using mmio::atomic;
 
 namespace {
@@ -69,8 +71,8 @@ std::array<target, 4> make_targets()
 	return {{
 		{ "sram",        reinterpret_cast<std::uint32_t>(&sram_word),          1u << 0, 1u << 1 },
 		{ "tim2_ccr1",   reinterpret_cast<std::uint32_t>(&tim2.ccr1),     1u << 0, 1u << 1 }, // APB1
-		{ "gpioe_odr",   reinterpret_cast<std::uint32_t>(&gpioe.odr),     1u << 0, 1u << 1 }, // AHB2, pins left in analog mode
-		{ "rcc_ahb2enr", reinterpret_cast<std::uint32_t>(&rcc.ahb2enr),    1u << 7, 1u << 8 }, // AHB3, GPIOH/GPIOI clocks (unused)
+		{ "gpioe_odr",   reinterpret_cast<std::uint32_t>(&gpioe.odr),     1u << 2, 1u << 3 }, // AHB2, pins left in analog mode; bit 1 does not exist on this device
+		{ "rcc_ahb2enr", reinterpret_cast<std::uint32_t>(&rcc.ahb2enr),    1u << 5, 1u << 6 }, // AHB3, GPIOF/GPIOG clocks: ports without pins on the LQFP100 package
 	}};
 }
 
@@ -148,6 +150,7 @@ alignas(1024) std::array<opsy::cortex_m::isr_handler_t, opsy::cortex_m::system_i
 
 void init_test_hardware()
 {
+	rcc.ahb1enr  |= rcc_p::ahb1enr_r::gpdma1en_f() | atomic;
 	rcc.ahb2enr  |= rcc_p::ahb2enr_r::gpioeen_f() | atomic;
 	rcc.apb1lenr |= (rcc_p::apb1lenr_r::tim2en_f()
 	                   | rcc_p::apb1lenr_r::tim6en_f()
@@ -160,10 +163,10 @@ void init_test_hardware()
 	tim6.sr   = tim6_p::sr_r::uif_f(false);
 	tim6.dier = tim6_p::dier_r::uie_f();
 
-	// GPDMA1 channel 2: one word, memory to register, software request
-	gpdma1.c[2].tr1 = gpdma_p::c_c::tr1_r::sdw_log2_f(2)
+	// GPDMA channel 2: one word, memory to register, software request
+	gpdma.c[2].tr1 = gpdma_p::c_c::tr1_r::sdw_log2_f(2)
 	                   | gpdma_p::c_c::tr1_r::ddw_log2_f(2);
-	gpdma1.c[2].tr2 = gpdma_p::c_c::tr2_r::swreq_f();
+	gpdma.c[2].tr2 = gpdma_p::c_c::tr2_r::swreq_f();
 
 	opsy::cortex_m::move_vtor(ram_vectors.data(), ram_vectors.size());
 	opsy::cortex_m::set_isr_handler(TIM6_IRQn, tim6_isr);
@@ -227,19 +230,19 @@ volatile std::uint32_t dma_source;
 std::uint32_t probe_dma(std::uint32_t address, std::uint32_t a, std::uint32_t b, bool& timed_out)
 {
 	dma_source = read(address) ^ b;
-	gpdma1.c[2].fcr = gpdma_p::c_c::fcr_r::tcf_f()
+	gpdma.c[2].fcr = gpdma_p::c_c::fcr_r::tcf_f()
 	                   | gpdma_p::c_c::fcr_r::htf_f()
 	                   | gpdma_p::c_c::fcr_r::dtef_f()
 	                   | gpdma_p::c_c::fcr_r::ulef_f()
 	                   | gpdma_p::c_c::fcr_r::usef_f()
 	                   | gpdma_p::c_c::fcr_r::suspf_f()
 	                   | gpdma_p::c_c::fcr_r::tof_f();
-	gpdma1.c[2].sar = gpdma_p::c_c::sar_r::sa_f(reinterpret_cast<std::uint32_t>(&dma_source));
-	gpdma1.c[2].dar = gpdma_p::c_c::dar_r::da_f(address);
-	gpdma1.c[2].br1 = gpdma_p::c_c::br1_r::bndt_f(4);
+	gpdma.c[2].sar = gpdma_p::c_c::sar_r::sa_f(reinterpret_cast<std::uint32_t>(&dma_source));
+	gpdma.c[2].dar = gpdma_p::c_c::dar_r::da_f(address);
+	gpdma.c[2].br1 = gpdma_p::c_c::br1_r::bndt_f(4);
 
-	auto const cr = reinterpret_cast<std::uint32_t>(&gpdma1.c[2].cr);
-	auto const sr = reinterpret_cast<std::uint32_t>(&gpdma1.c[2].sr);
+	auto const cr = reinterpret_cast<std::uint32_t>(&gpdma.c[2].cr);
+	auto const sr = reinterpret_cast<std::uint32_t>(&gpdma.c[2].sr);
 	std::uint32_t const enable = gpdma_p::c_c::cr_r::en_f::mask;
 	std::uint32_t const tcf = gpdma_p::c_c::sr_r::tcf_f::mask;
 	std::uint32_t remaining = 100000;
@@ -261,7 +264,7 @@ std::uint32_t probe_dma(std::uint32_t address, std::uint32_t a, std::uint32_t b,
 		: [value] "=&r"(value), [status] "=&r"(status), [flags] "=&r"(flags), [remaining] "+r"(remaining)
 		: [address] "r"(address), [a] "r"(a), [cr] "r"(cr), [sr] "r"(sr), [enable] "r"(enable), [tcf] "r"(tcf)
 		: "cc", "memory");
-	timed_out = remaining == 0 || gpdma1.c[2].sr.load().dtef();
+	timed_out = remaining == 0 || gpdma.c[2].sr.load().dtef();
 	return status;
 }
 
@@ -415,8 +418,7 @@ std::array<char, 128> line;
 void print(int length)
 {
 	if (length > 0)
-		uart::send(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(line.data()),
-		                                    std::min(static_cast<std::size_t>(length), line.size() - 1)));
+		trace::write(std::string_view(line.data(), std::min(static_cast<std::size_t>(length), line.size() - 1)));
 }
 
 void report()
@@ -451,7 +453,7 @@ opsy::task<1024> reporter;
 int main()
 {
 	clock::init();
-	uart::init();
+	trace::init();
 
 	// Both phases run before the scheduler starts, so SysTick and task switches stay out of
 	// the measurements.
@@ -462,7 +464,7 @@ int main()
 	bool const system_ok = reporter.start([]{
 		while (true)
 		{
-			(void)uart::receive();
+			opsy::sleep_for(2s);
 			report();
 		}
 	});

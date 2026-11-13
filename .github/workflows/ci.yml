@@ -40,6 +40,6 @@ jobs:
         with:
           name: firmware-${{ matrix.preset }}
           path: |
-            build/${{ matrix.preset }}/firmware/examples/hello/hello.elf
-            build/${{ matrix.preset }}/firmware/examples/hello/hello.bin
-            build/${{ matrix.preset }}/firmware/examples/hello/hello.map
+            build/${{ matrix.preset }}/firmware/examples/blink/blink.elf
+            build/${{ matrix.preset }}/firmware/examples/blink/blink.bin
+            build/${{ matrix.preset }}/firmware/examples/blink/blink.map

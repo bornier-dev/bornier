@@ -4,9 +4,9 @@ Open source EtherCAT slaves for machine tools running LinuxCNC: hardware, firmwa
 
 - Website: [bornier.dev](https://bornier.dev)
 
-> **Status: design phase.** Nothing here is usable yet. The base board schematic is complete
-> and checked; PCB layout comes next. The firmware is a build scaffold running on a
-> NUCLEO-H563ZI development board, without the EtherCAT stack yet.
+> **Status: board bring-up.** Nothing here is usable yet. The first base boards are built and
+> are being brought up block by block: the firmware runs on them and has on-target tests for
+> the blocks checked so far, without the EtherCAT stack yet.
 
 ## Goals
 
@@ -61,7 +61,7 @@ connector sits on a long edge: the profile closes the short ones; the USB jack i
 
 | Directory | Contents |
 |---|---|
-| [`firmware/`](firmware/README.md) | C++23 firmware on the [OpSy](https://github.com/Otatiaro/OpSy) RTOS, generated STM32H563 and STM32H523 register headers, board support for the NUCLEO-H563ZI and the base board, bring-up examples and on-target tests |
+| [`firmware/`](firmware/README.md) | C++23 firmware on the [OpSy](https://github.com/Otatiaro/OpSy) RTOS, generated STM32H523 register headers, board support for the base board, bring-up examples and on-target tests |
 | `hardware/lib/` | `kicadgen`, the Python schematic generator and checker (ERC, netlist), and the symbols, footprints and 3D models missing from the KiCad libraries, with their generators |
 | `hardware/base/` | Base board: schematic generator (`gen/`), KiCad project (`kicad/`), Gerbers (`fab/`), circuit simulation (`sim/`) |
 | [`tools/hil/`](tools/hil/README.md) | Hardware-in-the-loop test scripts |

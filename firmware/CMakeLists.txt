@@ -53,19 +53,15 @@ target_include_directories(opsy PUBLIC third_party/opsy)
 target_link_libraries(opsy PUBLIC cortex_m33 PRIVATE project_warnings)
 
 # ── Devices ───────────────────────────────────────────────────────────────────
-add_subdirectory(devices/STM32H563)
 add_subdirectory(devices/STM32H523)
 
 # ── Boards ────────────────────────────────────────────────────────────────────
-add_subdirectory(boards/nucleo-h563zi)
 add_subdirectory(boards/base)
 
 # ── Examples ──────────────────────────────────────────────────────────────────
-add_subdirectory(examples/hello)
 add_subdirectory(examples/blink)
 
 # ── On-target tests ───────────────────────────────────────────────────────────
 add_subdirectory(tests/atomic_mmio)
 add_subdirectory(tests/esc_probe)
 add_subdirectory(tests/rs485_echo)
-add_subdirectory(tests/step_generator)

@@ -9,7 +9,7 @@
 - **CMake only.** The CMake files and the GNU Arm toolchain are the whole build; IDE project
   files are not committed.
 - **Generated files are not edited by hand**: the register headers in
-  [`firmware/devices/`](firmware/devices/STM32H563/README.md).
+  [`firmware/devices/`](firmware/devices/STM32H523/README.md).
 
 ## Building the firmware
 
@@ -41,7 +41,7 @@ Images land in `build/<preset>/firmware/...` as `.elf`, `.bin` and `.map`.
   - memory-mapped registers are accessed through `volatile`, which the generated headers do;
   - data shared between an interrupt and a task is a `std::atomic` or is protected by a lock,
     never a plain variable;
-  - a read-modify-write on a register that an interrupt may also modify uses the OpSy atomic
+  - a read-modify-write on a register that an interrupt may also modify uses the atomic
     operators (`reg |= value | atomic`, `reg <<= field || atomic`). They protect against
     interrupts and tasks on the same core, not against DMA or another bus master
     ([`firmware/tests/atomic_mmio`](firmware/tests/atomic_mmio/main.cpp)).
@@ -55,13 +55,13 @@ EtherCAT (FoE). Flashing and debugging use probe-rs, which drives ST-Link, J-Lin
 CMSIS-DAP probes.
 
 ```sh
-probe-rs download --chip STM32H563ZI --verify build/debug/firmware/examples/hello/hello.elf
-probe-rs reset --chip STM32H563ZI
+probe-rs download --chip STM32H523VE --verify build/debug/firmware/examples/blink/blink.elf
+probe-rs reset --chip STM32H523VE
 ```
 
 On Windows, probe-rs needs the WinUSB driver on a J-Link, which replaces the SEGGER driver. To
 keep the SEGGER driver, flash with J-Link Commander (`JLink.exe`, `JLinkExe` on Linux) from the
-SEGGER J-Link software. For the base board:
+SEGGER J-Link software:
 
 ```sh
 JLinkExe -device STM32H523VE -if SWD -speed 4000 -autoconnect 1
@@ -89,8 +89,8 @@ sudo udevadm control --reload && sudo udevadm trigger
 To debug, start the GDB server, then connect GDB:
 
 ```sh
-probe-rs gdb --chip STM32H563ZI
-arm-none-eabi-gdb build/debug/firmware/examples/hello/hello.elf \
+probe-rs gdb --chip STM32H523VE
+arm-none-eabi-gdb build/debug/firmware/examples/blink/blink.elf \
     -ex "target extended-remote 127.0.0.1:1337" \
     -ex "set mem inaccessible-by-default off" \
     -ex "load"

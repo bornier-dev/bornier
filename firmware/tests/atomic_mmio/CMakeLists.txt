@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
 
 add_executable(atomic_mmio main.cpp)
-target_link_libraries(atomic_mmio PRIVATE board_nucleo_h563zi project_warnings)
+target_link_libraries(atomic_mmio PRIVATE board_base project_warnings)
 target_link_options(atomic_mmio PRIVATE -Wl,-Map=$<TARGET_FILE_DIR:atomic_mmio>/atomic_mmio.map)
 
 add_custom_command(TARGET atomic_mmio POST_BUILD

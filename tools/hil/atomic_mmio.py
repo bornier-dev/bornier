@@ -1,53 +1,59 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
-"""Read the report of the atomic_mmio on-target test and check its verdict.
+"""Hardware-in-the-loop check for the `atomic_mmio` test on the Bornier base board.
 
-Flash firmware/tests/atomic_mmio first. The firmware runs the test at boot and prints the
-report every time it receives a byte.
+Listens to SWO through a J-Link and checks the verdict of the report. The firmware runs the test
+once at boot, which takes a few seconds, then prints its report every two seconds. Run it against
+both the debug and the release image.
+
+The board must already be flashed and running. The script needs the SEGGER J-Link software:
+it runs J-Link SWO Viewer, found on the PATH or given with --viewer.
+
+    python tools/hil/atomic_mmio.py
 
 Exit status: 0 on PASS, 1 on FAIL or when no complete report arrives.
 """
 
 import argparse
 import sys
-import time
 
-import serial
+from blink_swo import find_viewer, listen
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check the report of the atomic_mmio on-target test.")
-    parser.add_argument("--port", required=True, help="serial port of the ST-LINK VCP (e.g. /dev/ttyACM0, COM5)")
-    parser.add_argument("--timeout", type=float, default=30.0, help="seconds to wait for the report")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--viewer", help="path of J-Link SWO Viewer (command line version)")
+    parser.add_argument("--device", default="STM32H523VE")
+    parser.add_argument("--cpu-hz", type=int, default=250_000_000, help="core clock of the image")
+    parser.add_argument("--swo-hz", type=int, default=2_000_000, help="bit rate asked on the SWO pin")
+    parser.add_argument("--seconds", type=float, default=12.0, help="listening time")
     args = parser.parse_args()
 
-    with serial.Serial(args.port, 115200, timeout=0.5) as port:
-        port.reset_input_buffer()
-        deadline = time.monotonic() + args.timeout
-        verdict = None
-        started = False
-        while time.monotonic() < deadline:
-            if not started:
-                # The test runs for a few seconds after reset and drops what arrives meanwhile:
-                # ask again until the report starts.
-                port.write(b"\n")
-            line = port.readline().decode("ascii", errors="replace").rstrip()
-            if not line:
-                continue
-            started = True
-            print(line)
-            if line.startswith("verdict "):
-                verdict = line.split()[1]
-            if line == "end":
-                break
+    viewer = find_viewer(args.viewer)
+    if viewer is None:
+        print("J-Link SWO Viewer not found: install the SEGGER J-Link software, or give --viewer", file=sys.stderr)
+        return 1
 
-    if verdict is None:
+    lines = [text for _, text in listen(viewer, args.device, args.cpu_hz, args.swo_hz, args.seconds)]
+
+    # Keep the last complete report: the listening may start in the middle of one.
+    ends = [index for index, text in enumerate(lines) if text == "end"]
+    report: list[str] = []
+    if ends:
+        start = ends[-2] + 1 if len(ends) >= 2 else 0
+        report = lines[start:ends[-1]]
+    for text in report:
+        print(text)
+
+    verdicts = [text.split()[1] for text in report if text.startswith("verdict ")]
+    complete = len(ends) >= 2 and len(verdicts) == 1
+    if not complete:
         print("FAIL  no complete report received; check that the atomic_mmio image is flashed and "
-              "running (not halted by the debugger), and that --port is the probe's virtual COM port",
+              "running (not halted by the debugger), and that the probe cable carries SWO",
               file=sys.stderr)
         return 1
-    if verdict != "PASS":
+    if verdicts[0] != "PASS":
         print("hint: see the header of firmware/tests/atomic_mmio/main.cpp for what each line must show",
               file=sys.stderr)
         return 1

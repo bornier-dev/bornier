@@ -16,12 +16,10 @@ Arm toolchain. Build, flashing and coding rules are in [CONTRIBUTING.md](../CONT
 - `cortex_m33`: CPU, FPU and code generation options;
 - `project_warnings`: the warning set, as errors (compiler and linker);
 - `opsy`: the RTOS;
-- `stm32h563` and `stm32h523` (in `devices/`);
-- `board_nucleo_h563zi` and `board_base` (in `boards/`): the NUCLEO-H563ZI development board and
-  the Bornier base board of [`hardware/base/`](../hardware/base).
+- `stm32h523` (in `devices/`);
+- `board_base` (in `boards/`): the Bornier base board of [`hardware/base/`](../hardware/base).
 
-An image links its board target and `project_warnings`; see `examples/hello/CMakeLists.txt`.
-`examples/hello` runs on the NUCLEO-H563ZI, `examples/blink` on the base board.
+An image links its board target and `project_warnings`; see `examples/blink/CMakeLists.txt`.
 
 ## Adding a board
 
