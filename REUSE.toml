@@ -24,6 +24,13 @@ path = ["**/README.md", "CONTRIBUTING.md", "AGENTS.md"]
 SPDX-FileCopyrightText = "2026 Thomas Legrand"
 SPDX-License-Identifier = "CC-BY-4.0"
 
+# Generated with the register headers, from the same SVD files. Listed after the documentation:
+# the last table that matches a file is the one that applies.
+[[annotations]]
+path = ["firmware/devices/STM32H563/README.md", "firmware/devices/STM32H523/README.md"]
+SPDX-FileCopyrightText = "2025 STMicroelectronics"
+SPDX-License-Identifier = "Apache-2.0"
+
 # Hardware design files, generated or edited with KiCad.
 [[annotations]]
 path = ["hardware/**/*.kicad_*", "hardware/**/sym-lib-table", "hardware/**/fp-lib-table", "hardware/**/results.md",
