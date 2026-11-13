@@ -22,8 +22,8 @@
 #include <new>
 
 #include <cortex_m.hpp>
-#include <STM32H563/interrupts.hpp>
-#include <utility/interrupt_vector.hpp>
+#include <hooks.hpp>
+#include <STM32H563/vectors.hpp>
 
 #include "uart.hpp"
 
@@ -57,30 +57,19 @@ void* _sbrk(std::ptrdiff_t);
 /**
  * @brief STM32H563 interrupt vector table, built entirely at compile time.
  *
- *        System exception handlers are passed to the
- *        @c opsy::utility::interrupt_vector constructor. Peripheral ISRs are
- *        registered via @c .with_handler<IRQn, handler>() — add calls here as
- *        drivers are written. Unregistered peripheral slots are @c nullptr;
- *        the hardware will escalate any unexpected IRQ to a HardFault, caught
- *        by @c Default_Handler.
+ *        @c opsy::scheduler::isrs places the three handlers of OpSy (SVC,
+ *        PendSV, SysTick). Peripheral ISRs are registered via
+ *        @c .with<IRQn, handler>() — add calls here as drivers are written.
+ *        Every other system exception and device interrupt goes to
+ *        @c Default_Handler. @c opsy::hooked_isr passes the device interrupt
+ *        handlers through @c hooks::decorate_isr.
  */
-__attribute__((section(".isr_vector"), used))
-constexpr auto g_vectors = opsy::utility::interrupt_vector<STM32H563::irq_count>(
-    &_estack,
-    Reset_Handler,
-    SysTick_Handler,
-    SVC_Handler,
-    PendSV_Handler,
-    Default_Handler,  // NMI
-    Default_Handler,  // HardFault
-    Default_Handler,  // MemManage
-    Default_Handler,  // BusFault
-    Default_Handler,  // UsageFault
-    Default_Handler   // DebugMonitor
-)
-    .with_handler<STM32H563::GPDMA1_CH0_IRQn, STM32H563::uart::tx_isr>()
-    .with_handler<STM32H563::GPDMA1_CH1_IRQn, STM32H563::uart::rx_dma_isr>()
-    .with_handler<STM32H563::USART3_IRQn,     STM32H563::uart::rx_isr>();
+[[gnu::section(".isr_vector"), gnu::used]]
+constexpr auto g_vectors = STM32H563::vector_table<Default_Handler, opsy::hooked_isr>(&_estack, Reset_Handler)
+    .with(opsy::scheduler::isrs)
+    .with<STM32H563::GPDMA1_CH0_IRQn, STM32H563::uart::tx_isr>()
+    .with<STM32H563::GPDMA1_CH1_IRQn, STM32H563::uart::rx_dma_isr>()
+    .with<STM32H563::USART3_IRQn,     STM32H563::uart::rx_isr>();
 
 // ── Default_Handler ───────────────────────────────────────────────────────────
 /**

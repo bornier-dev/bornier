@@ -23,8 +23,8 @@
 
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
-#include <STM32H523/interrupts.hpp>
-#include <utility/interrupt_vector.hpp>
+#include <hooks.hpp>
+#include <STM32H523/vectors.hpp>
 
 
 // ── Linker symbols (defined in stm32h523xe.ld) ───────────────────────
@@ -55,27 +55,16 @@ void* _sbrk(std::ptrdiff_t);
 /**
  * @brief STM32H523 interrupt vector table, built entirely at compile time.
  *
- *        System exception handlers are passed to the
- *        @c opsy::utility::interrupt_vector constructor. Peripheral ISRs are
- *        registered via @c .with_handler<IRQn, handler>() — add calls here as
- *        drivers are written. Unregistered peripheral slots are @c nullptr;
- *        the hardware will escalate any unexpected IRQ to a HardFault, caught
- *        by @c Default_Handler.
+ *        @c opsy::scheduler::isrs places the three handlers of OpSy (SVC,
+ *        PendSV, SysTick). Peripheral ISRs are registered via
+ *        @c .with<IRQn, handler>() — add calls here as drivers are written.
+ *        Every other system exception and device interrupt goes to
+ *        @c Default_Handler. @c opsy::hooked_isr passes the device interrupt
+ *        handlers through @c hooks::decorate_isr.
  */
-__attribute__((section(".isr_vector"), used))
-constexpr auto g_vectors = opsy::utility::interrupt_vector<STM32H523::irq_count>(
-    &_estack,
-    Reset_Handler,
-    SysTick_Handler,
-    SVC_Handler,
-    PendSV_Handler,
-    Default_Handler,  // NMI
-    Default_Handler,  // HardFault
-    Default_Handler,  // MemManage
-    Default_Handler,  // BusFault
-    Default_Handler,  // UsageFault
-    Default_Handler   // DebugMonitor
-);
+[[gnu::section(".isr_vector"), gnu::used]]
+constexpr auto g_vectors = STM32H523::vector_table<Default_Handler, opsy::hooked_isr>(&_estack, Reset_Handler)
+    .with(opsy::scheduler::isrs);
 
 // ── Default_Handler ───────────────────────────────────────────────────────────
 /**
