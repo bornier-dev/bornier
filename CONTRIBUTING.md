@@ -59,6 +59,25 @@ probe-rs download --chip STM32H563ZI --verify build/debug/firmware/examples/hell
 probe-rs reset --chip STM32H563ZI
 ```
 
+On Windows, probe-rs needs the WinUSB driver on a J-Link, which replaces the SEGGER driver. To
+keep the SEGGER driver, flash with J-Link Commander (`JLink.exe`, `JLinkExe` on Linux) from the
+SEGGER J-Link software. For the base board:
+
+```sh
+JLinkExe -device STM32H523VE -if SWD -speed 4000 -autoconnect 1
+J-Link> loadfile build/debug/firmware/examples/blink/blink.elf
+J-Link> r
+J-Link> g
+J-Link> exit
+```
+
+The base board prints its text on SWO, pin 6 of the debug connector. J-Link SWO Viewer shows it;
+`-cpufreq` is the core clock of the image, from which the viewer derives the bit rate:
+
+```sh
+JLinkSWOViewerCLExe -device STM32H523VE -cpufreq 250000000 -swofreq 2000000 -itmport 0
+```
+
 On Linux, install [`tools/udev/60-debug-probes.rules`](tools/udev/60-debug-probes.rules) so the
 probe is usable without root:
 
