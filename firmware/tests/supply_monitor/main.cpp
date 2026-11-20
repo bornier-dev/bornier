@@ -15,6 +15,7 @@
 //   verdict      PASS when VDDA is within 3.3 V +-5 % and +VIN within 10.8 to 30 V
 
 #include <application.hpp>
+#include <app.hpp>
 #include <board.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
@@ -32,9 +33,6 @@
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-// Not yet composed from modules (core/app.hpp): the image takes the board's vector table as is.
-[[gnu::section(".isr_vector"), gnu::used]]
-constexpr auto g_vectors = STM32H523::board::vectors;
 
 namespace
 {
@@ -51,40 +49,47 @@ void print_number(std::string_view name, uint32_t value)
 
 } // namespace
 
-opsy::task<1024> tester;
+/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+class supply_monitor_test
+{
+public:
+	static bool start()
+	{
+		return task_.start([]{
+			while (true)
+			{
+				opsy::sleep_for(1s);
+
+				const auto r = supplies::read();
+				print_number("vrefint_cal", supplies::vrefint_cal());
+				print_number("vrefint", r.vrefint_raw);
+				print_number("vin_raw", r.vin_raw);
+				print_number("vdda_mv", r.vdda_mv);
+				print_number("vin_mv", r.vin_mv);
+
+				const bool pass = r.vdda_mv >= 3135 && r.vdda_mv <= 3465
+				               && r.vin_mv >= 10800 && r.vin_mv <= 30000;
+				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
+
+				if (pass)
+					mcu_led::on();
+				else
+					mcu_led::off();
+			}
+		});
+	}
+
+private:
+	static inline opsy::task<1024> task_;
+};
+
+using status_led = mcu_led;
+using console    = trace;
+using rails      = supplies;
+
+using app = bornier::app<board, status_led, console, rails, supply_monitor_test>;
 
 void application()
 {
-	clock::init();
-	mcu_led::init();
-	trace::init();
-	supplies::init();
-
-	const bool system_ok = tester.start([]{
-		while (true)
-		{
-			opsy::sleep_for(1s);
-
-			const auto r = supplies::read();
-			print_number("vrefint_cal", supplies::vrefint_cal());
-			print_number("vrefint", r.vrefint_raw);
-			print_number("vin_raw", r.vin_raw);
-			print_number("vdda_mv", r.vdda_mv);
-			print_number("vin_mv", r.vin_mv);
-
-			const bool pass = r.vdda_mv >= 3135 && r.vdda_mv <= 3465
-			               && r.vin_mv >= 10800 && r.vin_mv <= 30000;
-			trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
-
-			if (pass)
-				mcu_led::on();
-			else
-				mcu_led::off();
-		}
-	});
-
-	if (!system_ok)
-		asm volatile("bkpt 0");
-
-	opsy::scheduler::start(); // does not return
+	app::run();
 }

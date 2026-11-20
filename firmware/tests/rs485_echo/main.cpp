@@ -15,6 +15,7 @@
 //   verdict  PASS when idle, 256 echoed, none missing and no error
 
 #include <application.hpp>
+#include <app.hpp>
 #include <board.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
@@ -32,9 +33,6 @@
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-// Not yet composed from modules (core/app.hpp): the image takes the board's vector table as is.
-[[gnu::section(".isr_vector"), gnu::used]]
-constexpr auto g_vectors = STM32H523::board::vectors;
 
 namespace
 {
@@ -51,59 +49,66 @@ void print_number(std::string_view name, uint32_t value)
 
 } // namespace
 
-opsy::task<1024> tester;
+/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+class rs485_echo_test
+{
+public:
+	static bool start()
+	{
+		return task_.start([]{
+			while (true)
+			{
+				opsy::sleep_for(1s);
+
+				(void)rs485::take_errors();
+				const bool idle = rs485::line_idle();
+
+				// A byte lasts 87 us; 100000 polls last several milliseconds.
+				uint32_t echoed = 0;
+				uint32_t missing = 0;
+				for (uint32_t value = 0; value < 256; ++value)
+				{
+					rs485::send(static_cast<uint8_t>(value));
+					const auto echo = rs485::receive(100000);
+					if (!echo)
+						++missing;
+					else if (*echo == value)
+						++echoed;
+				}
+				const auto errors = rs485::take_errors();
+
+				print_number("idle", idle ? 1 : 0);
+				print_number("echoed", echoed);
+				print_number("missing", missing);
+				trace::write("errors ");
+				trace::write(errors.framing ? "1" : "0");
+				trace::write(errors.noise ? "1" : "0");
+				trace::write(errors.overrun ? "1" : "0");
+				trace::write("\r\n");
+
+				const bool pass = idle && echoed == 256 && missing == 0
+				               && !errors.framing && !errors.noise && !errors.overrun;
+				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
+
+				if (pass)
+					mcu_led::on();
+				else
+					mcu_led::off();
+			}
+		});
+	}
+
+private:
+	static inline opsy::task<1024> task_;
+};
+
+using status_led = mcu_led;
+using console    = trace;
+using fieldbus   = rs485;
+
+using app = bornier::app<board, status_led, console, fieldbus, rs485_echo_test>;
 
 void application()
 {
-	clock::init();
-	mcu_led::init();
-	trace::init();
-	rs485::init();
-
-	const bool system_ok = tester.start([]{
-		while (true)
-		{
-			opsy::sleep_for(1s);
-
-			(void)rs485::take_errors();
-			const bool idle = rs485::line_idle();
-
-			// A byte lasts 87 us; 100000 polls last several milliseconds.
-			uint32_t echoed = 0;
-			uint32_t missing = 0;
-			for (uint32_t value = 0; value < 256; ++value)
-			{
-				rs485::send(static_cast<uint8_t>(value));
-				const auto echo = rs485::receive(100000);
-				if (!echo)
-					++missing;
-				else if (*echo == value)
-					++echoed;
-			}
-			const auto errors = rs485::take_errors();
-
-			print_number("idle", idle ? 1 : 0);
-			print_number("echoed", echoed);
-			print_number("missing", missing);
-			trace::write("errors ");
-			trace::write(errors.framing ? "1" : "0");
-			trace::write(errors.noise ? "1" : "0");
-			trace::write(errors.overrun ? "1" : "0");
-			trace::write("\r\n");
-
-			const bool pass = idle && echoed == 256 && missing == 0
-			               && !errors.framing && !errors.noise && !errors.overrun;
-			trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
-
-			if (pass)
-				mcu_led::on();
-			else
-				mcu_led::off();
-		}
-	});
-
-	if (!system_ok)
-		asm volatile("bkpt 0");
-
-	opsy::scheduler::start(); // does not return
+	app::run();
 }

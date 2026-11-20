@@ -15,6 +15,7 @@
 //   eeprom     EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
 
 #include <application.hpp>
+#include <app.hpp>
 #include <board.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
@@ -36,9 +37,6 @@ extern "C" {
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-// Not yet composed from modules (core/app.hpp): the image takes the board's vector table as is.
-[[gnu::section(".isr_vector"), gnu::used]]
-constexpr auto g_vectors = STM32H523::board::vectors;
 
 namespace
 {
@@ -55,52 +53,59 @@ void print_hex(std::string_view name, uint32_t value)
 
 } // namespace
 
-opsy::task<2048> stack;
+/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+class ethercat_preop_test
+{
+public:
+	static bool start()
+	{
+		return task_.start([]{
+			if (HW_Init() != 0)
+			{
+				trace::write("verdict FAIL hw_init\r\n");
+				return;
+			}
+			(void)MainInit();
+			bRunApplication = TRUE;
+
+			auto next_tick = opsy::scheduler::now() + 1ms;
+			auto next_report = opsy::scheduler::now() + 1s;
+			while (true)
+			{
+				MainLoop();
+
+				const auto now = opsy::scheduler::now();
+				if (now >= next_tick)
+				{
+					ECAT_CheckTimer();
+					next_tick += 1ms;
+				}
+				if (now >= next_report)
+				{
+					const uint32_t al_status = esc_bus::core_read(0x0130, 2);
+					print_hex("al_status", al_status);
+					print_hex("al_code", esc_bus::core_read(0x0134, 2));
+					print_hex("eeprom", esc_bus::core_read(0x0502, 2));
+					if ((al_status & 0x0F) >= 2)
+						mcu_led::on();
+					else
+						mcu_led::off();
+					next_report += 1s;
+				}
+			}
+		});
+	}
+
+private:
+	static inline opsy::task<2048> task_;
+};
+
+using status_led = mcu_led;
+using console    = trace;
+
+using app = bornier::app<board, status_led, console, ethercat_preop_test>;
 
 void application()
 {
-	clock::init();
-	mcu_led::init();
-	trace::init();
-
-	const bool system_ok = stack.start([]{
-		if (HW_Init() != 0)
-		{
-			trace::write("verdict FAIL hw_init\r\n");
-			return;
-		}
-		(void)MainInit();
-		bRunApplication = TRUE;
-
-		auto next_tick = opsy::scheduler::now() + 1ms;
-		auto next_report = opsy::scheduler::now() + 1s;
-		while (true)
-		{
-			MainLoop();
-
-			const auto now = opsy::scheduler::now();
-			if (now >= next_tick)
-			{
-				ECAT_CheckTimer();
-				next_tick += 1ms;
-			}
-			if (now >= next_report)
-			{
-				const uint32_t al_status = esc_bus::core_read(0x0130, 2);
-				print_hex("al_status", al_status);
-				print_hex("al_code", esc_bus::core_read(0x0134, 2));
-				print_hex("eeprom", esc_bus::core_read(0x0502, 2));
-				if ((al_status & 0x0F) >= 2)
-					mcu_led::on();
-				else
-					mcu_led::off();
-				next_report += 1s;
-			}
-		}
-	});
-
-	if (!system_ok)
-		asm volatile("bkpt 0");
-
-	opsy::scheduler::start(); // does not return
+	app::run();
 }

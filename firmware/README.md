@@ -102,13 +102,21 @@ and defines its entry point, `application()` (see
 
 using namespace STM32H523;
 
-using app = bornier::app<board, mcu_led, trace, example::blinker<mcu_led, trace>>;
+using status_led = mcu_led;
+using console    = trace;
+using heartbeat  = example::blinker<status_led, console>;
+
+using app = bornier::app<board, status_led, console, heartbeat>;
 
 void application()
 {
     app::run();
 }
 ```
+
+Each module gets an alias named by its role in the image (`status_led`, `console`, `heartbeat`):
+the list of the app then reads as a list of modules, and swapping a driver, or a test double,
+changes one line. An alias is the same type: it costs nothing and the debugger shows the module.
 
 `app::run()` initialises the board then each module, starts the tasks, then starts the scheduler.
 The image's vector table is `app::vectors`: the board's, with the handlers of every module. The

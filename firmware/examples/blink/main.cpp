@@ -15,7 +15,13 @@
 
 using namespace STM32H523;
 
-using app = bornier::app<board, mcu_led, trace, example::blinker<mcu_led, trace>>;
+// One alias per module, named by its role in the image: the list of the app reads as a list of
+// modules, and swapping a driver (or a test double) changes one line.
+using status_led = mcu_led;
+using console    = trace;
+using heartbeat  = example::blinker<status_led, console>;
+
+using app = bornier::app<board, status_led, console, heartbeat>;
 
 void application()
 {

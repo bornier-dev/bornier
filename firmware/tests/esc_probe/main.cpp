@@ -21,6 +21,7 @@
 //                  bit 5 tells that the EEPROM is emulated and bit 15 that a request waits.
 
 #include <application.hpp>
+#include <app.hpp>
 #include <board.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
@@ -38,9 +39,6 @@
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-// Not yet composed from modules (core/app.hpp): the image takes the board's vector table as is.
-[[gnu::section(".isr_vector"), gnu::used]]
-constexpr auto g_vectors = STM32H523::board::vectors;
 
 namespace
 {
@@ -98,41 +96,48 @@ bool bus_works()
 
 } // namespace
 
-opsy::task<1024> prober;
+/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+class esc_probe_test
+{
+public:
+	static bool start()
+	{
+		return task_.start([]{
+			while (true)
+			{
+				esc_bus::set_mode(esc_bus::mode::single);
+				trace::write("mode single\r\n");
+				const bool single = bus_works();
+				trace::write(single ? "single PASS\r\n" : "single FAIL\r\n");
+
+				esc_bus::set_mode(esc_bus::mode::quad);
+				trace::write("mode quad\r\n");
+				const bool quad = bus_works();
+				trace::write(quad ? "quad PASS\r\n" : "quad FAIL\r\n");
+
+				const bool pass = single && quad;
+				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
+
+				if (pass)
+					mcu_led::on();
+				else
+					mcu_led::off();
+				opsy::sleep_for(1s);
+			}
+		});
+	}
+
+private:
+	static inline opsy::task<1024> task_;
+};
+
+using status_led = mcu_led;
+using console    = trace;
+using esc        = esc_bus;
+
+using app = bornier::app<board, status_led, console, esc, esc_probe_test>;
 
 void application()
 {
-	clock::init();
-	mcu_led::init();
-	trace::init();
-	esc_bus::init();
-
-	const bool system_ok = prober.start([]{
-		while (true)
-		{
-			esc_bus::set_mode(esc_bus::mode::single);
-			trace::write("mode single\r\n");
-			const bool single = bus_works();
-			trace::write(single ? "single PASS\r\n" : "single FAIL\r\n");
-
-			esc_bus::set_mode(esc_bus::mode::quad);
-			trace::write("mode quad\r\n");
-			const bool quad = bus_works();
-			trace::write(quad ? "quad PASS\r\n" : "quad FAIL\r\n");
-
-			const bool pass = single && quad;
-			trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
-
-			if (pass)
-				mcu_led::on();
-			else
-				mcu_led::off();
-			opsy::sleep_for(1s);
-		}
-	});
-
-	if (!system_ok)
-		asm volatile("bkpt 0");
-
-	opsy::scheduler::start(); // does not return
+	app::run();
 }

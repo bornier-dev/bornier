@@ -26,6 +26,7 @@
 // Host side: tools/hil/atomic_mmio.py.
 
 #include <application.hpp>
+#include <app.hpp>
 #include <board.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
@@ -51,9 +52,6 @@
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-// Not yet composed from modules (core/app.hpp): the image takes the board's vector table as is.
-[[gnu::section(".isr_vector"), gnu::used]]
-constexpr auto g_vectors = STM32H523::board::vectors;
 using mmio::atomic;
 
 namespace {
@@ -152,8 +150,6 @@ void disarm_isr()
 	isr_target.store(nullptr, std::memory_order_relaxed);
 }
 
-alignas(1024) std::array<opsy::cortex_m::isr_handler_t, opsy::cortex_m::system_irqs_count + irq_count> ram_vectors;
-
 void init_test_hardware()
 {
 	rcc.ahb1enr  |= rcc_p::ahb1enr_r::gpdma1en_f() | atomic;
@@ -174,9 +170,6 @@ void init_test_hardware()
 	                   | gpdma_p::c_c::tr1_r::ddw_log2_f(2);
 	gpdma.c[2].tr2 = gpdma_p::c_c::tr2_r::swreq_f();
 
-	opsy::cortex_m::move_vtor(ram_vectors.data(), ram_vectors.size());
-	opsy::cortex_m::set_isr_handler(TIM6_IRQn, tim6_isr);
-	opsy::cortex_m::set_isr_handler(TIM7_IRQn, tim7_isr);
 	opsy::cortex_m::set_priority(TIM6_IRQn, test_priority);
 	opsy::cortex_m::set_priority(TIM7_IRQn, test_priority);
 	opsy::cortex_m::enable_interrupt(TIM6_IRQn);
@@ -452,31 +445,50 @@ void report()
 	print(std::snprintf(line.data(), line.size(), "verdict %s\r\nend\r\n", verdict() ? "PASS" : "FAIL"));
 }
 
-opsy::task<1024> reporter;
-
 } // namespace
+
+/**
+ * @brief The test, as a module.
+ *
+ *        Its two interrupts are in the vector table through isrs. Both measuring phases run in
+ *        init(), before the scheduler starts, so SysTick and task switches stay out of the
+ *        measurements; the task started by start() then repeats the report.
+ */
+class atomic_mmio_test
+{
+public:
+	static constexpr auto isrs = []<typename Table>(const Table& table) -> Table
+	{
+		return table.template with<TIM6_IRQn, tim6_isr>().template with<TIM7_IRQn, tim7_isr>();
+	};
+
+	static void init()
+	{
+		init_test_hardware();
+		run_all();
+		release_test_hardware();
+	}
+
+	static bool start()
+	{
+		return task_.start([]{
+			while (true)
+			{
+				opsy::sleep_for(2s);
+				report();
+			}
+		});
+	}
+
+private:
+	static inline opsy::task<1024> task_;
+};
+
+using console = trace;
+
+using app = bornier::app<board, console, atomic_mmio_test>;
 
 void application()
 {
-	clock::init();
-	trace::init();
-
-	// Both phases run before the scheduler starts, so SysTick and task switches stay out of
-	// the measurements.
-	init_test_hardware();
-	run_all();
-	release_test_hardware();
-
-	bool const system_ok = reporter.start([]{
-		while (true)
-		{
-			opsy::sleep_for(2s);
-			report();
-		}
-	});
-
-	if (!system_ok)
-		asm volatile("bkpt 0");
-
-	opsy::scheduler::start(); // does not return
+	app::run();
 }
