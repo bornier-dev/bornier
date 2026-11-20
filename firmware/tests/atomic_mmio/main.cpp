@@ -25,6 +25,7 @@
 // The test runs once at boot. Its report is printed on SWO every two seconds.
 // Host side: tools/hil/atomic_mmio.py.
 
+#include <application.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -450,7 +451,7 @@ opsy::task<1024> reporter;
 
 } // namespace
 
-int main()
+void application()
 {
 	clock::init();
 	trace::init();

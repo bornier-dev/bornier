@@ -24,7 +24,7 @@ target_compile_options(cortex_m33 INTERFACE
 target_link_options(cortex_m33 INTERFACE
     -mcpu=cortex-m33 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=hard
     --specs=nano.specs --specs=nosys.specs
-    -static -Wl,--gc-sections
+    -static -nostartfiles -Wl,--gc-sections
 )
 
 # Every warning that makes sense for embedded C++, as errors.

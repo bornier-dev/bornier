@@ -5,6 +5,7 @@
 // prints one numbered line per blink on SWO. A steady 1 Hz proves the 25 MHz oscillator, the PLL
 // and the scheduler tick.
 
+#include <application.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -22,7 +23,7 @@ using namespace STM32H523;
 
 opsy::task<1024> blinker;
 
-int main()
+void application()
 {
 	clock::init();
 	mcu_led::init();

@@ -20,6 +20,7 @@
 //   core_eeprom    EEPROM configuration (low half) and status (high half); in the status,
 //                  bit 5 tells that the EEPROM is emulated and bit 15 that a request waits.
 
+#include <application.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -94,7 +95,7 @@ bool bus_works()
 
 opsy::task<1024> prober;
 
-int main()
+void application()
 {
 	clock::init();
 	mcu_led::init();

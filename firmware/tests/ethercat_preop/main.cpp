@@ -14,6 +14,7 @@
 //   al_code    AL status code (0x0134), 0 when no error
 //   eeprom     EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
 
+#include <application.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -51,7 +52,7 @@ void print_hex(std::string_view name, uint32_t value)
 
 opsy::task<2048> stack;
 
-int main()
+void application()
 {
 	clock::init();
 	mcu_led::init();

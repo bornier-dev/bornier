@@ -14,6 +14,7 @@
 //   errors   framing, noise and overrun errors seen (1 each), as three digits
 //   verdict  PASS when idle, 256 echoed, none missing and no error
 
+#include <application.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -47,7 +48,7 @@ void print_number(std::string_view name, uint32_t value)
 
 opsy::task<1024> tester;
 
-int main()
+void application()
 {
 	clock::init();
 	mcu_led::init();

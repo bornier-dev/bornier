@@ -25,6 +25,7 @@
 #include <scheduler.hpp>
 #include <hooks.hpp>
 #include <STM32H523/vectors.hpp>
+#include <application.hpp>
 
 
 // ── Linker symbols (defined in stm32h523xe.ld) ───────────────────────
@@ -39,8 +40,10 @@ extern uint32_t _sdata;   ///< Start of .data in RAM
 extern uint32_t _edata;   ///< End of .data in RAM
 extern uint32_t _sbss;    ///< Start of .bss in RAM
 extern uint32_t _ebss;    ///< End of .bss in RAM
-extern void __libc_init_array(); ///< Calls C++ static constructors (.init_array)
-extern int  main();
+extern void (*__preinit_array_start[])(); ///< Static initialisation, run first
+extern void (*__preinit_array_end[])();
+extern void (*__init_array_start[])();    ///< C++ static constructors
+extern void (*__init_array_end[])();
 
 // Handlers defined in this file. SVC_Handler, PendSV_Handler and SysTick_Handler are declared by
 // OpSy (scheduler.hpp) and defined in scheduler.cpp.
@@ -89,8 +92,10 @@ extern "C" [[noreturn]] void Default_Handler()
  *        -# Enable the FPU (CP10/CP11 full-access in CPACR).
  *        -# Copy initialised data from flash (@c _sidata) to RAM (@c .data).
  *        -# Zero the uninitialised data section (@c .bss).
- *        -# Call @c __libc_init_array() to run C++ static constructors.
- *        -# Branch to @c main().
+ *        -# Run the static initialisers: @c .preinit_array, then @c .init_array (C++ static
+ *           constructors). The C runtime start files are not linked (-nostartfiles), so this
+ *           is done here rather than by @c __libc_init_array().
+ *        -# Call @c application(), the entry point of the image (application.hpp).
  */
 extern "C" [[noreturn]] void Reset_Handler()
 {
@@ -104,15 +109,12 @@ extern "C" [[noreturn]] void Reset_Handler()
     for (auto ptr = &_sbss; ptr != &_ebss; ++ptr)
         *ptr = 0u;
 
-    __libc_init_array();
+    for (auto init = __preinit_array_start; init != __preinit_array_end; ++init)
+        (*init)();
+    for (auto init = __init_array_start; init != __init_array_end; ++init)
+        (*init)();
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-	main();
-#pragma GCC diagnostic pop
-
-    asm volatile("bkpt 0"); // main() must not return
-    while (true) {}
+    application();
 }
 
 // ── No dynamic allocation ─────────────────────────────────────────────────────

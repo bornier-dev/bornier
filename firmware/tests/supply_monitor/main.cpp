@@ -14,6 +14,7 @@
 //   vin_mv       +VIN in millivolts
 //   verdict      PASS when VDDA is within 3.3 V +-5 % and +VIN within 10.8 to 30 V
 
+#include <application.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -47,7 +48,7 @@ void print_number(std::string_view name, uint32_t value)
 
 opsy::task<1024> tester;
 
-int main()
+void application()
 {
 	clock::init();
 	mcu_led::init();
