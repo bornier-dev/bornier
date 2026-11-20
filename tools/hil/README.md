@@ -10,6 +10,7 @@ J-Link, and need Python 3 and the SEGGER J-Link software.
 | `firmware/tests/atomic_mmio` | `atomic_mmio.py` | exclusive accesses (LDREX/STREX) to peripheral registers, against interrupts and DMA |
 | `firmware/tests/esc_probe` | `esc_probe.py` | LAN9253 through the OCTOSPI: identification registers (BYTE_TEST, ID_REV), then write and read back in the user RAM of the EtherCAT core, in single then in quad (SQI) bus mode |
 | `firmware/tests/rs485_echo` | `rs485_echo.py` | isolated RS-485 port, nothing wired: the 256 byte values come back through the transceiver, no line error |
+| `firmware/tests/supply_monitor` | `supply_monitor.py` | supplies read by the ADC: VDDA (3.3 V rail) from VREFINT, +VIN from VIN_SENSE; the board is supplied through its terminal block, its voltage given with `--vin` |
 
 Run each test on the debug and the release image. Flashing is described in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#flashing-and-debugging).
