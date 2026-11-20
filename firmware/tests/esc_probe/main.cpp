@@ -94,6 +94,35 @@ bool bus_works()
 	return first && second;
 }
 
+// Prints the mean duration, in CPU cycles at 250 MHz, of a register read and of a read of the
+// EtherCAT core (CSR command, polling until done, data). Measured over 100 accesses with the
+// DWT cycle counter; the task may be preempted meanwhile, so these are upper bounds.
+void print_timing()
+{
+	constexpr uint32_t count = 100;
+	(void)opsy::cortex_m::enable_cycle_count();
+
+	uint32_t start = opsy::cortex_m::cycle_count();
+	for (uint32_t i = 0; i < count; ++i)
+		(void)esc_bus::read(esc_bus::byte_test);
+	const uint32_t read_cycles = (opsy::cortex_m::cycle_count() - start) / count;
+
+	start = opsy::cortex_m::cycle_count();
+	for (uint32_t i = 0; i < count; ++i)
+		(void)esc_bus::core_read(core_type, 4);
+	const uint32_t core_read_cycles = (opsy::cortex_m::cycle_count() - start) / count;
+
+	char digits[10];
+	auto end = std::to_chars(digits, digits + sizeof(digits), read_cycles).ptr;
+	trace::write("timing read_cycles ");
+	trace::write(std::string_view(digits, end));
+	trace::write("\r\n");
+	end = std::to_chars(digits, digits + sizeof(digits), core_read_cycles).ptr;
+	trace::write("timing core_read_cycles ");
+	trace::write(std::string_view(digits, end));
+	trace::write("\r\n");
+}
+
 } // namespace
 
 /** @brief The test, as a module: one task that runs the checks and reports on SWO. */
@@ -108,11 +137,15 @@ public:
 				esc_bus::set_mode(esc_bus::mode::single);
 				trace::write("mode single\r\n");
 				const bool single = bus_works();
+				if (single)
+					print_timing();
 				trace::write(single ? "single PASS\r\n" : "single FAIL\r\n");
 
 				esc_bus::set_mode(esc_bus::mode::quad);
 				trace::write("mode quad\r\n");
 				const bool quad = bus_works();
+				if (quad)
+					print_timing();
 				trace::write(quad ? "quad PASS\r\n" : "quad FAIL\r\n");
 
 				const bool pass = single && quad;
