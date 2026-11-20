@@ -61,7 +61,7 @@ template<switchable Led, text_output Output>
 class blinker
 {
 public:
-    static bool start() { return task_.start([] { run(); }); }
+    static bool start() { return task_.start(run); }
 
 private:
     static void run();                       // blinks Led, writes one line per blink on Output

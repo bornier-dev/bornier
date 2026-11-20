@@ -95,7 +95,7 @@ public:
 	}
 
 	/** @brief Starts the task that starts the ADC, then measures every 100 ms. */
-	static bool start() { return task_.start([] { run(); }); }
+	static bool start() { return task_.start(run); }
 
 	/** @brief The last measurement, or nothing before the first one. */
 	static std::optional<reading> read()

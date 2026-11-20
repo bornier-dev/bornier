@@ -61,7 +61,7 @@ class blinker
 public:
 
 	/** @brief Starts the blinking task; false if the scheduler refused it. */
-	static bool start() { return task_.start([] { run(); }); }
+	static bool start() { return task_.start(run); }
 
 private:
 

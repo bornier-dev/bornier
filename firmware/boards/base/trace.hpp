@@ -68,7 +68,7 @@ public:
 	}
 
 	/** @brief Starts the task that hands the queued text to the ITM. */
-	static bool start() { return task_.start([] { run(); }); }
+	static bool start() { return task_.start(run); }
 
 	/**
 	 * @brief Queues @p text for SWO; what does not fit is dropped.
