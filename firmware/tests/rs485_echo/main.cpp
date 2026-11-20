@@ -3,7 +3,8 @@
 //
 // On-target test for the Bornier base board: isolated RS-485 port, with nothing wired to the
 // MODBUS terminal block. The receiver of the transceiver is always on, so every byte sent comes
-// back: the test sends the 256 byte values and checks each echo. That path goes through the
+// back: the test sends the 256 byte values as one frame, by DMA, and checks the echo, received by
+// DMA too. That path goes through the
 // isolated supply of the transceiver, its driver, the biased and terminated line and its
 // receiver.
 //
@@ -25,6 +26,7 @@
 #include <rs485.hpp>
 #include <trace.hpp>
 
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <cstdint>
@@ -63,18 +65,20 @@ public:
 				(void)rs485::take_errors();
 				const bool idle = rs485::line_idle();
 
-				// A byte lasts 87 us; 100000 polls last several milliseconds.
-				uint32_t echoed = 0;
-				uint32_t missing = 0;
+				// The 256 values go out as one frame, by DMA; the echo comes back into another
+				// buffer, by DMA, and ends when the line falls silent. 256 bytes last 22 ms.
 				for (uint32_t value = 0; value < 256; ++value)
-				{
-					rs485::send(static_cast<uint8_t>(value));
-					const auto echo = rs485::receive(100000);
-					if (!echo)
-						++missing;
-					else if (*echo == value)
+					sent_[value] = static_cast<uint8_t>(value);
+				echo_.fill(0);
+				rs485::listen(echo_);
+				rs485::send(sent_);
+				const std::size_t count = rs485::received(100ms);
+
+				uint32_t echoed = 0;
+				for (std::size_t i = 0; i < count; ++i)
+					if (echo_[i] == sent_[i])
 						++echoed;
-				}
+				const uint32_t missing = static_cast<uint32_t>(sent_.size() - count);
 				const auto errors = rs485::take_errors();
 
 				print_number("idle", idle ? 1 : 0);
@@ -99,6 +103,8 @@ public:
 	}
 
 private:
+	static inline std::array<uint8_t, 256> sent_{};
+	static inline std::array<uint8_t, 256> echo_{};
 	static inline opsy::task<1024> task_;
 };
 
