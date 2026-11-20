@@ -42,7 +42,8 @@ def listen(viewer: str, device: str, cpu_hz: int, swo_hz: int, seconds: float) -
         output = Path(folder) / "swo.txt"
         command = [viewer, "-device", device, "-cpufreq", str(cpu_hz), "-swofreq", str(swo_hz),
                    "-itmport", "0", "-outputfile", str(output)]
-        viewer_process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        # stdin stays an open pipe: on Linux the viewer quits as soon as it reads end of file there
+        viewer_process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                           stderr=subprocess.DEVNULL)
         lines: list[tuple[float, str]] = []
         seen = 0
