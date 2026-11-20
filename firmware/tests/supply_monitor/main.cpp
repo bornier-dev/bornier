@@ -60,8 +60,14 @@ public:
 			{
 				opsy::sleep_for(1s);
 
-				const auto r = supplies::read();
-				print_number("vrefint_cal", supplies::vrefint_cal());
+				const auto measured = supplies::read();
+				if (!measured)
+				{
+					trace::write("verdict FAIL\r\n"); // no measurement yet, or the ADC is stuck
+					continue;
+				}
+				const auto& r = *measured;
+				print_number("vrefint_cal", r.vrefint_cal);
 				print_number("vrefint", r.vrefint_raw);
 				print_number("vin_raw", r.vin_raw);
 				print_number("vdda_mv", r.vdda_mv);
