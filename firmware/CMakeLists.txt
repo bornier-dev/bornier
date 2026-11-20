@@ -52,6 +52,11 @@ add_library(opsy STATIC third_party/opsy/scheduler.cpp)
 target_include_directories(opsy PUBLIC third_party/opsy)
 target_link_libraries(opsy PUBLIC cortex_m33 PRIVATE project_warnings)
 
+# ── Composition of images from modules ────────────────────────────────────────
+add_library(bornier_core INTERFACE)
+target_include_directories(bornier_core INTERFACE core)
+target_link_libraries(bornier_core INTERFACE opsy)
+
 # ── Devices ───────────────────────────────────────────────────────────────────
 add_subdirectory(devices/STM32H523)
 

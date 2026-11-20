@@ -7,4 +7,4 @@
 add_library(board_base INTERFACE)
 target_sources(board_base INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/startup.cpp)
 target_include_directories(board_base INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(board_base INTERFACE stm32h523)
+target_link_libraries(board_base INTERFACE stm32h523 bornier_core)

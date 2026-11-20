@@ -15,6 +15,7 @@
 //   verdict  PASS when idle, 256 echoed, none missing and no error
 
 #include <application.hpp>
+#include <board.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
@@ -30,6 +31,10 @@
 
 using namespace std::chrono_literals;
 using namespace STM32H523;
+
+// Not yet composed from modules (core/app.hpp): the image takes the board's vector table as is.
+[[gnu::section(".isr_vector"), gnu::used]]
+constexpr auto g_vectors = STM32H523::board::vectors;
 
 namespace
 {

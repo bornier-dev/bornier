@@ -7,13 +7,13 @@
  * @author  Thomas Legrand
  * @brief   C++ startup file for the Bornier base board, STM32H523VE (Cortex-M33)
  *
- *          Provides the interrupt vector table, Reset_Handler, and C++ runtime
+ *          Provides Reset_Handler, Default_Handler and the C++ runtime
  *          initialization. Also enforces the no-dynamic-allocation policy by
  *          trapping any call to @c _sbrk, @c operator @c new, or
  *          @c operator @c new[].
  *
- *          Peripheral ISRs are registered at compile time via
- *          @c InterruptVector::Register<IRQn, handler>().
+ *          The vector table is not here: each image composes its own from the
+ *          board's (board.hpp) and its modules' handlers (core/app.hpp).
  ******************************************************************************
  */
 
@@ -22,10 +22,8 @@
 #include <new>
 
 #include <cortex_m.hpp>
-#include <scheduler.hpp>
-#include <hooks.hpp>
-#include <STM32H523/vectors.hpp>
 #include <application.hpp>
+#include <board.hpp>
 
 
 // ── Linker symbols (defined in stm32h523xe.ld) ───────────────────────
@@ -33,7 +31,6 @@ extern "C"
 {
 uint32_t SystemCoreClock = 250'000'000; // 250MHz
 
-extern uint32_t _estack;  ///< Top of main stack
 extern uint32_t _sstack;  ///< Bottom of main stack (= _estack - _Min_Stack_Size)
 extern uint32_t _sidata;  ///< Load address of .data in flash
 extern uint32_t _sdata;   ///< Start of .data in RAM
@@ -45,29 +42,9 @@ extern void (*__preinit_array_end[])();
 extern void (*__init_array_start[])();    ///< C++ static constructors
 extern void (*__init_array_end[])();
 
-// Handlers defined in this file. SVC_Handler, PendSV_Handler and SysTick_Handler are declared by
-// OpSy (scheduler.hpp) and defined in scheduler.cpp.
-[[noreturn]] void Default_Handler();
-[[noreturn]] void Reset_Handler();
-
 // newlib hooks defined below
 void* _sbrk(std::ptrdiff_t);
 } // extern "C"
-
-// ── Interrupt vector table ────────────────────────────────────────────────────
-/**
- * @brief STM32H523 interrupt vector table, built entirely at compile time.
- *
- *        @c opsy::scheduler::isrs places the three handlers of OpSy (SVC,
- *        PendSV, SysTick). Peripheral ISRs are registered via
- *        @c .with<IRQn, handler>() — add calls here as drivers are written.
- *        Every other system exception and device interrupt goes to
- *        @c Default_Handler. @c opsy::hooked_isr passes the device interrupt
- *        handlers through @c hooks::decorate_isr.
- */
-[[gnu::section(".isr_vector"), gnu::used]]
-constexpr auto g_vectors = STM32H523::vector_table<Default_Handler, opsy::hooked_isr>(&_estack, Reset_Handler)
-    .with(opsy::scheduler::isrs);
 
 // ── Default_Handler ───────────────────────────────────────────────────────────
 /**
