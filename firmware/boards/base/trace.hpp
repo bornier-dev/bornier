@@ -9,7 +9,17 @@
  *
  *          The text leaves through stimulus port 0 of the ITM, the trace unit of the
  *          Cortex-M33. The debug probe sets up the ITM and the bit rate of the pin when it
- *          starts listening; without a probe nothing is sent and @c write() returns at once.
+ *          starts listening.
+ *
+ *          Writing never waits: write() stores the text in a queue, and a task of this module
+ *          (start()) hands it to the ITM, sleeping while the stimulus port is busy. Text that
+ *          does not fit in the queue is dropped and counted (dropped()), never waited for.
+ *          Without a probe listening, or once it has stopped, the task sleeps and nothing else
+ *          is affected: the ITM keeps its settings through a reset of the MCU, so a probe that
+ *          has listened once leaves a port that may never become ready again.
+ *
+ *          write() is for tasks, not interrupt handlers. Writers are serialised by a mutex:
+ *          the text of one call is never interleaved with another's.
  *
  *          Output only: SWO has no return path.
  *
@@ -19,8 +29,15 @@
 
 #pragma once
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string_view>
+
+#include <opsy.hpp>
+#include <mutex.hpp>
+#include <queue.hpp>
 
 #include <STM32H523/dbgmcu.hpp>
 
@@ -28,10 +45,10 @@ namespace STM32H523
 {
 
 /**
- * @brief Text output on SWO.
+ * @brief Text output on SWO, as a module: init() hands PB3 to the trace port, start() starts
+ *        the task that empties the queue.
  *
  *        All methods are static — no instance needed.
- *        Call @c init() once before @c write().
  */
 class trace
 {
@@ -50,28 +67,42 @@ public:
 		                 | dbgmcu_p::cr_r::trace_en_f();
 	}
 
+	/** @brief Starts the task that hands the queued text to the ITM. */
+	static bool start() { return task_.start([] { run(); }); }
+
 	/**
-	 * @brief Sends text on stimulus port 0, blocking while the ITM buffer is full.
-	 *
-	 *        Not reentrant: call it from a single task. The text is dropped when no probe has
-	 *        enabled the ITM and its port 0.
+	 * @brief Queues @p text for SWO; what does not fit is dropped.
 	 *
 	 * @param text Characters to send.
 	 */
 	static void write(std::string_view text)
 	{
-		if ((reg32(itm_tcr) & itm_tcr_itmena) == 0 || (reg32(itm_ter) & 1u) == 0)
-			return;
-
+		const std::lock_guard lock(writers_);
 		for (const char c : text)
-		{
-			// Reading a stimulus port gives 1 when it accepts a new value.
-			while ((reg32(itm_stim0) & 1u) == 0) {}
-			reg8(itm_stim0) = static_cast<uint8_t>(c);
-		}
+			(void)queue_.try_push(c);
 	}
 
+	/** @brief Characters dropped because the queue was full. */
+	static std::size_t dropped() { return queue_.dropped(); }
+
 private:
+
+	static constexpr std::size_t capacity = 2048;
+
+	static void run()
+	{
+		using namespace std::chrono_literals;
+		while (const auto c = queue_.pop())
+		{
+			// Without a probe, the ITM or its port 0 is off: the text is dropped.
+			if ((reg32(itm_tcr) & itm_tcr_itmena) == 0 || (reg32(itm_ter) & 1u) == 0)
+				continue;
+			// Reading a stimulus port gives 1 when it accepts a new value.
+			while ((reg32(itm_stim0) & 1u) == 0)
+				opsy::sleep_for(1ms);
+			reg8(itm_stim0) = static_cast<uint8_t>(*c);
+		}
+	}
 
 	// ITM registers of the Cortex-M33 (Armv8-M Architecture Reference Manual).
 	static constexpr uintptr_t itm_stim0 = 0xE0000000; ///< Stimulus port 0; a byte write sends one byte
@@ -81,6 +112,10 @@ private:
 
 	static volatile uint32_t& reg32(uintptr_t address) { return *reinterpret_cast<volatile uint32_t*>(address); }
 	static volatile uint8_t&  reg8(uintptr_t address)  { return *reinterpret_cast<volatile uint8_t*>(address); }
+
+	static inline opsy::queue<char, capacity> queue_;
+	static inline opsy::mutex writers_;
+	static inline opsy::task<512> task_;
 };
 
 } // namespace STM32H523
