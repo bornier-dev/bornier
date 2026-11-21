@@ -18,6 +18,10 @@
 //   al_code    AL status code (0x0134), 0 when no error
 //   eeprom     EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
 //   pdi_calls  calls to PDI_Isr() since start, on requests of the LAN9253
+//   sync0_idle level of ESC_SYNC0 (PA4) when sampled, mostly its idle level
+//
+// For a logic analyser on the HE10 of the local bus: pin 26, LATCH, a 10 us pulse on each SYNC0
+// (sync_latch); pin 1, CS0, low while the task serves the LAN9253; ground on pin 25.
 //   pdi_mean   mean duration of a call, in CPU cycles at 250 MHz (elapsed: DMA waits included)
 //   pdi_max    longest call, in CPU cycles
 
@@ -35,6 +39,7 @@
 #include <led.hpp>
 #include <stop_probe.hpp>
 #include <supplies.hpp>
+#include <sync_latch.hpp>
 #include <trace.hpp>
 
 extern "C" {
@@ -91,6 +96,7 @@ public:
 				// came while another was being served gives no new edge: the pin is checked too.
 				if (esc_irq::wait_until(next_tick) || esc_irq::pending())
 				{
+					marker(true);
 					// Served again while an asked-for AL event is pending: the AL event request
 					// tells, the pin may take a moment to rise once the stack has cleared it.
 					for (uint32_t pass = 0; pass < max_passes; ++pass)
@@ -104,6 +110,7 @@ public:
 						if (!ssc_hw_event_pending())
 							break;
 					}
+					marker(false);
 				}
 
 				const auto now = opsy::scheduler::now();
@@ -121,6 +128,7 @@ public:
 					print_hex("al_code", esc_bus::core_read(0x0134, 2));
 					print_hex("eeprom", esc_bus::core_read(0x0502, 2));
 					print_hex("pdi_calls", pdi_calls_);
+					print_hex("sync0_idle", gpioa.idr.load().id4() ? 1u : 0u);
 					print_hex("pdi_mean", pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_));
 					print_hex("pdi_max", pdi_max_);
 					if ((al_status & 0x0F) >= 2)
@@ -133,7 +141,24 @@ public:
 		});
 	}
 
+	/// CS0 of the local bus (PD0, pin 1 of the HE10), unused without modules: a marker for the
+	/// logic analyser, low from the wake-up of the task to the end of the requests it serves.
+	static void init()
+	{
+		rcc.ahb2enr |= rcc_p::ahb2enr_r::gpioden_f() | mmio::atomic;
+		marker(false);
+		gpiod.moder <<= gpio_p::moder_r::mode0_f(0b01) || mmio::atomic;
+	}
+
 private:
+	static void marker(bool serving)
+	{
+		if (serving)
+			gpiod.bsrr = gpio_p::bsrr_r::br0_f();
+		else
+			gpiod.bsrr = gpio_p::bsrr_r::bs0_f();
+	}
+
 	/// Calls to PDI_Isr() for one request at most: the stack clears what it serves.
 	static constexpr uint32_t max_passes = 8;
 
@@ -151,8 +176,9 @@ using drives     = drive_ports;
 using machine    = stop_probe;
 using rails      = supplies;
 using watchdog   = ext_watchdog;
+using latch      = sync_latch;
 
-using app = bornier::app<board, status_led, console, esc, esc_events, drives, machine, rails, watchdog,
+using app = bornier::app<board, status_led, console, esc, esc_events, drives, machine, rails, watchdog, latch,
                          ethercat_preop_test>;
 
 void application()
