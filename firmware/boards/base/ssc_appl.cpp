@@ -31,6 +31,7 @@
 // The step generator runs on the SYNC0 period the master sets up (register 0x09A0), from
 // SAFEOP: without Distributed Clocks, or on a period it cannot run on, the slave refuses SAFEOP
 // (AL status codes 0x0028, synchronization mode not supported, and 0x0036, SYNC0 cycle time).
+// The period is 2 ms at most, a whole number of microseconds (axes.hpp).
 
 #include <axes.hpp>
 #include <stop_probe.hpp>

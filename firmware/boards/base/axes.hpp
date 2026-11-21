@@ -26,6 +26,10 @@
  *          Missed frames: the EtherCAT stack leaves OP after two of them, and disable_all()
  *          then disables every drive at once (decided: a clean cut, as the stack does).
  *
+ *          Cycle: the SYNC0 period the master sets up, from 8 slots up to 2 ms at the 1 MHz
+ *          slots of the defaults (2000 slots: the DMA ring holds two cycles of them plus a
+ *          margin), a whole number of slots. A longer cycle is refused (start_generator()).
+ *
  *          outputs(), run() and the readers are for the stack's task.
  *
  *          No HAL. No dynamic allocation.
