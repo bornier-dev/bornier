@@ -21,12 +21,10 @@
  *          - from a target within one cycle of steps of where it stands: an axis enabled with a
  *            target far away holds until the master brings the target to it, instead of
  *            running there at the maximum rate.
- *          Otherwise it holds where it stands, and outside OP every axis holds, so that the
- *          generator sees no missed frame.
+ *          Otherwise it holds where it stands, and outside OP every axis holds.
  *
- *          A fault of the generator (more frames missed in a row than its tolerance, see
- *          step_generator) puts every axis in fault; a fault reset of the master acknowledges
- *          it, and the axes resume from where they stand.
+ *          Missed frames: the EtherCAT stack leaves OP after two of them, and disable_all()
+ *          then disables every drive at once (decided: a clean cut, as the stack does).
  *
  *          outputs(), run() and the readers are for the stack's task.
  *
@@ -60,7 +58,7 @@ struct axes_publication
 {
 	std::array<int32_t, step_generator::axis_count> targets{};
 	uint32_t follow = 0; ///< axes that follow their target
-	bool held = true;    ///< outside OP: every axis holds, no frame counts as missed
+	bool held = true;    ///< outside OP: every axis holds
 };
 
 } // namespace detail
@@ -112,15 +110,12 @@ public:
 	 */
 	static void run(bool outputs_allowed)
 	{
-		const bool generator_fault = step_generator::state() != step_generator::mode::running;
-		bool reset = false;
 		auto& next = published_[1 - current_.load(std::memory_order_relaxed)];
 		next.follow = 0;
 		for (std::size_t n = 0; n < count; ++n)
 		{
 			const uint16_t controlword = outputs_allowed ? controlwords_[n] : 0;
-			reset = reset || (controlword & fault_reset) != 0;
-			state_[n].update(controlword, drive_ports::alarm(n) || generator_fault);
+			state_[n].update(controlword, drive_ports::alarm(n));
 			const bool enabled = outputs_allowed && state_[n].enabled();
 			drive_ports::enable(n, enabled);
 
@@ -136,9 +131,6 @@ public:
 		}
 		next.held = !outputs_allowed;
 		current_.store(1 - current_.load(std::memory_order_relaxed), std::memory_order_release);
-		fresh_.store(true, std::memory_order_release);
-		if (generator_fault && reset)
-			step_generator::acknowledge();
 	}
 
 	/** @brief Stops following and disables every drive at once: leaving OP. */
@@ -167,19 +159,15 @@ public:
 
 private:
 
-	static constexpr uint16_t fault_reset = 0x0080;
-
 	/// Fill interrupt (TIM5 CC2): the command of the next cycle.
 	static void fill_isr()
 	{
 		(void)step_generator::fill([] {
 			const auto& p = published_[current_.load(std::memory_order_acquire)];
-			const bool fresh = fresh_.exchange(false, std::memory_order_acq_rel);
-			step_generator::command c{};
-			c.received = fresh || p.held;
+			step_generator::targets_t t{};
 			for (std::size_t n = 0; n < count; ++n)
-				c.targets[n] = (p.follow & (1u << n)) != 0 ? p.targets[n] : step_generator::statistics().axes[n].position;
-			return c;
+				t[n] = (p.follow & (1u << n)) != 0 && !p.held ? p.targets[n] : step_generator::statistics().axes[n].position;
+			return t;
 		});
 	}
 
@@ -190,7 +178,6 @@ private:
 	static inline uint32_t max_steps_ = 0;
 	static inline std::array<detail::axes_publication, 2> published_{};
 	static inline std::atomic<uint32_t> current_{0};
-	static inline std::atomic<bool> fresh_{false};
 
 public:
 
