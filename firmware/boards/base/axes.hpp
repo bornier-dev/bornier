@@ -66,8 +66,8 @@ struct axes_publication
 /**
  * @brief The step/dir axes under CiA402 CSP, as a module.
  *
- *        All methods are static — no instance needed. start() and isrs are used by
- *        bornier::app.
+ *        All methods are static — no instance needed. isrs is used by bornier::app; the
+ *        stack starts the generator on the way to SAFEOP (start_generator()).
  */
 class axes
 {
@@ -76,9 +76,19 @@ public:
 	static constexpr std::size_t count = step_generator::axis_count;
 	static_assert(count == drive_ports::count);
 
-	/** @brief Starts the step generator; its slot grid locks on the next SYNC0. */
-	static bool start()
+	/**
+	 * @brief Starts the step generator on the SYNC0 period of the master; its slot grid locks
+	 *        on the next SYNC0. On the way to SAFEOP, once the master has set up the
+	 *        Distributed Clocks.
+	 *
+	 * @param cycle_ns SYNC0 period, ns.
+	 * @return @c false if the generator cannot run on that period (not a whole number of
+	 *         slots, or more slots than its ring holds).
+	 */
+	static bool start_generator(uint32_t cycle_ns)
 	{
+		auto settings = defaults;
+		settings.cycle_ns = cycle_ns;
 		step_generator::derived d{};
 		if (step_generator::derive(settings, d) != step_generator::error::none)
 			return false;
@@ -88,6 +98,14 @@ public:
 		// be played before they are.
 		step_generator::start(settings, opsy::cortex_m::highest_priority);
 		return true;
+	}
+
+	/** @brief Stops the generator, every drive disabled: leaving SAFEOP. The axes keep their
+	 *         position for the next start. */
+	static void stop_generator()
+	{
+		disable_all();
+		step_generator::stop();
 	}
 
 	/**
@@ -154,8 +172,9 @@ public:
 	/** @brief Position of an axis, steps scheduled: all are emitted (0x6064 + 0x800n). */
 	static int32_t position(std::size_t n) { return step_generator::statistics().axes[n].position; }
 
-	/// Settings of the generator: 1 MHz slots, the 1 ms cycle of the master.
-	static constexpr step_generator::config settings{};
+	/// Settings of the generator but the cycle, the SYNC0 period of the master: 1 MHz slots,
+	/// pulses of 500 ns, DIR 1 us before and after.
+	static constexpr step_generator::config defaults{};
 
 private:
 

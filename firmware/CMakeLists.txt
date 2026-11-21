@@ -90,7 +90,7 @@ if(BORNIER_SSC_DIR)
     # The SSC Tool regenerates its application file whole: the functions the board's application
     # defines (boards/base/ssc_appl.cpp) are renamed there, unused, rather than edited.
     set_source_files_properties("${BORNIER_SSC_DIR}/${BORNIER_SSC_APPLICATION}" TARGET_DIRECTORY ssc PROPERTIES
-        COMPILE_DEFINITIONS "APPL_InputMapping=APPL_InputMapping_generated;APPL_OutputMapping=APPL_OutputMapping_generated;APPL_Application=APPL_Application_generated;APPL_StartOutputHandler=APPL_StartOutputHandler_generated;APPL_StopOutputHandler=APPL_StopOutputHandler_generated")
+        COMPILE_DEFINITIONS "APPL_StartInputHandler=APPL_StartInputHandler_generated;APPL_StopInputHandler=APPL_StopInputHandler_generated;APPL_InputMapping=APPL_InputMapping_generated;APPL_OutputMapping=APPL_OutputMapping_generated;APPL_Application=APPL_Application_generated;APPL_StartOutputHandler=APPL_StartOutputHandler_generated;APPL_StopOutputHandler=APPL_StopOutputHandler_generated")
     target_include_directories(ssc SYSTEM PUBLIC "${BORNIER_SSC_DIR}")
     target_include_directories(ssc PUBLIC boards/base)
     target_link_libraries(ssc PUBLIC cortex_m33)

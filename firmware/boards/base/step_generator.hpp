@@ -244,7 +244,11 @@ public:
 		(void)opsy::cortex_m::enable_cycle_count(); // fill statistics
 		config_ = c;
 		(void)derive(c, d_);
+		// The axes keep their position across a restart: only the statistics start over.
+		auto const kept = stats_.axes;
 		stats_ = {};
+		for (std::size_t a = 0; a < axis_count; ++a)
+			stats_.axes[a].position = stats_.axes[a].target = kept[a].position;
 		state_ = {};
 		clear_slots(0, ring_slots);
 		dir_bits_ = (1u << axis_count) - 1; // all forward, as axis_state::forward

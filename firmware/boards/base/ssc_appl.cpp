@@ -27,6 +27,10 @@
 // RxPDO 0x1600 (24 bytes): controlword, target position, for each axis in turn.
 // TxPDO 0x1A00 (30 bytes): 0x2000:01 to :05, then statusword, position actual value, for each
 // axis in turn. The axes themselves are in axes.hpp. All runs in the stack's task.
+//
+// The step generator runs on the SYNC0 period the master sets up (register 0x09A0), from
+// SAFEOP: without Distributed Clocks, or on a period it cannot run on, the slave refuses SAFEOP
+// (AL status codes 0x0028, synchronization mode not supported, and 0x0036, SYNC0 cycle time).
 
 #include <axes.hpp>
 #include <stop_probe.hpp>
@@ -120,6 +124,25 @@ void APPL_InputMapping(UINT16* pData)
 		put<uint16_t>(axis, *statusword_objects[n]);
 		put<int32_t>(axis + 2, *position_objects[n]);
 	}
+}
+
+UINT16 APPL_StartInputHandler(UINT16* pIntMask)
+{
+	(void)pIntMask;
+	// The steps need SYNC0, at the period the master set up for the Distributed Clocks.
+	UINT32 cycle_ns = 0;
+	HW_EscRead(reinterpret_cast<MEM_ADDR*>(&cycle_ns), ESC_DC_SYNC0_CYCLETIME_OFFSET, sizeof(cycle_ns));
+	if (cycle_ns == 0)
+		return ALSTATUSCODE_SYNCHRONNOTSUPPORTED;
+	if (!axes::start_generator(cycle_ns))
+		return ALSTATUSCODE_DCSYNC0CYCLETIME;
+	return ALSTATUSCODE_NOERROR;
+}
+
+UINT16 APPL_StopInputHandler(void)
+{
+	axes::stop_generator();
+	return ALSTATUSCODE_NOERROR;
 }
 
 void APPL_Application(void)
