@@ -22,7 +22,9 @@
 //   sync0_idle level of ESC_SYNC0 (PA4) when sampled, mostly its idle level
 //   gen_*      step generator: cycles filled, fills without SYNC0, phase resyncs, DMA errors,
 //              longest fill (CPU cycles), latest end of fill (TIM5 ticks after SYNC0), and for
-//              axis 0 the steps scheduled, the cycles that deferred steps and the reversals
+//              axis 0 the steps scheduled, the cycles that deferred steps and the reversals;
+//              cycles missed, extrapolated, faults, targets refused, mode (0 running, 1 stopping,
+//              2 faulted)
 //
 // For a logic analyser on the HE10 of the local bus: pin 26, LATCH, a 10 us pulse on each SYNC0
 // (sync_latch); pin 1, CS0, low while the task serves the LAN9253; ground on pin 25.
@@ -144,6 +146,11 @@ public:
 					print_hex("gen_pulses0", g.axes[0].pulses);
 					print_hex("gen_deferred0", g.axes[0].deferred);
 					print_hex("gen_reversals0", g.axes[0].reversals);
+					print_hex("gen_missed", g.missed);
+					print_hex("gen_extrapolated", g.extrapolated);
+					print_hex("gen_faults", g.faults);
+					print_hex("gen_refused", g.refused);
+					print_hex("gen_mode", static_cast<uint32_t>(step_generator::state()));
 					print_hex("pdi_mean", pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_));
 					print_hex("pdi_max", pdi_max_);
 					if ((al_status & 0x0F) >= 2)
