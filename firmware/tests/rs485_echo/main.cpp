@@ -13,7 +13,8 @@
 //   echoed   number of bytes that came back right, out of 256
 //   missing  number of bytes that did not come back
 //   errors   framing, noise and overrun errors seen (1 each), as three digits
-//   verdict  PASS when idle, 256 echoed, none missing and no error
+//   failed   1 once a sending missed its deadline: the port is down until the next reset
+//   verdict  PASS when idle, 256 echoed, none missing, no error and the port not failed
 
 #include <application.hpp>
 #include <app.hpp>
@@ -49,6 +50,13 @@ void print_number(std::string_view name, uint32_t value)
 	trace::write("\r\n");
 }
 
+/// Nothing to put in a safe state in this test: a failure of the port shows in its verdict.
+struct no_outputs
+{
+	static void fault() {}
+};
+using port = rs485<no_outputs>;
+
 } // namespace
 
 /** @brief The test, as a module: one task that runs the checks and reports on SWO. */
@@ -62,24 +70,24 @@ public:
 			{
 				opsy::sleep_for(1s);
 
-				(void)rs485::take_errors();
-				const bool idle = rs485::line_idle();
+				(void)port::take_errors();
+				const bool idle = port::line_idle();
 
 				// The 256 values go out as one frame, by DMA; the echo comes back into another
 				// buffer, by DMA, and ends when the line falls silent. 256 bytes last 22 ms.
 				for (uint32_t value = 0; value < 256; ++value)
 					sent_[value] = static_cast<uint8_t>(value);
 				echo_.fill(0);
-				rs485::listen(echo_);
-				rs485::send(sent_);
-				const std::size_t count = rs485::received(100ms);
+				port::listen(echo_);
+				port::send(sent_);
+				const std::size_t count = port::received(100ms);
 
 				uint32_t echoed = 0;
 				for (std::size_t i = 0; i < count; ++i)
 					if (echo_[i] == sent_[i])
 						++echoed;
 				const uint32_t missing = static_cast<uint32_t>(sent_.size() - count);
-				const auto errors = rs485::take_errors();
+				const auto errors = port::take_errors();
 
 				print_number("idle", idle ? 1 : 0);
 				print_number("echoed", echoed);
@@ -90,7 +98,8 @@ public:
 				trace::write(errors.overrun ? "1" : "0");
 				trace::write("\r\n");
 
-				const bool pass = idle && echoed == 256 && missing == 0
+				print_number("failed", port::failed() ? 1 : 0);
+				const bool pass = idle && echoed == 256 && missing == 0 && !port::failed()
 				               && !errors.framing && !errors.noise && !errors.overrun;
 				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
 
@@ -110,7 +119,7 @@ private:
 
 using status_led = mcu_led;
 using console    = trace;
-using fieldbus   = rs485;
+using fieldbus   = port;
 
 using app = bornier::app<board, status_led, console, fieldbus, rs485_echo_test>;
 

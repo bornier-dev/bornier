@@ -44,6 +44,13 @@ using namespace STM32H523;
 namespace
 {
 
+/// Nothing to put in a safe state in this test: a failure of the bus shows in its verdict.
+struct no_outputs
+{
+	static void fault() {}
+};
+using bus = esc_bus<no_outputs>;
+
 constexpr uint16_t core_type     = 0x0000; // type, revision, build (2 bytes)
 constexpr uint16_t core_al_event = 0x0220;
 constexpr uint16_t core_eeprom   = 0x0500;
@@ -64,10 +71,10 @@ void print_register(std::string_view name, uint32_t value)
 // Writes a pattern to the user RAM and reads it back in the three access sizes.
 bool user_ram_holds(uint32_t pattern)
 {
-	esc_bus::core_write(core_user_ram, pattern, 4);
-	const uint32_t whole = esc_bus::core_read(core_user_ram, 4);
-	const uint32_t upper = esc_bus::core_read(static_cast<uint16_t>(core_user_ram + 2), 2);
-	const uint32_t byte1 = esc_bus::core_read(static_cast<uint16_t>(core_user_ram + 1), 1);
+	bus::core_write(core_user_ram, pattern, 4);
+	const uint32_t whole = bus::core_read(core_user_ram, 4);
+	const uint32_t upper = bus::core_read(static_cast<uint16_t>(core_user_ram + 2), 2);
+	const uint32_t byte1 = bus::core_read(static_cast<uint16_t>(core_user_ram + 1), 1);
 	print_register("user_ram", whole);
 	return whole == pattern && upper == pattern >> 16 && byte1 == ((pattern >> 8) & 0xFFu);
 }
@@ -75,21 +82,21 @@ bool user_ram_holds(uint32_t pattern)
 // Runs all the checks in the current bus mode.
 bool bus_works()
 {
-	const uint32_t byte_test = esc_bus::read(esc_bus::byte_test);
-	const uint32_t id_rev    = esc_bus::read(esc_bus::id_rev);
+	const uint32_t byte_test = bus::read(bus::byte_test);
+	const uint32_t id_rev    = bus::read(bus::id_rev);
 	print_register("byte_test", byte_test);
 	print_register("id_rev", id_rev);
-	print_register("hw_cfg", esc_bus::read(esc_bus::hw_cfg));
+	print_register("hw_cfg", bus::read(bus::hw_cfg));
 
 	// The core is only reached once the bus itself is proven: a core access polls the chip,
 	// and would never end on a dead bus.
 	if (byte_test != 0x87654321u || (id_rev >> 16) != 0x9253u)
 		return false;
 
-	print_register("core_type", esc_bus::core_read(core_type, 4));
-	print_register("core_product", esc_bus::core_read(core_product, 4));
-	print_register("core_al_event", esc_bus::core_read(core_al_event, 4));
-	print_register("core_eeprom", esc_bus::core_read(core_eeprom, 4));
+	print_register("core_type", bus::core_read(core_type, 4));
+	print_register("core_product", bus::core_read(core_product, 4));
+	print_register("core_al_event", bus::core_read(core_al_event, 4));
+	print_register("core_eeprom", bus::core_read(core_eeprom, 4));
 	const bool first  = user_ram_holds(0xA5C33C5Au);
 	const bool second = user_ram_holds(0x5A3CC3A5u);
 	return first && second;
@@ -105,12 +112,12 @@ void print_timing()
 
 	uint32_t start = opsy::cortex_m::cycle_count();
 	for (uint32_t i = 0; i < count; ++i)
-		(void)esc_bus::read(esc_bus::byte_test);
+		(void)bus::read(bus::byte_test);
 	const uint32_t read_cycles = (opsy::cortex_m::cycle_count() - start) / count;
 
 	start = opsy::cortex_m::cycle_count();
 	for (uint32_t i = 0; i < count; ++i)
-		(void)esc_bus::core_read(core_type, 4);
+		(void)bus::core_read(core_type, 4);
 	const uint32_t core_read_cycles = (opsy::cortex_m::cycle_count() - start) / count;
 
 	char digits[10];
@@ -135,18 +142,18 @@ public:
 		return task_.start([]{
 			// Back to compatibility mode, the one this test checks, whatever PDI an earlier
 			// image left the LAN9253 in: without the stack, nothing loads its configuration.
-			if (!esc_bus::reset())
+			if (!bus::reset())
 				trace::write("reset FAIL\r\n");
 			while (true)
 			{
-				esc_bus::set_mode(esc_bus::mode::single);
+				bus::set_mode(bus::mode::single);
 				trace::write("mode single\r\n");
 				const bool single = bus_works();
 				if (single)
 					print_timing();
 				trace::write(single ? "single PASS\r\n" : "single FAIL\r\n");
 
-				esc_bus::set_mode(esc_bus::mode::quad);
+				bus::set_mode(bus::mode::quad);
 				trace::write("mode quad\r\n");
 				const bool quad = bus_works();
 				if (quad)
@@ -154,6 +161,7 @@ public:
 				trace::write(quad ? "quad PASS\r\n" : "quad FAIL\r\n");
 
 				const bool pass = single && quad;
+				print_register("bus_failure", static_cast<uint32_t>(bus::failed()));
 				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
 
 				if (pass)
@@ -171,7 +179,7 @@ private:
 
 using status_led = mcu_led;
 using console    = trace;
-using esc        = esc_bus;
+using esc        = bus;
 
 using app = bornier::app<board, status_led, console, esc, esc_probe_test>;
 

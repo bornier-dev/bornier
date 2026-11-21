@@ -10,6 +10,7 @@
 #include <ssc_hw.h>
 
 #include <opsy.hpp>
+#include <axes.hpp>
 #include <esc_bus.hpp>
 
 #include <cstddef>
@@ -17,6 +18,9 @@
 #include <span>
 
 using namespace STM32H523;
+
+// A failure of the bus puts the board in its safe state for good (esc_bus, axes::fault()).
+using bus = esc_bus<axes>;
 
 namespace
 {
@@ -53,7 +57,7 @@ void read_core(uint8_t* data, uint16_t address, uint16_t length)
 	while (left > 0)
 	{
 		const uint32_t size = piece(at, left);
-		const uint32_t value = esc_bus::core_read(static_cast<uint16_t>(at), size);
+		const uint32_t value = bus::core_read(static_cast<uint16_t>(at), size);
 		for (uint32_t i = 0; i < size; ++i)
 			*data++ = static_cast<uint8_t>(value >> (8 * i));
 		at += size;
@@ -71,7 +75,7 @@ void write_core(const uint8_t* data, uint16_t address, uint16_t length)
 		uint32_t value = 0;
 		for (uint32_t i = 0; i < size; ++i)
 			value |= static_cast<uint32_t>(*data++) << (8 * i);
-		esc_bus::core_write(static_cast<uint16_t>(at), value, size);
+		bus::core_write(static_cast<uint16_t>(at), value, size);
 		at += size;
 		left -= size;
 	}
@@ -95,10 +99,10 @@ UINT8 HW_Init(void)
 {
 	// The LAN9253 reloads its configuration from the SII the stack emulates: its PDI is then
 	// the one of the SII (see esc_bus::expect_pdi_change()).
-	if (!esc_bus::reset())
+	if (!bus::reset())
 		return 1;
-	esc_bus::set_mode(esc_bus::mode::quad);
-	if (esc_bus::read(esc_bus::byte_test) != 0x87654321)
+	bus::set_mode(bus::mode::quad);
+	if (bus::read(bus::byte_test) != 0x87654321)
 		return 1;
 
 	// No AL event reaches the IRQ pin until the stack asks for one (AL event mask); then
@@ -106,8 +110,8 @@ UINT8 HW_Init(void)
 	uint32_t mask = 0;
 	write_core(reinterpret_cast<const uint8_t*>(&mask), al_event_mask, sizeof(mask));
 	event_mask = 0;
-	esc_bus::write(int_en, int_en_ecat);
-	esc_bus::write(irq_cfg, esc_bus::read(irq_cfg) | irq_cfg_irq_en);
+	bus::write(int_en, int_en_ecat);
+	bus::write(irq_cfg, bus::read(irq_cfg) | irq_cfg_irq_en);
 	return 0;
 }
 
@@ -115,7 +119,7 @@ void HW_Release(void) {}
 
 UINT16 HW_GetALEventRegister(void)
 {
-	return static_cast<UINT16>(esc_bus::core_read(al_event_request, 2));
+	return static_cast<UINT16>(bus::core_read(al_event_request, 2));
 }
 
 UINT16 HW_GetALEventRegister_Isr(void)
@@ -138,8 +142,8 @@ UINT16 HW_EepromReload(void)
 void HW_EscRead(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
 	auto* const data = reinterpret_cast<uint8_t*>(pData);
-	if (esc_bus::direct())
-		esc_bus::direct_read(Address, std::span(data, Len));
+	if (bus::direct())
+		bus::direct_read(Address, std::span(data, Len));
 	else
 		read_core(data, Address, Len);
 }
@@ -155,13 +159,13 @@ void HW_EscReadIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 void HW_EscWrite(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
 	const auto* const data = reinterpret_cast<const uint8_t*>(pData);
-	if (esc_bus::direct())
-		esc_bus::direct_write(Address, std::span(data, Len));
+	if (bus::direct())
+		bus::direct_write(Address, std::span(data, Len));
 	else
 		write_core(data, Address, Len);
 
 	if (Address <= eeprom_control && eeprom_control < Address + Len)
-		esc_bus::expect_pdi_change();
+		bus::expect_pdi_change();
 
 	// The stack writes the AL event mask whole (SetALEventMask(), ResetALEventMask()).
 	if (Address == al_event_mask && Len >= 2)

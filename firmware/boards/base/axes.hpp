@@ -91,6 +91,8 @@ public:
 	 */
 	static bool start_generator(uint32_t cycle_ns)
 	{
+		if (faulted_)
+			return false;
 		auto settings = defaults;
 		settings.cycle_ns = cycle_ns;
 		step_generator::derived d{};
@@ -113,6 +115,21 @@ public:
 	}
 
 	/**
+	 * @brief The safe state of the board, for good: every drive disabled and the generator
+	 *        stopped at once; from then on every drive stays disabled and the generator does not
+	 *        start again, until the next reset of the MCU. On a failure the board cannot recover
+	 *        from, such as its EtherCAT bus (esc_bus). From the stack's task.
+	 */
+	static void fault()
+	{
+		faulted_ = true;
+		stop_generator();
+	}
+
+	/** @brief Whether the board is in its safe state for good, see fault(). */
+	static bool faulted() { return faulted_; }
+
+	/**
 	 * @brief The outputs of the master for the next cycle.
 	 *
 	 * @param controlwords Controlword of each axis (0x6040 + 0x800n).
@@ -132,6 +149,7 @@ public:
 	 */
 	static void run(bool outputs_allowed)
 	{
+		outputs_allowed = outputs_allowed && !faulted_;
 		auto& next = published_[1 - current_.load(std::memory_order_relaxed)];
 		next.follow = 0;
 		for (std::size_t n = 0; n < count; ++n)
@@ -199,6 +217,7 @@ private:
 	static inline std::array<int32_t, count> targets_{};
 	static inline std::array<bool, count> following_{};
 	static inline uint32_t max_steps_ = 0;
+	static inline bool faulted_ = false;
 	static inline std::array<detail::axes_publication, 2> published_{};
 	static inline std::atomic<uint32_t> current_{0};
 

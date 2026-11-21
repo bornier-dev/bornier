@@ -28,6 +28,11 @@
  *            frame: the line silent for the MODBUS inter-frame time (USART receiver timeout),
  *            or the buffer full (DMA transfer complete), or the deadline.
  *
+ *          A sending has a deadline: twice its time on the line, in whole ticks of the RTOS clock,
+ *          plus one for the tick under way. Past it the port fails: the sending is stopped, the
+ *          board goes to its safe state (Safety::fault()), and the port stays down until the
+ *          next reset of the MCU: send() and listen() then return at once, received() gives 0.
+ *
  *          The calling task sleeps on a semaphore meanwhile: no polling. Its interrupts are at
  *          the drivers' level (opsy::scheduler::os_callable_priority), from which a semaphore may be
  *          released.
@@ -64,10 +69,17 @@ using mmio::atomic;
  *
  *        All methods are static — no instance needed. init() and isrs are used by
  *        bornier::app; send(), listen() and received() are for one task at a time.
+ *
+ * @tparam Safety Puts the board in its safe state when the port fails, from the calling task: a
+ *                static fault().
  */
+template<typename Safety>
 class rs485
 {
 public:
+
+	/** @brief Whether the port failed: a sending did not end by its deadline. */
+	static bool failed() { return failed_; }
 
 	/** @brief Line errors seen by the receiver since the last call to @c take_errors(). */
 	struct errors
@@ -127,11 +139,12 @@ public:
 	/**
 	 * @brief Sends @p data and returns once its last stop bit has left the pin.
 	 *
-	 *        The calling task sleeps meanwhile. @p data must stay valid until then.
+	 *        The calling task sleeps meanwhile. @p data must stay valid until then. Past the
+	 *        deadline, the port fails (see the top of this file).
 	 */
 	static void send(std::span<const std::uint8_t> data)
 	{
-		if (data.empty())
+		if (data.empty() || failed_)
 			return;
 		usart2.icr = usart_p::icr_r::tccf_f();
 		clear_flags(tx());
@@ -139,7 +152,12 @@ public:
 		tx().br1 = gpdma_p::c_c::br1_r::bndt_f(static_cast<std::uint16_t>(data.size()));
 		tx().cr  = gpdma_p::c_c::cr_r::en_f();
 		usart2.cr1 |= usart_p::cr1_r::tcie_f() | atomic;
-		sent_.acquire();
+		if (sent_.try_acquire_for(opsy::duration(2 * frame_ms(data.size()) + 2)))
+			return;
+		usart2.cr1 <<= usart_p::cr1_r::tcie_f(false) || atomic;
+		stop(tx());
+		failed_ = true;
+		Safety::fault();
 	}
 
 	/**
@@ -150,6 +168,8 @@ public:
 	 */
 	static void listen(std::span<std::uint8_t> buffer)
 	{
+		if (failed_)
+			return;
 		stop(rx());
 		usart2.rqr = usart_p::rqr_r::rxfrq_f(); // drops a byte left from before
 		usart2.icr = usart_p::icr_r::rtocf_f();
@@ -165,10 +185,13 @@ public:
 	/**
 	 * @brief Waits for the end of the frame armed by listen(), at most @p timeout.
 	 *
-	 * @return The number of bytes received, 0 if none came before the deadline.
+	 * @return The number of bytes received, 0 if none came before the deadline or the port
+	 *         failed.
 	 */
 	static std::size_t received(opsy::duration timeout)
 	{
+		if (failed_)
+			return 0;
 		(void)received_.try_acquire_for(timeout);
 		usart2.cr1 <<= usart_p::cr1_r::rtoie_f(false) || atomic;
 		stop(rx());
@@ -194,6 +217,12 @@ private:
 
 	// MODBUS RTU end of frame: 3.5 characters of silence, fixed at 1.75 ms above 19200 baud.
 	static constexpr uint32_t silence_bits = baud_rate > 19'200 ? baud_rate * 175 / 100'000 + 1 : 35;
+
+	/// Time of @p bytes on the line, ms, rounded up: 10 bits each.
+	static constexpr uint32_t frame_ms(std::size_t bytes)
+	{
+		return static_cast<uint32_t>((10 * bytes * 1000 + baud_rate - 1) / baud_rate);
+	}
 
 	static constexpr std::uint8_t usart2_rx_request = 23; ///< GPDMA request, RM0481 table 142
 	static constexpr std::uint8_t usart2_tx_request = 24;
@@ -248,6 +277,7 @@ private:
 	static inline opsy::binary_semaphore sent_{0};
 	static inline opsy::binary_semaphore received_{0};
 	static inline std::uint16_t listening_ = 0;
+	static inline bool failed_ = false;
 
 public:
 

@@ -44,6 +44,13 @@
  *          for the OCTOSPI to be idle, SCS# high for long enough, and that time overlaps with
  *          the software in between.
  *
+ *          Every wait has a deadline, drawn from the length of the transaction: twice its time
+ *          on the bus, and for a transfer moved by DMA, that time in whole ticks of the RTOS
+ *          clock. A wait that runs out is a failure of the bus: the transaction is aborted, the
+ *          board goes to its safe state (Safety::fault()), and the bus stays down until the
+ *          next reset of the MCU: every access then returns at once, reads giving 0. failed()
+ *          tells what ran out.
+ *
  *          Not reentrant: all the calls must come from a single task.
  *
  *          No HAL. No dynamic allocation.
@@ -81,10 +88,26 @@ using mmio::atomic;
  *
  *        All methods are static — no instance needed.
  *        Call @c init() once, after @c clock::init().
+ *
+ * @tparam Safety Puts the board in its safe state when the bus fails, from the calling task: a
+ *                static fault().
  */
+template<typename Safety>
 class esc_bus
 {
 public:
+
+	/** @brief The wait that ran out when the bus failed, see the top of this file. */
+	enum class failure : uint8_t
+	{
+		none,         ///< The bus works
+		transfer,     ///< The OCTOSPI did not end a transaction
+		dma,          ///< A transfer moved by DMA did not end
+		core_command, ///< The LAN9253 did not run a command of its EtherCAT core
+	};
+
+	/** @brief Why the bus failed, @c failure::none while it works. */
+	static failure failed() { return failure_; }
 
 	static constexpr uint16_t id_rev    = 0x0050; ///< Chip ID (upper half) and revision (lower half)
 	static constexpr uint16_t byte_test = 0x0064; ///< Reads 0x87654321 when the byte order is right
@@ -144,6 +167,7 @@ public:
 		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler_single);
 		octospi.cr   = octospi_p::cr_r::en_f();
 
+		(void)opsy::cortex_m::enable_cycle_count(); // the deadlines of the waits; runs on this core
 		command(lines_quad, reset_quad);
 		quad_ = false;
 
@@ -169,7 +193,7 @@ public:
 	static void set_mode(mode wanted)
 	{
 		const bool quad = wanted == mode::quad;
-		if (quad == quad_)
+		if (quad == quad_ || down())
 			return;
 
 		// The command goes out in the mode the chip is still in; the clock changes once the
@@ -191,11 +215,13 @@ public:
 	 *        expect_pdi_change()). It comes back in single mode, in compatibility mode, with the
 	 *        default dummy bytes. For tasks only.
 	 *
-	 * @return @c false if it does not answer within 10 ms.
+	 * @return @c false if it does not answer within 10 ms, or the bus failed.
 	 */
 	static bool reset()
 	{
 		using namespace std::chrono_literals;
+		if (down())
+			return false;
 		write(reset_ctl, digital_reset);
 		quad_ = false;
 		direct_ = false;
@@ -232,14 +258,16 @@ public:
 	 *        4 data bytes, least significant first.
 	 *
 	 * @param address Register address, as in compatibility mode.
-	 * @return        Register value.
+	 * @return        Register value, 0 once the bus failed.
 	 */
 	static uint32_t read(uint16_t address)
 	{
-		start(0b01, quad_ ? fast_read_instruction : read_instruction);
+		if (!start(0b01, quad_ ? fast_read_instruction : read_instruction))
+			return 0;
 		octospi.ar = octospi_p::ar_r(direct_ ? address | direct_registers : address); // starts the transfer
 
-		while (!octospi.sr.load().tcf()) {}
+		if (!transferred(4))
+			return 0;
 		const uint32_t value = octospi.dr.load().value();
 		finish();
 		return value;
@@ -256,12 +284,13 @@ public:
 	 */
 	static void write(uint16_t address, uint32_t value)
 	{
-		start(0b00, write_instruction);
+		if (!start(0b00, write_instruction))
+			return;
 		octospi.ar = octospi_p::ar_r(direct_ ? address | direct_registers : address);
 		octospi.dr = octospi_p::dr_r(value); // starts the transfer
 
-		while (!octospi.sr.load().tcf()) {}
-		finish();
+		if (transferred(4))
+			finish();
 	}
 
 	/**
@@ -274,7 +303,7 @@ public:
 	 *
 	 * @param address Address in the EtherCAT core, aligned on @p size.
 	 * @param size    Number of bytes: 1, 2 or 4.
-	 * @return        Value read, in the low @p size bytes.
+	 * @return        Value read, in the low @p size bytes; 0 once the bus failed.
 	 */
 	static uint32_t core_read(uint16_t address, uint32_t size)
 	{
@@ -284,7 +313,8 @@ public:
 		if (direct_)
 			return word_read(address, size) & mask;
 		write(ecat_csr_cmd, csr_busy | csr_read | (size << 16) | address);
-		while (read(ecat_csr_cmd) & csr_busy) {}
+		if (!core_command_done())
+			return 0;
 		return read(ecat_csr_data) & mask;
 	}
 
@@ -306,7 +336,7 @@ public:
 		}
 		write(ecat_csr_data, value);
 		write(ecat_csr_cmd, csr_busy | (size << 16) | address);
-		while (read(ecat_csr_cmd) & csr_busy) {}
+		(void)core_command_done();
 	}
 
 	/**
@@ -317,11 +347,11 @@ public:
 	 *        padding bytes before the first byte to align it, and dummy bytes between words.
 	 *
 	 * @param address First byte, any alignment, 0x0000 to 0x2FFF.
-	 * @param data    Where the bytes go.
+	 * @param data    Where the bytes go; left as they are from where the bus failed.
 	 */
 	static void direct_read(uint16_t address, std::span<uint8_t> data)
 	{
-		while (!data.empty())
+		while (!data.empty() && !down())
 		{
 			const std::size_t pad = address & 3u;
 			const std::size_t length = std::min(data.size(), chunk - pad);
@@ -340,11 +370,13 @@ public:
 				// OCTOSPI makes it busy, and a busy OCTOSPI ignores the writes that set up a
 				// command.
 				dma_bytes(true, stream);
-				start(0b01, fast_read_instruction, static_cast<uint32_t>(stream),
-				      octospi_p::cr_r(octospi_p::cr_r::dmaen_f()), static_cast<uint8_t>(length));
+				if (!start(0b01, fast_read_instruction, static_cast<uint32_t>(stream),
+				           octospi_p::cr_r(octospi_p::cr_r::dmaen_f()), static_cast<uint8_t>(length)))
+					return;
 				octospi.ar = octospi_p::ar_r(increment | address);
 				dma().cr = gpdma_p::c_c::cr_r::en_f() | gpdma_p::c_c::cr_r::tcie_f();
-				done_.acquire();
+				if (!moved(stream))
+					return;
 				finish();
 
 				// Word w of the stream starts at w * (4 + read_gap); the padding comes first.
@@ -379,11 +411,11 @@ public:
 	 *        calling task sleeps.
 	 *
 	 * @param address First byte, any alignment, 0x0000 to 0x2FFF.
-	 * @param data    The bytes.
+	 * @param data    The bytes; none written from where the bus failed.
 	 */
 	static void direct_write(uint16_t address, std::span<const uint8_t> data)
 	{
-		while (!data.empty())
+		while (!data.empty() && !down())
 		{
 			const std::size_t pad = address & 3u;
 			const std::size_t length = std::min(data.size(), chunk - pad);
@@ -415,11 +447,13 @@ public:
 				if (pad != 0 || (pad + length) % 4 != 0)
 					settle();
 				dma_bytes(false, stream);
-				start(0b00, write_instruction, static_cast<uint32_t>(stream),
-				      octospi_p::cr_r(octospi_p::cr_r::dmaen_f() | octospi_p::cr_r::tcie_f()));
+				if (!start(0b00, write_instruction, static_cast<uint32_t>(stream),
+				           octospi_p::cr_r(octospi_p::cr_r::dmaen_f() | octospi_p::cr_r::tcie_f())))
+					return;
 				octospi.ar = octospi_p::ar_r(dword_buffering | address); // starts, waits for data
 				dma().cr = gpdma_p::c_c::cr_r::en_f();
-				done_.acquire();
+				if (!moved(stream))
+					return;
 				finish();
 			}
 			address = static_cast<uint16_t>(address + length);
@@ -485,6 +519,14 @@ private:
 
 	static constexpr std::uint8_t ospi1_request = 57; ///< GPDMA request, RM0481 table 142
 
+	static constexpr uint32_t cycles_per_us = 250;          ///< SYSCLK, see clock.hpp
+	static constexpr uint32_t cycles_per_ms = 1000 * cycles_per_us;
+
+	/// Longest wait for the LAN9253 to run a command of its core, compatibility mode. Measured on
+	/// the board (tests/esc_probe): the command is done at the first poll, a register read of
+	/// 1.4 us in quad mode, 7 us in single mode; 100 us is 14 polls at the least.
+	static constexpr uint32_t core_command_cycles = 100 * cycles_per_us;
+
 	// Values of the IMODE, ADMODE and DMODE fields.
 	static constexpr uint8_t lines_single = 1;
 	static constexpr uint8_t lines_quad   = 3;
@@ -494,6 +536,7 @@ private:
 	static inline bool pdi_change_ = false; ///< The PDI may change, see expect_pdi_change()
 	static inline uint8_t cs_high_ = cs_high_compatibility; ///< CSHT field now in DCR1
 	static inline bool wrote_ = false;      ///< The last transaction was a write
+	static inline failure failure_ = failure::none;
 
 	/// A transaction of direct_read() or direct_write(): data, padding and dummy bytes.
 	static inline std::array<uint8_t, chunk + read_gap * (chunk / 4)> stream_{};
@@ -505,6 +548,77 @@ private:
 	static uint8_t prescaler()
 	{
 		return !quad_ ? prescaler_single : direct_ ? prescaler_direct : prescaler_quad;
+	}
+
+	static bool down() { return failure_ != failure::none; }
+
+	/// Longest a transaction with @p bytes data, padding and dummy bytes may take, in CPU
+	/// cycles: twice its time on the bus at the current clock and lines (instruction, address,
+	/// length byte, the bytes, the most dummy cycles), plus 1 us for the accesses of the CPU
+	/// around it.
+	static uint32_t limit(std::size_t bytes)
+	{
+		const uint32_t lines = quad_ ? 4 : 1;
+		const uint32_t clocks = (32 + 8 * static_cast<uint32_t>(bytes)) / lines + 2 * direct_initial;
+		return 2 * clocks * (prescaler() + 1u) + cycles_per_us;
+	}
+
+	/// Polls until @p done, at most @p cycles CPU cycles. Checked once more past the deadline: a
+	/// task preempted beyond it does not take a finished transaction for a stuck one.
+	template<typename Done>
+	static bool wait(Done done, uint32_t cycles)
+	{
+		const uint32_t begin = opsy::cortex_m::cycle_count();
+		while (!done())
+			if (opsy::cortex_m::cycle_count() - begin > cycles)
+				return done();
+		return true;
+	}
+
+	/// Waits for the end of the transaction under way, @p bytes long; @c false, the bus failed,
+	/// past limit().
+	static bool transferred(std::size_t bytes)
+	{
+		if (wait([] { return octospi.sr.load().tcf(); }, limit(bytes)))
+			return true;
+		fail(failure::transfer);
+		return false;
+	}
+
+	/// Sleeps until the end of a transfer moved by DMA, @p bytes long; @c false, the bus failed,
+	/// past limit() in whole ticks of the RTOS clock, plus one for the tick under way.
+	static bool moved(std::size_t bytes)
+	{
+		if (done_.try_acquire_for(opsy::duration(limit(bytes) / cycles_per_ms + 2)))
+			return true;
+		fail(failure::dma);
+		return false;
+	}
+
+	/// Polls the command register until the LAN9253 has run the command, compatibility mode;
+	/// @c false, the bus failed.
+	static bool core_command_done()
+	{
+		if (wait([] { return (read(ecat_csr_cmd) & csr_busy) == 0; }, core_command_cycles))
+			return !down();
+		fail(failure::core_command);
+		return false;
+	}
+
+	/// A wait ran out: the transfer is stopped, the board goes to its safe state, the bus stays
+	/// down. The first failure is the one kept.
+	static void fail(failure why)
+	{
+		if (!down())
+			failure_ = why;
+		if (dma().cr.load().en())
+		{
+			dma().cr = dma().cr.load() | gpdma_p::c_c::cr_r::susp_f();
+			(void)wait([] { return dma().sr.load().suspf(); }, cycles_per_us);
+			dma().cr = gpdma_p::c_c::cr_r::reset_f();
+		}
+		octospi.cr = octospi.cr.load() | octospi_p::cr_r::abort_f();
+		Safety::fault();
 	}
 
 	/// Checks the PDI mode after the EEPROM emulation has answered, see expect_pdi_change().
@@ -538,9 +652,11 @@ private:
 	static uint32_t word_read(uint16_t address, uint32_t size)
 	{
 		const uint32_t pad = address & 3u;
-		start(0b01, fast_read_instruction, pad + size, octospi_p::cr_r(0u), static_cast<uint8_t>(size));
+		if (!start(0b01, fast_read_instruction, pad + size, octospi_p::cr_r(0u), static_cast<uint8_t>(size)))
+			return 0;
 		octospi.ar = octospi_p::ar_r(increment | address); // starts the transfer
-		while (!octospi.sr.load().tcf()) {}
+		if (!transferred(pad + size))
+			return 0;
 		const uint32_t value = octospi.dr.load().value();
 		finish();
 		return value >> (8 * pad);
@@ -552,19 +668,21 @@ private:
 	{
 		if (size < 4)
 			settle();
-		start(0b00, write_instruction, size);
+		if (!start(0b00, write_instruction, size))
+			return;
 		octospi.ar = octospi_p::ar_r(dword_buffering | address); // starts, waits for data
 		auto* const fifo = reinterpret_cast<volatile uint8_t*>(&octospi.dr);
 		for (uint32_t i = 0; i < size; ++i)
 			*fifo = static_cast<uint8_t>(value >> (8 * i));
-		while (!octospi.sr.load().tcf()) {}
-		finish();
+		if (transferred(size))
+			finish();
 	}
 
 	/// Sends SETCFG with the dummy bytes of Direct Mapped mode. In quad mode.
 	static void set_configuration()
 	{
-		idle();
+		if (!idle())
+			return;
 		octospi.cr  = octospi_p::cr_r::en_f(); // indirect write
 		octospi.dlr = octospi_p::dlr_r(configuration.size() - 1);
 		octospi.ccr = octospi_p::ccr_r::imode_f(lines_quad) | octospi_p::ccr_r::dmode_f(lines_quad);
@@ -573,11 +691,16 @@ private:
 		auto* const fifo = reinterpret_cast<volatile uint8_t*>(&octospi.dr);
 		for (const uint8_t byte : configuration)
 		{
-			while (!octospi.sr.load().ftf()) {} // the FIFO holds 32 bytes, sent in 0.6 us
+			// The FIFO holds 32 bytes, sent in 0.6 us.
+			if (!wait([] { return octospi.sr.load().ftf(); }, limit(configuration.size())))
+			{
+				fail(failure::transfer);
+				return;
+			}
 			*fifo = byte;
 		}
-		while (!octospi.sr.load().tcf()) {}
-		finish();
+		if (transferred(configuration.size()))
+			finish();
 	}
 
 	/// Sets up the DMA channel to move @p bytes, one byte at a time, between the OCTOSPI and
@@ -622,47 +745,59 @@ private:
 
 	/// Waits until the OCTOSPI is idle: the previous transaction over, SCS# high for CSHT.
 	/// Meanwhile it ignores the writes that set up a command, which would never start.
-	static void idle()
+	/// @c false, the bus failed or fails, when it stays busy past limit().
+	static bool idle()
 	{
-		while (octospi.sr.load().busy()) {}
+		if (down())
+			return false;
+		if (wait([] { return !octospi.sr.load().busy(); }, limit(0)))
+			return true;
+		fail(failure::transfer);
+		return false;
 	}
 
 	/// Waits until the OCTOSPI is idle, then sets how long SCS# stays high after the next
-	/// transaction: a write of the core in Direct Mapped mode needs @c write_guard.
-	static void prepare(bool core_write)
+	/// transaction: a write of the core in Direct Mapped mode needs @c write_guard. @c false,
+	/// the bus failed.
+	static bool prepare(bool core_write)
 	{
-		idle();
+		if (!idle())
+			return false;
 		const uint8_t wanted = !direct_ ? cs_high_compatibility : core_write ? write_guard : cs_high_direct;
 		if (wanted != cs_high_)
 		{
 			octospi.dcr1 = octospi_p::dcr1_r::devsize_f(15) | octospi_p::dcr1_r::csht_f(wanted);
 			cs_high_ = wanted;
 		}
+		return true;
 	}
 
 	/// Sends an instruction alone, on the given lines.
 	static void command(uint8_t lines, uint32_t instruction)
 	{
-		idle();
+		if (!idle())
+			return;
 		octospi.cr  = octospi_p::cr_r::en_f(); // indirect write
 		octospi.ccr = octospi_p::ccr_r::imode_f(lines);
 		octospi.tcr = octospi_p::tcr_r(0u);
 		octospi.ir  = octospi_p::ir_r(instruction); // starts the transfer
 
-		while (!octospi.sr.load().tcf()) {}
-		finish();
+		if (transferred(0))
+			finish();
 	}
 
 	/// Sets up a transfer of @p bytes with a 16-bit address, once the OCTOSPI is idle; the
 	/// caller then gives the address. @p extra adds to the control register (DMA request,
 	/// interrupt). A FASTREAD tells the LAN9253 @p length data bytes (127 at most), @p bytes
 	/// when 0: in Direct Mapped mode the transfer also carries padding and dummy bytes.
-	static void start(uint8_t functional_mode, uint32_t instruction, uint32_t bytes = 4,
+	/// @c false, the bus failed: nothing set up.
+	static bool start(uint8_t functional_mode, uint32_t instruction, uint32_t bytes = 4,
 	                  octospi_p::cr_r extra = octospi_p::cr_r(0u), uint8_t length = 0)
 	{
 		const bool fast_read = instruction == fast_read_instruction;
 		wrote_ = instruction == write_instruction;
-		prepare(wrote_);
+		if (!prepare(wrote_))
+			return false;
 		const uint8_t lines = quad_ ? lines_quad : lines_single;
 		const uint8_t dummy_cycles = direct_ ? 2 * direct_initial : fast_read_dummy_cycles;
 		octospi.cr  = octospi_p::cr_r::en_f() | octospi_p::cr_r::fmode_f(functional_mode) | extra;
@@ -675,6 +810,7 @@ private:
 		                    | octospi_p::ccr_r::dmode_f(lines);
 		octospi.tcr = octospi_p::tcr_r::dcyc_f(fast_read ? dummy_cycles : 0);
 		octospi.ir  = octospi_p::ir_r(instruction);
+		return true;
 	}
 
 	/// Ends a transfer: its last bit is on the bus; SCS# rises after it, see idle().
