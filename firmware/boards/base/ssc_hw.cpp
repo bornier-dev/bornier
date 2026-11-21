@@ -25,6 +25,12 @@ constexpr uint16_t al_event_request = 0x0220;
 constexpr uint16_t al_event_mask    = 0x0204;
 constexpr uint16_t eeprom_control   = 0x0502; ///< Written by the EEPROM emulation to answer a command
 
+// Registers of the LAN9253 itself, outside the EtherCAT core.
+constexpr uint16_t irq_cfg = 0x0054;         ///< IRQ pin; reset: open drain, active low, disabled
+constexpr uint32_t irq_cfg_irq_en = 1u << 8;
+constexpr uint16_t int_en = 0x005C;          ///< Interrupt enable
+constexpr uint32_t int_en_ecat = 1u << 0;    ///< ECAT_INT_EN: the AL event request of the EtherCAT core
+
 opsy::time_point timer_origin = opsy::startup;
 
 /** @brief Size of the next piece of an access at @p address with @p remaining bytes left. */
@@ -92,9 +98,12 @@ UINT8 HW_Init(void)
 	if (esc_bus::read(esc_bus::byte_test) != 0x87654321)
 		return 1;
 
-	// No AL event reaches the IRQ pin until the stack asks for one.
+	// No AL event reaches the IRQ pin until the stack asks for one (AL event mask); then
+	// ESC_IRQ goes low while one is pending (see esc_irq).
 	uint32_t mask = 0;
 	write_core(reinterpret_cast<const uint8_t*>(&mask), al_event_mask, sizeof(mask));
+	esc_bus::write(int_en, int_en_ecat);
+	esc_bus::write(irq_cfg, esc_bus::read(irq_cfg) | irq_cfg_irq_en);
 	return 0;
 }
 
