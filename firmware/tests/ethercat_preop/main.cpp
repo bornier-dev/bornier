@@ -33,6 +33,7 @@
 
 extern "C" {
 #include <applInterface.h>
+#include <ssc_hw.h>
 }
 
 #include <algorithm>
@@ -80,10 +81,12 @@ public:
 			auto next_report = opsy::scheduler::now() + 1s;
 			while (true)
 			{
-				// Asleep until the LAN9253 requests the stack, or the next millisecond.
-				if (esc_irq::wait_until(next_tick))
+				// Asleep until the LAN9253 requests the stack, or the next millisecond. A request that
+				// came while another was being served gives no new edge: the pin is checked too.
+				if (esc_irq::wait_until(next_tick) || esc_irq::pending())
 				{
-					// The request stays pending, ESC_IRQ low, until the stack has served it.
+					// Served again while an asked-for AL event is pending: the AL event request
+					// tells, the pin may take a moment to rise once the stack has cleared it.
 					for (uint32_t pass = 0; pass < max_passes; ++pass)
 					{
 						const uint32_t start = opsy::cortex_m::cycle_count();
@@ -92,7 +95,7 @@ public:
 						pdi_cycles_ = pdi_cycles_ + cycles;
 						pdi_max_ = std::max(pdi_max_, cycles);
 						pdi_calls_ = pdi_calls_ + 1;
-						if (!esc_irq::pending())
+						if (!ssc_hw_event_pending())
 							break;
 					}
 				}

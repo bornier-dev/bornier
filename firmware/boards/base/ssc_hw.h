@@ -18,8 +18,9 @@
  *          from then on, each access of the stack is one SPI transaction, any address and
  *          length, moved by DMA while the calling task sleeps when longer than a word.
  *
- *          First milestone: the stack runs from its main loop only (INIT and PREOP). No ESC
- *          interrupt is used yet, so DISABLE_ESC_INT() and ENABLE_ESC_INT() are empty.
+ *          The stack runs from one task: its main loop, and its interrupt routine PDI_Isr() when
+ *          ESC_IRQ wakes the task (see esc_irq). Both never run at once, so DISABLE_ESC_INT() and
+ *          ENABLE_ESC_INT() are empty.
  *
  *          Timer: one tick per millisecond, from the RTOS clock.
  ******************************************************************************
@@ -35,6 +36,10 @@ extern "C" {
 #endif
 
 #define ECAT_TIMER_INC_P_MS 1 /* timer ticks per millisecond */
+
+/* Whether an AL event the stack asked for (AL event mask) is still pending: the stack's interrupt
+   routine has more to serve. One read of the AL event request. */
+BOOL ssc_hw_event_pending(void);
 
 UINT32 ssc_hw_timer(void);
 void ssc_hw_clear_timer(void);

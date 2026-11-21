@@ -33,6 +33,9 @@ constexpr uint32_t int_en_ecat = 1u << 0;    ///< ECAT_INT_EN: the AL event requ
 
 opsy::time_point timer_origin = opsy::startup;
 
+/// The AL event mask as the stack last wrote it: the events that pull ESC_IRQ low.
+uint16_t event_mask = 0;
+
 /** @brief Size of the next piece of an access at @p address with @p remaining bytes left. */
 uint32_t piece(uint32_t address, uint32_t remaining)
 {
@@ -102,6 +105,7 @@ UINT8 HW_Init(void)
 	// ESC_IRQ goes low while one is pending (see esc_irq).
 	uint32_t mask = 0;
 	write_core(reinterpret_cast<const uint8_t*>(&mask), al_event_mask, sizeof(mask));
+	event_mask = 0;
 	esc_bus::write(int_en, int_en_ecat);
 	esc_bus::write(irq_cfg, esc_bus::read(irq_cfg) | irq_cfg_irq_en);
 	return 0;
@@ -117,6 +121,11 @@ UINT16 HW_GetALEventRegister(void)
 UINT16 HW_GetALEventRegister_Isr(void)
 {
 	return HW_GetALEventRegister();
+}
+
+BOOL ssc_hw_event_pending(void)
+{
+	return (HW_GetALEventRegister() & event_mask) != 0 ? TRUE : FALSE;
 }
 
 // The LAN9253 reads 8 bytes per EEPROM command (0x0502 bit 6): the stack then serves the
@@ -135,9 +144,8 @@ void HW_EscRead(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 		read_core(data, Address, Len);
 }
 
-// The stack calls the Isr variants from PDI_Isr() and Sync0_Isr(). No ESC interrupt is used yet:
-// they run in the stack's task, like the others. Once the ESC interrupt is used, the stack's
-// interrupt work must run in a task woken by it, since a block access sleeps.
+// The stack calls the Isr variants from PDI_Isr() and Sync0_Isr(), which run in the stack's task,
+// woken by ESC_IRQ (see esc_irq): an access may sleep on DMA, so never from an interrupt handler.
 void HW_EscReadIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
 	HW_EscRead(pData, Address, Len);
@@ -153,6 +161,10 @@ void HW_EscWrite(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 
 	if (Address <= eeprom_control && eeprom_control < Address + Len)
 		esc_bus::expect_pdi_change();
+
+	// The stack writes the AL event mask whole (SetALEventMask(), ResetALEventMask()).
+	if (Address == al_event_mask && Len >= 2)
+		event_mask = static_cast<uint16_t>(data[0] | (data[1] << 8));
 }
 
 void HW_EscWriteIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
