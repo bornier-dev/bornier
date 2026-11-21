@@ -9,7 +9,9 @@
 //
 // The stack runs from one task, asleep but on a request of the LAN9253 (ESC_IRQ) or on the next
 // millisecond: on a request, its interrupt routine PDI_Isr() (process data); every millisecond,
-// its timer; each time, its main loop (AL control, mailbox).
+// its timer; each time, its main loop (AL control, mailbox), and the external watchdog is fed.
+// The application of the board runs in the stack (boards/base/ssc_appl.cpp): drive enables and
+// alarms under CiA402, stop chain, probe, supply voltage.
 //
 // Report on SWO, once per second:
 //   al_status  AL status register (0x0130): 1 INIT, 2 PREOP, 4 SAFEOP, 8 OP, bit 4 error
@@ -27,8 +29,12 @@
 #include <scheduler.hpp>
 #include <clock.hpp>
 #include <esc_bus.hpp>
+#include <drive_ports.hpp>
 #include <esc_irq.hpp>
+#include <ext_watchdog.hpp>
 #include <led.hpp>
+#include <stop_probe.hpp>
+#include <supplies.hpp>
 #include <trace.hpp>
 
 extern "C" {
@@ -107,6 +113,7 @@ public:
 					next_tick += 1ms;
 				}
 				MainLoop();
+				ext_watchdog::feed();
 				if (now >= next_report)
 				{
 					const uint32_t al_status = esc_bus::core_read(0x0130, 2);
@@ -140,8 +147,13 @@ using status_led = mcu_led;
 using console    = trace;
 using esc        = esc_bus;
 using esc_events = esc_irq;
+using drives     = drive_ports;
+using machine    = stop_probe;
+using rails      = supplies;
+using watchdog   = ext_watchdog;
 
-using app = bornier::app<board, status_led, console, esc, esc_events, ethercat_preop_test>;
+using app = bornier::app<board, status_led, console, esc, esc_events, drives, machine, rails, watchdog,
+                         ethercat_preop_test>;
 
 void application()
 {
