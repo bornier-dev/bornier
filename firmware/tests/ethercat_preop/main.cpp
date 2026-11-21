@@ -88,9 +88,6 @@ public:
 	static bool start()
 	{
 		const bool started = task_.start([]{
-			// Above the report: its prints on SWO take milliseconds, longer than a cycle. Set
-			// from here: the scheduler runs.
-			task_.priority(opsy::task_priority::high);
 			if (HW_Init() != 0)
 			{
 				trace::write("verdict FAIL hw_init\r\n");
@@ -164,7 +161,11 @@ public:
 				}
 			}
 		});
-		return started && report_task_.start([]{
+		if (!started)
+			return false;
+		// Above the report: its prints on SWO take milliseconds, longer than a cycle.
+		task_.priority(opsy::task_priority::high);
+		return report_task_.start([]{
 			while (true)
 			{
 				report_ready_.acquire();
