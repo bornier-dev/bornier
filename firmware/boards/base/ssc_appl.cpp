@@ -8,25 +8,27 @@
 // carries the license of the stack and stays out of this repository. The build renames, in that
 // file only, the functions defined here (see firmware/CMakeLists.txt): the stack calls these.
 //
-// Object dictionary (from the dictionary file given to the SSC Tool):
+// Object dictionary (from the dictionary file given to the SSC Tool), n the axis, 0 to 3:
 //
-// | Index           | Name                        | Type  | PDO    |
-// |-----------------|-----------------------------|-------|--------|
-// | 0x2000:01       | Emergency stop chain closed | USINT | 0x1A00 |
-// | 0x2000:02       | Probe active                | USINT | 0x1A00 |
-// | 0x2000:03       | Supply voltage (mV)         | UINT  | 0x1A00 |
-// | 0x2000:04       | Outputs enabled             | USINT | 0x1A00 |
-// | 0x2000:05       | Reserved                    | USINT | 0x1A00 |
-// | 0x6040 + 0x800n | Controlword of axis n       | UINT  | 0x1600 |
-// | 0x6041 + 0x800n | Statusword of axis n        | UINT  | 0x1A00 |
+// | Index           | Name                            | Type  | PDO    |
+// |-----------------|---------------------------------|-------|--------|
+// | 0x2000:01       | Emergency stop chain closed     | USINT | 0x1A00 |
+// | 0x2000:02       | Probe active                    | USINT | 0x1A00 |
+// | 0x2000:03       | Supply voltage (mV)             | UINT  | 0x1A00 |
+// | 0x2000:04       | Outputs enabled                 | USINT | 0x1A00 |
+// | 0x2000:05       | Reserved                        | USINT | 0x1A00 |
+// | 0x6040 + 0x800n | Controlword                     | UINT  | 0x1600 |
+// | 0x6041 + 0x800n | Statusword                      | UINT  | 0x1A00 |
+// | 0x6060 + 0x800n | Modes of operation (8: CSP)     | SINT  |        |
+// | 0x6061 + 0x800n | Modes of operation display      | SINT  |        |
+// | 0x6064 + 0x800n | Position actual value (steps)   | DINT  | 0x1A00 |
+// | 0x607A + 0x800n | Target position (steps)         | DINT  | 0x1600 |
 //
-// Each axis runs the CiA402 state machine from its controlword and the alarm of its drive; the
-// drive is enabled only in operation enabled, and only while the outputs are allowed (OP). When
-// they no longer are, every drive is disabled at once and every axis falls back to switch on
-// disabled. All runs in the stack's task.
+// RxPDO 0x1600 (24 bytes): controlword, target position, for each axis in turn.
+// TxPDO 0x1A00 (30 bytes): 0x2000:01 to :05, then statusword, position actual value, for each
+// axis in turn. The axes themselves are in axes.hpp. All runs in the stack's task.
 
-#include <cia402.hpp>
-#include <drive_ports.hpp>
+#include <axes.hpp>
 #include <stop_probe.hpp>
 #include <supplies.hpp>
 
@@ -46,37 +48,36 @@ using namespace STM32H523;
 namespace
 {
 
-constexpr std::size_t axes_count = drive_ports::count;
+constexpr std::size_t axis_output_bytes = 6; ///< Controlword, target position
+constexpr std::size_t board_input_bytes = 6; ///< 0x2000:01 to :05
+constexpr std::size_t axis_input_bytes = 6;  ///< Statusword, position actual value
 
-/// RxPDO 0x1600, master to slave.
-struct outputs
-{
-	uint16_t controlword[axes_count];
-};
-
-/// TxPDO 0x1A00, slave to master.
-struct inputs
-{
-	uint8_t stop_chain_closed;
-	uint8_t probe_active;
-	uint16_t supply_mv;
-	uint8_t outputs_enabled;
-	uint8_t reserved;
-	uint16_t statusword[axes_count];
-};
-
-static_assert(sizeof(outputs) == 8, "RxPDO 0x1600 is 8 bytes");
-static_assert(sizeof(inputs) == 14, "TxPDO 0x1A00 is 14 bytes");
-
-std::array<bornier::cia402::axis, axes_count> axes{};
-outputs received{};
 bool outputs_allowed = false;
 
 // The dictionary objects of each axis, for the SDO accesses.
-const std::array<UINT16*, axes_count> controlword_objects{
+const std::array<UINT16*, axes::count> controlword_objects{
 	&Axis0Controlword0x6040, &Axis1Controlword0x6840, &Axis2Controlword0x7040, &Axis3Controlword0x7840};
-const std::array<UINT16*, axes_count> statusword_objects{
+const std::array<INT32*, axes::count> target_objects{
+	&Axis0TargetPosition0x607A, &Axis1TargetPosition0x687A, &Axis2TargetPosition0x707A, &Axis3TargetPosition0x787A};
+const std::array<UINT16*, axes::count> statusword_objects{
 	&Axis0Statusword0x6041, &Axis1Statusword0x6841, &Axis2Statusword0x7041, &Axis3Statusword0x7841};
+const std::array<INT32*, axes::count> position_objects{
+	&Axis0PositionActualValue0x6064, &Axis1PositionActualValue0x6864,
+	&Axis2PositionActualValue0x7064, &Axis3PositionActualValue0x7864};
+
+template<typename T>
+T get(const uint8_t* bytes)
+{
+	T value;
+	std::memcpy(&value, bytes, sizeof(value));
+	return value;
+}
+
+template<typename T>
+void put(uint8_t* bytes, T value)
+{
+	std::memcpy(bytes, &value, sizeof(value));
+}
 
 } // namespace
 
@@ -84,39 +85,46 @@ extern "C" {
 
 void APPL_OutputMapping(UINT16* pData)
 {
-	std::memcpy(&received, pData, sizeof(received));
-	for (std::size_t n = 0; n < axes_count; ++n)
-		*controlword_objects[n] = received.controlword[n];
+	const auto* bytes = reinterpret_cast<const uint8_t*>(pData);
+	std::array<uint16_t, axes::count> controlwords{};
+	std::array<int32_t, axes::count> targets{};
+	for (std::size_t n = 0; n < axes::count; ++n)
+	{
+		const uint8_t* axis = bytes + n * axis_output_bytes;
+		controlwords[n] = get<uint16_t>(axis);
+		targets[n] = get<int32_t>(axis + 2);
+		*controlword_objects[n] = controlwords[n];
+		*target_objects[n] = targets[n];
+	}
+	axes::outputs(controlwords, targets);
 }
 
 void APPL_InputMapping(UINT16* pData)
 {
-	inputs sent{};
-	sent.stop_chain_closed = stop_probe::chain_closed() ? 1 : 0;
-	sent.probe_active = stop_probe::probe_active() ? 1 : 0;
+	auto* bytes = reinterpret_cast<uint8_t*>(pData);
 	const auto supply = supplies::read();
-	sent.supply_mv = supply ? static_cast<uint16_t>(supply->vin_mv) : 0;
-	sent.outputs_enabled = outputs_allowed ? 1 : 0;
-	for (std::size_t n = 0; n < axes_count; ++n)
+	BoardInputs0x2000.EmergencyStopChainClosed = stop_probe::chain_closed() ? 1 : 0;
+	BoardInputs0x2000.ProbeActive = stop_probe::probe_active() ? 1 : 0;
+	BoardInputs0x2000.SupplyVoltage = supply ? static_cast<uint16_t>(supply->vin_mv) : 0;
+	BoardInputs0x2000.OutputsEnabled = outputs_allowed ? 1 : 0;
+	bytes[0] = BoardInputs0x2000.EmergencyStopChainClosed;
+	bytes[1] = BoardInputs0x2000.ProbeActive;
+	put<uint16_t>(bytes + 2, BoardInputs0x2000.SupplyVoltage);
+	bytes[4] = BoardInputs0x2000.OutputsEnabled;
+	bytes[5] = 0;
+	for (std::size_t n = 0; n < axes::count; ++n)
 	{
-		sent.statusword[n] = axes[n].statusword();
-		*statusword_objects[n] = sent.statusword[n];
+		uint8_t* axis = bytes + board_input_bytes + n * axis_input_bytes;
+		*statusword_objects[n] = axes::statusword(n);
+		*position_objects[n] = axes::position(n);
+		put<uint16_t>(axis, *statusword_objects[n]);
+		put<int32_t>(axis + 2, *position_objects[n]);
 	}
-
-	BoardInputs0x2000.EmergencyStopChainClosed = sent.stop_chain_closed;
-	BoardInputs0x2000.ProbeActive = sent.probe_active;
-	BoardInputs0x2000.SupplyVoltage = sent.supply_mv;
-	BoardInputs0x2000.OutputsEnabled = sent.outputs_enabled;
-	std::memcpy(pData, &sent, sizeof(sent));
 }
 
 void APPL_Application(void)
 {
-	for (std::size_t n = 0; n < axes_count; ++n)
-	{
-		axes[n].update(outputs_allowed ? received.controlword[n] : 0, drive_ports::alarm(n));
-		drive_ports::enable(n, outputs_allowed && axes[n].enabled());
-	}
+	axes::run(outputs_allowed);
 }
 
 UINT16 APPL_StartOutputHandler(void)
@@ -128,11 +136,7 @@ UINT16 APPL_StartOutputHandler(void)
 UINT16 APPL_StopOutputHandler(void)
 {
 	outputs_allowed = false;
-	for (std::size_t n = 0; n < axes_count; ++n)
-	{
-		drive_ports::enable(n, false);
-		axes[n].disable();
-	}
+	axes::disable_all();
 	return ALSTATUSCODE_NOERROR;
 }
 

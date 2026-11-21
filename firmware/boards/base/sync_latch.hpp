@@ -20,7 +20,7 @@
  *          LATCH is pin 26 of the HE10, with a ground on pin 25 and 27.
  *
  *          TIM5 also counts, at the timer clock, the time since the last SYNC0: the step
- *          generator and the probe capture will use it.
+ *          generator uses its compares (step_generator), the probe capture will too.
  *
  *          No HAL. No dynamic allocation.
  ******************************************************************************
@@ -57,10 +57,12 @@ public:
 
 		// TIM5: free-running at the timer clock, reset by each SYNC0 edge (ETRF), its reset
 		// as trigger output (MMS = 000).
+		// ETF = 0011: 8 samples at 250 MHz, a glitch under 32 ns (crosstalk) is not taken for
+		// SYNC0. URS: no update event on the reset, only on overflow.
 		tim5.arr = tim2_p::arr_r(0xFFFF'FFFFu);
 		tim5.smcr = tim2_p::smcr_r::sms_f(slave_reset) | tim2_p::smcr_r::ts_f(trigger_etrf)
-		          | tim2_p::smcr_r::etp_f(sync0_falling);
-		tim5.cr1 = tim2_p::cr1_r::cen_f();
+		          | tim2_p::smcr_r::etf_f(0b0011) | tim2_p::smcr_r::etp_f(sync0_falling);
+		tim5.cr1 = tim2_p::cr1_r::urs_f() | tim2_p::cr1_r::cen_f();
 
 		// TIM15: one pulse on CH1, started by the trigger of TIM5 (ITR4: TS = 0b01000), PWM mode
 		// 2: active from CCR1 to ARR.
