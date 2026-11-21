@@ -36,10 +36,16 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
 
+      # Every image this build makes: the example and the on-target tests. None holds the
+      # EtherCAT stack, which is not in this repository (README, EtherCAT stack).
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.preset }}
           path: |
-            build/${{ matrix.preset }}/firmware/examples/blink/blink.elf
-            build/${{ matrix.preset }}/firmware/examples/blink/blink.bin
-            build/${{ matrix.preset }}/firmware/examples/blink/blink.map
+            build/${{ matrix.preset }}/firmware/examples/*/*.elf
+            build/${{ matrix.preset }}/firmware/examples/*/*.bin
+            build/${{ matrix.preset }}/firmware/examples/*/*.map
+            build/${{ matrix.preset }}/firmware/tests/*/*.elf
+            build/${{ matrix.preset }}/firmware/tests/*/*.bin
+            build/${{ matrix.preset }}/firmware/tests/*/*.map
+          if-no-files-found: error
