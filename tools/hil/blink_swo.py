@@ -83,6 +83,10 @@ def main() -> int:
         return 1
 
     lines = listen(viewer, args.device, args.cpu_hz, args.swo_hz, args.seconds)
+    # The board drops its text until the probe has switched the trace on: the first line may
+    # have lost its beginning.
+    if lines and not LINE.match(lines[0][1]):
+        lines = lines[1:]
     counts = [(when, int(match.group(1))) for when, text in lines if (match := LINE.match(text))]
     foreign = [text for _, text in lines if not LINE.match(text)]
 
