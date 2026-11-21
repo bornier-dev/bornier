@@ -40,6 +40,10 @@
  *            longer than a word are moved by DMA (GPDMA1 channel 7) while the calling task
  *            sleeps.
  *
+ *          A transaction ends as soon as its last bit is on the bus: the next one first waits
+ *          for the OCTOSPI to be idle, SCS# high for long enough, and that time overlaps with
+ *          the software in between.
+ *
  *          Not reentrant: all the calls must come from a single task.
  *
  *          No HAL. No dynamic allocation.
@@ -53,6 +57,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <type_traits>
 
@@ -99,7 +104,8 @@ public:
 	 *
 	 *        The LAN9253 keeps its bus mode and its PDI mode through a reset of the MCU alone:
 	 *        it is sent the command that leaves quad mode, which it ignores when in single mode,
-	 *        and BYTE_TEST tells its PDI mode.
+	 *        and BYTE_TEST tells its PDI mode. A LAN9253 found in Direct Mapped mode may not
+	 *        have its dummy bytes set: reset() it before any access to its core.
 	 *
 	 *        The OCTOSPI is clocked by HCLK, its reset selection. HCLK equals SYSCLK on this
 	 *        board, the condition under which that selection gives correct data.
@@ -131,10 +137,10 @@ public:
 		gpiob.moder <<= gpio_p::moder_r::mode10_f(0b10) || atomic;
 
 		// DEVSIZE 15: 64 KB address space, the 16-bit addresses of the LAN9253.
-		// CSHT 7: SCS# stays high 8 clock cycles between two commands (50 ns needed).
-		// CKMODE 0: clock low while SCS# is high (SPI mode 0).
+		// CKMODE 0: clock low while SCS# is high (SPI mode 0). CSHT: see prepare().
 		octospi.dcr1 = octospi_p::dcr1_r::devsize_f(15)
-		                     | octospi_p::dcr1_r::csht_f(cs_high);
+		                     | octospi_p::dcr1_r::csht_f(cs_high_compatibility);
+		cs_high_ = cs_high_compatibility;
 		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler_single);
 		octospi.cr   = octospi_p::cr_r::en_f();
 
@@ -145,6 +151,7 @@ public:
 		// that address is in the EtherCAT core, and BYTE_TEST answers 0x3000 above.
 		direct_ = read(byte_test) != byte_test_value
 		          && read(byte_test | direct_registers) == byte_test_value;
+		pdi_change_ = false;
 
 		// Transfers of more than a word in Direct Mapped mode: GPDMA1 channel 7.
 		rcc.ahb1enr |= rcc_p::ahb1enr_r::gpdma1en_f() | atomic;
@@ -165,13 +172,14 @@ public:
 		if (quad == quad_)
 			return;
 
-		// The command goes out in the mode the chip is still in; the clock changes while the
-		// OCTOSPI is idle, which command() guarantees on return.
+		// The command goes out in the mode the chip is still in; the clock changes once the
+		// OCTOSPI is idle.
 		if (quad)
 			command(lines_single, enable_quad);
 		else
 			command(lines_quad, reset_quad);
 		quad_ = quad;
+		idle();
 		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler());
 	}
 
@@ -179,9 +187,9 @@ public:
 	 * @brief Resets the LAN9253 (DIGITAL_RST) and waits, asleep, until it answers again.
 	 *
 	 *        The LAN9253 then reloads its configuration from the SII EEPROM, which this board
-	 *        emulates: the PDI it uses afterwards is the one of the SII (see follow_pdi()). It
-	 *        comes back in single mode, in compatibility mode, with the default dummy bytes.
-	 *        For tasks only.
+	 *        emulates: the PDI it uses afterwards is the one of the SII (see
+	 *        expect_pdi_change()). It comes back in single mode, in compatibility mode, with the
+	 *        default dummy bytes. For tasks only.
 	 *
 	 * @return @c false if it does not answer within 10 ms.
 	 */
@@ -191,6 +199,8 @@ public:
 		write(reset_ctl, digital_reset);
 		quad_ = false;
 		direct_ = false;
+		pdi_change_ = false;
+		idle();
 		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler());
 		for (int attempt = 0; attempt < 10; ++attempt)
 		{
@@ -202,33 +212,17 @@ public:
 	}
 
 	/**
-	 * @brief Follows the PDI of the LAN9253 into EtherCAT Direct Mapped mode (PDI 0x82).
+	 * @brief Tells that the EEPROM emulation has answered a command: the LAN9253 may be
+	 *        loading its configuration, and then take the PDI of the SII.
 	 *
-	 *        The LAN9253 takes the PDI of the SII once its configuration is loaded, at least
-	 *        1.5 us after the last write of the EEPROM emulation. Called after each such write:
-	 *        when the LAN9253 has switched, the bus switches too. In quad mode.
-	 *
-	 * @return @c true once in Direct Mapped mode.
+	 *        From then on, each access to the core first checks the PDI mode, until the
+	 *        configuration is loaded in compatibility mode (HW_CFG READY) or the LAN9253 is in
+	 *        EtherCAT Direct Mapped mode (PDI 0x82): the bus then follows. No effect in Direct
+	 *        Mapped mode.
 	 */
-	static bool follow_pdi()
-	{
-		if (direct_)
-			return true;
-		// Three reads span the 1.5 us of the switch.
-		for (int attempt = 0; attempt < 3; ++attempt)
-			if (read(byte_test) != byte_test_value)
-				break;
-			else if (attempt == 2)
-				return false;
-		if (read(byte_test | direct_registers) != byte_test_value)
-			return false;
-		set_configuration();
-		direct_ = true;
-		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler());
-		return true;
-	}
+	static void expect_pdi_change() { pdi_change_ = !direct_; }
 
-	/** @brief Whether the LAN9253 is in EtherCAT Direct Mapped mode, see follow_pdi(). */
+	/** @brief Whether the LAN9253 is in EtherCAT Direct Mapped mode, see expect_pdi_change(). */
 	static bool direct() { return direct_; }
 
 	/**
@@ -275,7 +269,8 @@ public:
 	 *        register map, 0x0000 to 0x0FFF).
 	 *
 	 *        In compatibility mode, through the ECAT_CSR_CMD and ECAT_CSR_DATA registers: the
-	 *        command is written, then polled until the LAN9253 has run it.
+	 *        command is written, then polled until the LAN9253 has run it. In Direct Mapped
+	 *        mode, one transaction.
 	 *
 	 * @param address Address in the EtherCAT core, aligned on @p size.
 	 * @param size    Number of bytes: 1, 2 or 4.
@@ -283,16 +278,14 @@ public:
 	 */
 	static uint32_t core_read(uint16_t address, uint32_t size)
 	{
+		if (pdi_change_)
+			follow_pdi();
+		const uint32_t mask = size == 4 ? ~0u : (1u << (8 * size)) - 1u;
 		if (direct_)
-		{
-			uint32_t value = 0;
-			direct_read(address, std::span(reinterpret_cast<uint8_t*>(&value), size));
-			return value;
-		}
+			return word_read(address, size) & mask;
 		write(ecat_csr_cmd, csr_busy | csr_read | (size << 16) | address);
 		while (read(ecat_csr_cmd) & csr_busy) {}
-		const uint32_t value = read(ecat_csr_data);
-		return size == 4 ? value : value & ((1u << (8 * size)) - 1u);
+		return read(ecat_csr_data) & mask;
 	}
 
 	/**
@@ -304,9 +297,11 @@ public:
 	 */
 	static void core_write(uint16_t address, uint32_t value, uint32_t size)
 	{
+		if (pdi_change_)
+			follow_pdi();
 		if (direct_)
 		{
-			direct_write(address, std::span(reinterpret_cast<const uint8_t*>(&value), size));
+			word_write(address, value, size);
 			return;
 		}
 		write(ecat_csr_data, value);
@@ -330,35 +325,43 @@ public:
 		{
 			const std::size_t pad = address & 3u;
 			const std::size_t length = std::min(data.size(), chunk - pad);
-			const std::size_t words = (pad + length + 3) / 4;
-			const std::size_t stream = pad + length + read_gap * (words - 1);
-
-			// FASTREAD, the address incremented (bits 15:14 = 01), the length, the dummy bytes.
-			const auto request = words > 1 ? octospi_p::cr_r(octospi_p::cr_r::dmaen_f()) : octospi_p::cr_r(0u);
-			start(0b01, fast_read_instruction, static_cast<uint32_t>(stream), request,
-			      static_cast<uint8_t>(length));
-			if (words == 1)
+			if (pad + length <= 4)
 			{
-				octospi.ar = octospi_p::ar_r(increment | address); // starts the transfer
-				while (!octospi.sr.load().tcf()) {}
-				const uint32_t value = octospi.dr.load().value();
-				finish();
-				for (std::size_t i = 0; i < length; ++i)
-					data[i] = static_cast<uint8_t>(value >> (8 * (pad + i)));
+				const uint32_t value = word_read(address, static_cast<uint32_t>(length));
+				std::memcpy(data.data(), &value, length);
 			}
 			else
 			{
-				// The DMA starts once the command is set up: data in the FIFO of the OCTOSPI
-				// makes it busy, and a busy OCTOSPI ignores the writes that set up a command.
+				const std::size_t words = (pad + length + 3) / 4;
+				const std::size_t stream = pad + length + read_gap * (words - 1);
+
+				// FASTREAD, the address incremented (bits 15:14 = 01), the length, the dummy
+				// bytes. The DMA starts once the command is set up: data in the FIFO of the
+				// OCTOSPI makes it busy, and a busy OCTOSPI ignores the writes that set up a
+				// command.
 				dma_bytes(true, stream);
+				start(0b01, fast_read_instruction, static_cast<uint32_t>(stream),
+				      octospi_p::cr_r(octospi_p::cr_r::dmaen_f()), static_cast<uint8_t>(length));
 				octospi.ar = octospi_p::ar_r(increment | address);
 				dma().cr = gpdma_p::c_c::cr_r::en_f() | gpdma_p::c_c::cr_r::tcie_f();
 				done_.acquire();
 				finish();
-				for (std::size_t i = 0; i < length; ++i)
+
+				// Word w of the stream starts at w * (4 + read_gap); the padding comes first.
+				std::size_t done = std::min(4 - pad, length);
+				std::memcpy(data.data(), &stream_[pad], done);
+				for (std::size_t at = 4 + read_gap; done < length; at += 4 + read_gap)
 				{
-					const std::size_t k = pad + i;
-					data[i] = stream_[k + (k / 4) * read_gap];
+					if (length - done >= 4)
+					{
+						std::memcpy(&data[done], &stream_[at], 4);
+						done += 4;
+					}
+					else
+					{
+						std::memcpy(&data[done], &stream_[at], length - done);
+						done = length;
+					}
 				}
 			}
 			address = static_cast<uint16_t>(address + length);
@@ -380,43 +383,48 @@ public:
 	 */
 	static void direct_write(uint16_t address, std::span<const uint8_t> data)
 	{
-		octospi.dcr1 = octospi_p::dcr1_r::devsize_f(15) | octospi_p::dcr1_r::csht_f(write_guard);
 		while (!data.empty())
 		{
 			const std::size_t pad = address & 3u;
 			const std::size_t length = std::min(data.size(), chunk - pad);
-			std::size_t stream = 0;
-			for (std::size_t i = 0; i < length; ++i)
+			if (pad + length <= 4)
 			{
-				stream_[stream++] = data[i];
-				if (((pad + i) & 3u) == 3u && i + 1 < length)
-					for (std::size_t gap = 0; gap < write_gap; ++gap)
-						stream_[stream++] = 0;
-			}
-
-			const bool one_word = pad + length <= 4;
-			const auto request = one_word ? octospi_p::cr_r(0u)
-			                              : octospi_p::cr_r(octospi_p::cr_r::dmaen_f() | octospi_p::cr_r::tcie_f());
-			start(0b00, write_instruction, static_cast<uint32_t>(stream), request);
-			octospi.ar = octospi_p::ar_r(dword_buffering | address); // starts, waits for data
-			if (one_word)
-			{
-				auto* const fifo = reinterpret_cast<volatile uint8_t*>(&octospi.dr);
-				for (std::size_t i = 0; i < stream; ++i)
-					*fifo = stream_[i];
-				while (!octospi.sr.load().tcf()) {}
+				uint32_t value = 0;
+				std::memcpy(&value, data.data(), length);
+				word_write(address, value, static_cast<uint32_t>(length));
 			}
 			else
 			{
+				// The words, each after the dummy bytes that follow the one before; what the
+				// dummy bytes hold does not matter.
+				std::size_t done = std::min(4 - pad, length);
+				std::memcpy(stream_.data(), data.data(), done);
+				std::size_t stream = done;
+				while (done < length)
+				{
+					stream += write_gap;
+					const std::size_t bytes = std::min<std::size_t>(4, length - done);
+					if (bytes == 4)
+						std::memcpy(&stream_[stream], &data[done], 4);
+					else
+						std::memcpy(&stream_[stream], &data[done], bytes);
+					stream += bytes;
+					done += bytes;
+				}
+
+				if (pad != 0 || (pad + length) % 4 != 0)
+					settle();
 				dma_bytes(false, stream);
+				start(0b00, write_instruction, static_cast<uint32_t>(stream),
+				      octospi_p::cr_r(octospi_p::cr_r::dmaen_f() | octospi_p::cr_r::tcie_f()));
+				octospi.ar = octospi_p::ar_r(dword_buffering | address); // starts, waits for data
 				dma().cr = gpdma_p::c_c::cr_r::en_f();
 				done_.acquire();
+				finish();
 			}
-			finish(); // SCS# high for write_guard: the last word is written meanwhile
 			address = static_cast<uint16_t>(address + length);
 			data = data.subspan(length);
 		}
-		octospi.dcr1 = octospi_p::dcr1_r::devsize_f(15) | octospi_p::dcr1_r::csht_f(cs_high);
 	}
 
 private:
@@ -447,8 +455,11 @@ private:
 	static constexpr uint8_t prescaler_quad   = 3;  ///< 250 MHz / 4 = 62.5 MHz (80 MHz at most)
 	static constexpr uint8_t prescaler_direct = 5;  ///< 250 MHz / 6 = 41.7 MHz, 24 ns a cycle
 
-	static constexpr uint8_t cs_high     = 7;  ///< SCS# high 8 cycles between commands
-	static constexpr uint8_t write_guard = 20; ///< 21 cycles, 504 ns, after a write of the core
+	// SCS# high between two commands, CSHT + 1 cycles: 50 ns at least, and after a write of
+	// the core in Direct Mapped mode, until the LAN9253 has written it (490 ns at most).
+	static constexpr uint8_t cs_high_compatibility = 7; ///< 8 cycles, 128 ns at 62.5 MHz
+	static constexpr uint8_t cs_high_direct = 2;        ///< 3 cycles, 72 ns at 41.7 MHz
+	static constexpr uint8_t write_guard = 20;          ///< 21 cycles, 504 ns at 41.7 MHz
 
 	/// A FASTREAD in quad mode sends, after the address, the length of the transfer in one byte
 	/// (up to 127), then dummy bytes. The length tells the LAN9253 where to stop: it never
@@ -478,8 +489,11 @@ private:
 	static constexpr uint8_t lines_single = 1;
 	static constexpr uint8_t lines_quad   = 3;
 
-	static inline bool quad_ = false;   ///< Bus mode the LAN9253 is in
-	static inline bool direct_ = false; ///< PDI mode the LAN9253 is in, see follow_pdi()
+	static inline bool quad_ = false;       ///< Bus mode the LAN9253 is in
+	static inline bool direct_ = false;     ///< PDI mode the LAN9253 is in
+	static inline bool pdi_change_ = false; ///< The PDI may change, see expect_pdi_change()
+	static inline uint8_t cs_high_ = cs_high_compatibility; ///< CSHT field now in DCR1
+	static inline bool wrote_ = false;      ///< The last transaction was a write
 
 	/// A transaction of direct_read() or direct_write(): data, padding and dummy bytes.
 	static inline std::array<uint8_t, chunk + read_gap * (chunk / 4)> stream_{};
@@ -493,9 +507,64 @@ private:
 		return !quad_ ? prescaler_single : direct_ ? prescaler_direct : prescaler_quad;
 	}
 
+	/// Checks the PDI mode after the EEPROM emulation has answered, see expect_pdi_change().
+	static void follow_pdi()
+	{
+		if (read(byte_test) == byte_test_value)
+		{
+			if ((read(hw_cfg) & hw_cfg_ready) != 0)
+				pdi_change_ = false; // loaded: the PDI of the SII is the compatibility mode
+			return;
+		}
+		if (read(byte_test | direct_registers) != byte_test_value)
+			return; // switching: the next access checks again
+		set_configuration();
+		direct_ = true;
+		pdi_change_ = false;
+		idle();
+		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler());
+	}
+
+	/// Before a write that does not cover whole words only, in Direct Mapped mode. Measured on
+	/// the board, and not in the datasheet: when the transaction before was a write, the
+	/// LAN9253 drops such a write, whatever the time in between; a read in between clears it.
+	static void settle()
+	{
+		if (wrote_)
+			(void)read(byte_test);
+	}
+
+	/// Reads @p size bytes at @p address within one word, Direct Mapped mode.
+	static uint32_t word_read(uint16_t address, uint32_t size)
+	{
+		const uint32_t pad = address & 3u;
+		start(0b01, fast_read_instruction, pad + size, octospi_p::cr_r(0u), static_cast<uint8_t>(size));
+		octospi.ar = octospi_p::ar_r(increment | address); // starts the transfer
+		while (!octospi.sr.load().tcf()) {}
+		const uint32_t value = octospi.dr.load().value();
+		finish();
+		return value >> (8 * pad);
+	}
+
+	/// Writes the low @p size bytes of @p value at @p address within one word, Direct Mapped
+	/// mode, DWORD buffered: the LAN9253 writes them when SCS# rises.
+	static void word_write(uint16_t address, uint32_t value, uint32_t size)
+	{
+		if (size < 4)
+			settle();
+		start(0b00, write_instruction, size);
+		octospi.ar = octospi_p::ar_r(dword_buffering | address); // starts, waits for data
+		auto* const fifo = reinterpret_cast<volatile uint8_t*>(&octospi.dr);
+		for (uint32_t i = 0; i < size; ++i)
+			*fifo = static_cast<uint8_t>(value >> (8 * i));
+		while (!octospi.sr.load().tcf()) {}
+		finish();
+	}
+
 	/// Sends SETCFG with the dummy bytes of Direct Mapped mode. In quad mode.
 	static void set_configuration()
 	{
+		idle();
 		octospi.cr  = octospi_p::cr_r::en_f(); // indirect write
 		octospi.dlr = octospi_p::dlr_r(configuration.size() - 1);
 		octospi.ccr = octospi_p::ccr_r::imode_f(lines_quad) | octospi_p::ccr_r::dmode_f(lines_quad);
@@ -551,9 +620,30 @@ private:
 		done_.release();
 	}
 
-	/// Sends an instruction alone, on the given lines, and returns once the OCTOSPI is idle.
+	/// Waits until the OCTOSPI is idle: the previous transaction over, SCS# high for CSHT.
+	/// Meanwhile it ignores the writes that set up a command, which would never start.
+	static void idle()
+	{
+		while (octospi.sr.load().busy()) {}
+	}
+
+	/// Waits until the OCTOSPI is idle, then sets how long SCS# stays high after the next
+	/// transaction: a write of the core in Direct Mapped mode needs @c write_guard.
+	static void prepare(bool core_write)
+	{
+		idle();
+		const uint8_t wanted = !direct_ ? cs_high_compatibility : core_write ? write_guard : cs_high_direct;
+		if (wanted != cs_high_)
+		{
+			octospi.dcr1 = octospi_p::dcr1_r::devsize_f(15) | octospi_p::dcr1_r::csht_f(wanted);
+			cs_high_ = wanted;
+		}
+	}
+
+	/// Sends an instruction alone, on the given lines.
 	static void command(uint8_t lines, uint32_t instruction)
 	{
+		idle();
 		octospi.cr  = octospi_p::cr_r::en_f(); // indirect write
 		octospi.ccr = octospi_p::ccr_r::imode_f(lines);
 		octospi.tcr = octospi_p::tcr_r(0u);
@@ -563,15 +653,17 @@ private:
 		finish();
 	}
 
-	/// Sets up a transfer of @p bytes with a 16-bit address; the caller then gives the address.
-	/// @p extra adds to the control register (DMA request, interrupt). A FASTREAD tells the
-	/// LAN9253 @p length data bytes (127 at most), @p bytes when 0: in Direct Mapped mode the
-	/// transfer also carries padding and dummy bytes.
+	/// Sets up a transfer of @p bytes with a 16-bit address, once the OCTOSPI is idle; the
+	/// caller then gives the address. @p extra adds to the control register (DMA request,
+	/// interrupt). A FASTREAD tells the LAN9253 @p length data bytes (127 at most), @p bytes
+	/// when 0: in Direct Mapped mode the transfer also carries padding and dummy bytes.
 	static void start(uint8_t functional_mode, uint32_t instruction, uint32_t bytes = 4,
 	                  octospi_p::cr_r extra = octospi_p::cr_r(0u), uint8_t length = 0)
 	{
-		const uint8_t lines = quad_ ? lines_quad : lines_single;
 		const bool fast_read = instruction == fast_read_instruction;
+		wrote_ = instruction == write_instruction;
+		prepare(wrote_);
+		const uint8_t lines = quad_ ? lines_quad : lines_single;
 		const uint8_t dummy_cycles = direct_ ? 2 * direct_initial : fast_read_dummy_cycles;
 		octospi.cr  = octospi_p::cr_r::en_f() | octospi_p::cr_r::fmode_f(functional_mode) | extra;
 		octospi.dlr = octospi_p::dlr_r(bytes - 1);
@@ -585,14 +677,10 @@ private:
 		octospi.ir  = octospi_p::ir_r(instruction);
 	}
 
-	/// Ends a transfer and leaves the OCTOSPI ready for the next one.
+	/// Ends a transfer: its last bit is on the bus; SCS# rises after it, see idle().
 	static void finish()
 	{
 		octospi.fcr = octospi_p::fcr_r::ctcf_f();
-
-		// The OCTOSPI stays busy after the last data bit, until SCS# has been high long enough.
-		// Meanwhile it ignores the writes that set up the next command, which would never start.
-		while (octospi.sr.load().busy()) {}
 	}
 
 public:

@@ -85,7 +85,7 @@ void ssc_hw_clear_timer(void)
 UINT8 HW_Init(void)
 {
 	// The LAN9253 reloads its configuration from the SII the stack emulates: its PDI is then
-	// the one of the SII (see esc_bus::follow_pdi()).
+	// the one of the SII (see esc_bus::expect_pdi_change()).
 	if (!esc_bus::reset())
 		return 1;
 	esc_bus::set_mode(esc_bus::mode::quad);
@@ -143,7 +143,7 @@ void HW_EscWrite(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 		write_core(data, Address, Len);
 
 	if (Address <= eeprom_control && eeprom_control < Address + Len)
-		(void)esc_bus::follow_pdi();
+		esc_bus::expect_pdi_change();
 }
 
 void HW_EscWriteIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
