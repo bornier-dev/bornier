@@ -11,20 +11,26 @@ jobs:
   firmware:
     name: Firmware (${{ matrix.preset }})
     runs-on: ubuntu-latest
-    # Same toolchain as the LinuxCNC PC: Debian packages only.
+    # Same platform as the LinuxCNC PC; the compiler is the pinned GCC 16 release (CONTRIBUTING.md).
     container: debian:trixie
     strategy:
       fail-fast: false
       matrix:
         # Both builds, always: a bug that only shows up when optimised is undefined behaviour.
         preset: [debug, release]
+    env:
+      TOOLCHAIN: arm-none-eabi-toolchain-16.2.0-1
+      TOOLCHAIN_SHA256: a4fb8cc55be7e3a641ffd7cd8e396762b1ee77a7ff19411884eed0a44585b2b0
     steps:
       - name: Install toolchain
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            git ca-certificates cmake ninja-build \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+            git ca-certificates cmake ninja-build curl xz-utils
+          curl -fsSLO "https://github.com/Otatiaro/arm-none-eabi-toolchain/releases/download/v16.2.0-1/$TOOLCHAIN-linux-x86_64.tar.xz"
+          echo "$TOOLCHAIN_SHA256  $TOOLCHAIN-linux-x86_64.tar.xz" | sha256sum -c
+          tar -xf "$TOOLCHAIN-linux-x86_64.tar.xz" -C /opt
+          echo "/opt/$TOOLCHAIN/bin" >> "$GITHUB_PATH"
 
       - uses: actions/checkout@v7
         with:

@@ -13,18 +13,25 @@
 
 ## Building the firmware
 
-On Debian 13 (the reference platform, also used by CI):
+The firmware is C++26 and needs GCC 16. The reference toolchain is
+[arm-none-eabi-toolchain 16.2.0-1](https://github.com/Otatiaro/arm-none-eabi-toolchain/releases/tag/v16.2.0-1)
+(GCC 16.2.0, binutils 2.47, newlib 4.6), built for Linux and Windows x86_64 and used by CI. On
+Debian 13 (the reference platform, also used by CI):
 
 ```sh
-sudo apt install cmake ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+sudo apt install cmake ninja-build curl xz-utils
+curl -fsSLO https://github.com/Otatiaro/arm-none-eabi-toolchain/releases/download/v16.2.0-1/arm-none-eabi-toolchain-16.2.0-1-linux-x86_64.tar.xz
+echo "a4fb8cc55be7e3a641ffd7cd8e396762b1ee77a7ff19411884eed0a44585b2b0  arm-none-eabi-toolchain-16.2.0-1-linux-x86_64.tar.xz" | sha256sum -c
+tar -xf arm-none-eabi-toolchain-16.2.0-1-linux-x86_64.tar.xz -C ~/.local
+export PATH=~/.local/arm-none-eabi-toolchain-16.2.0-1/bin:$PATH
 git clone --recurse-submodules https://github.com/bornier-dev/bornier.git
 cd bornier
 cmake --preset debug   && cmake --build --preset debug
 cmake --preset release && cmake --build --preset release
 ```
 
-On other systems, install CMake, Ninja and the Arm GNU Toolchain 14.2 (the version Debian 13
-ships), with `arm-none-eabi-gcc` on the `PATH`.
+On other systems, install CMake, Ninja and that toolchain (or another GCC 16 for arm-none-eabi),
+with `arm-none-eabi-gcc` on the `PATH`.
 
 Images land in `build/<preset>/firmware/...` as `.elf`, `.bin` and `.map`.
 

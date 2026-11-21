@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
 #
 # CMake toolchain file for the GNU Arm Embedded toolchain (arm-none-eabi).
-# The toolchain is resolved from PATH (Debian: gcc-arm-none-eabi, or the Arm GNU Toolchain release).
+# The toolchain is resolved from PATH (GCC 16, see CONTRIBUTING.md).
 
 set(CMAKE_SYSTEM_NAME      Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)
