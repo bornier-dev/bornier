@@ -85,7 +85,10 @@ public:
 		if (step_generator::derive(settings, d) != step_generator::error::none)
 			return false;
 		max_steps_ = d.max_steps;
-		step_generator::start(settings, opsy::scheduler::os_callable_priority);
+		// Level 0, above OpSy (design note, interrupt priorities): the fill never calls OpSy, and
+		// must not wait behind its kernel or its critical sections, or the slots it writes would
+		// be played before they are.
+		step_generator::start(settings, opsy::cortex_m::highest_priority);
 		return true;
 	}
 

@@ -20,6 +20,9 @@
 //   eeprom     EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
 //   pdi_calls  calls to PDI_Isr() since start, on requests of the LAN9253
 //   sync0_idle level of ESC_SYNC0 (PA4) when sampled, mostly its idle level
+//   gen_*      step generator: cycles filled, fills without SYNC0, phase resyncs, DMA errors,
+//              longest fill (CPU cycles), latest end of fill (TIM5 ticks after SYNC0), and for
+//              axis 0 the steps scheduled, the cycles that deferred steps and the reversals
 //
 // For a logic analyser on the HE10 of the local bus: pin 26, LATCH, a 10 us pulse on each SYNC0
 // (sync_latch); pin 1, CS0, low while the task serves the LAN9253; ground on pin 25.
@@ -131,6 +134,16 @@ public:
 					print_hex("eeprom", esc_bus::core_read(0x0502, 2));
 					print_hex("pdi_calls", pdi_calls_);
 					print_hex("sync0_idle", gpioa.idr.load().id4() ? 1u : 0u);
+					const auto& g = step_generator::statistics();
+					print_hex("gen_cycles", g.cycles);
+					print_hex("gen_unsynced", g.unsynced);
+					print_hex("gen_resyncs", g.resyncs);
+					print_hex("gen_dma_errors", g.dma_errors);
+					print_hex("gen_fill_max", g.fill_cycles_max);
+					print_hex("gen_fill_end", g.fill_end_max);
+					print_hex("gen_pulses0", g.axes[0].pulses);
+					print_hex("gen_deferred0", g.axes[0].deferred);
+					print_hex("gen_reversals0", g.axes[0].reversals);
 					print_hex("pdi_mean", pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_));
 					print_hex("pdi_max", pdi_max_);
 					if ((al_status & 0x0F) >= 2)
