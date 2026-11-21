@@ -2,9 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Thomas Legrand
 //
 // Hardware access layer of the EtherCAT Slave Stack Code on the Bornier base board, see
-// ssc_hw.h. Accesses go through esc_bus in quad mode: registers and short accesses through the
-// CSR command register, in aligned pieces of 1, 2 or 4 bytes; blocks of the process RAM (mailbox,
-// process data) through the FIFOs of the LAN9253, by DMA.
+// ssc_hw.h. Accesses go through esc_bus in quad mode. In EtherCAT Direct Mapped mode, the one the
+// SII sets, each access is one transaction, any address and length. Before, while the LAN9253 is
+// in compatibility mode to load its configuration, through its CSR command register, in aligned
+// pieces of 1, 2 or 4 bytes.
 
 #include <ssc_hw.h>
 
@@ -22,16 +23,9 @@ namespace
 
 constexpr uint16_t al_event_request = 0x0220;
 constexpr uint16_t al_event_mask    = 0x0204;
-
-constexpr uint16_t process_ram = 0x1000;
+constexpr uint16_t eeprom_control   = 0x0502; ///< Written by the EEPROM emulation to answer a command
 
 opsy::time_point timer_origin = opsy::startup;
-
-/// A block of the process RAM, longer than one CSR access: it goes through the FIFOs.
-bool is_block(uint16_t address, uint16_t length)
-{
-	return address >= process_ram && length > 4;
-}
 
 /** @brief Size of the next piece of an access at @p address with @p remaining bytes left. */
 uint32_t piece(uint32_t address, uint32_t remaining)
@@ -90,6 +84,10 @@ void ssc_hw_clear_timer(void)
 
 UINT8 HW_Init(void)
 {
+	// The LAN9253 reloads its configuration from the SII the stack emulates: its PDI is then
+	// the one of the SII (see esc_bus::follow_pdi()).
+	if (!esc_bus::reset())
+		return 1;
 	esc_bus::set_mode(esc_bus::mode::quad);
 	if (esc_bus::read(esc_bus::byte_test) != 0x87654321)
 		return 1;
@@ -122,8 +120,8 @@ UINT16 HW_EepromReload(void)
 void HW_EscRead(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
 	auto* const data = reinterpret_cast<uint8_t*>(pData);
-	if (is_block(Address, Len))
-		esc_bus::ram_read(Address, std::span(data, Len));
+	if (esc_bus::direct())
+		esc_bus::direct_read(Address, std::span(data, Len));
 	else
 		read_core(data, Address, Len);
 }
@@ -139,10 +137,13 @@ void HW_EscReadIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 void HW_EscWrite(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
 	const auto* const data = reinterpret_cast<const uint8_t*>(pData);
-	if (is_block(Address, Len))
-		esc_bus::ram_write(Address, std::span(data, Len));
+	if (esc_bus::direct())
+		esc_bus::direct_write(Address, std::span(data, Len));
 	else
 		write_core(data, Address, Len);
+
+	if (Address <= eeprom_control && eeprom_control < Address + Len)
+		(void)esc_bus::follow_pdi();
 }
 
 void HW_EscWriteIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)

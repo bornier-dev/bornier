@@ -12,10 +12,11 @@
  *          with the SSC Tool, and the build points at it (BORNIER_SSC_DIR). The stack includes
  *          this header through its HW_ACCESS_FILE setting, so it is plain C.
  *
- *          The LAN9253 is driven in SPI indirect mode (PDI 0x80) by esc_bus: registers and
- *          short accesses go through its CSR command register, 1, 2 or 4 aligned bytes at a
- *          time; blocks of the process RAM (more than 4 bytes from 0x1000: mailbox, process
- *          data) go through its FIFOs, by DMA, while the calling task sleeps.
+ *          The LAN9253 is driven by esc_bus. HW_Init() resets it: it starts in compatibility
+ *          mode (PDI 0x80, its straps), where the stack serves the EEPROM emulation through its
+ *          CSR command register, then takes the PDI of the SII, EtherCAT Direct Mapped (0x82):
+ *          from then on, each access of the stack is one SPI transaction, any address and
+ *          length, moved by DMA while the calling task sleeps when longer than a word.
  *
  *          First milestone: the stack runs from its main loop only (INIT and PREOP). No ESC
  *          interrupt is used yet, so DISABLE_ESC_INT() and ENABLE_ESC_INT() are empty.
