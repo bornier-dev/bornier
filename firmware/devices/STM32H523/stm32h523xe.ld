@@ -20,6 +20,7 @@ PHDRS
     text PT_LOAD FLAGS(5);
     data PT_LOAD FLAGS(6);
     bss  PT_LOAD FLAGS(6);
+    noinit PT_LOAD FLAGS(6);
 }
 
 STACK_SIZE = DEFINED(STACK_SIZE) ? STACK_SIZE : 0x400;
@@ -101,7 +102,16 @@ SECTIONS
         _ebss = .;
     } > RAM :bss
 
-    ASSERT(_ebss <= _sstack, "RAM overflow: .data + .bss collide with the main stack")
+    /* Neither copied nor cleared by the startup: kept through a reset (fault record). */
+    .noinit (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.noinit .noinit.*)
+        . = ALIGN(4);
+        _enoinit = .;
+    } > RAM AT > RAM :noinit
+
+    ASSERT(_enoinit <= _sstack, "RAM overflow: .data + .bss + .noinit collide with the main stack")
 
     .ARM.attributes 0 : { *(.ARM.attributes) }
 }

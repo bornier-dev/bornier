@@ -21,9 +21,13 @@
 #include <cstdint>
 #include <new>
 
+#include <algorithm>
+
 #include <cortex_m.hpp>
 #include <application.hpp>
 #include <board.hpp>
+#include <ext_watchdog.hpp>
+#include <fault_log.hpp>
 
 
 // ── Linker symbols (defined in stm32h523xe.ld) ───────────────────────
@@ -46,17 +50,79 @@ extern void (*__init_array_end[])();
 void* _sbrk(std::ptrdiff_t);
 } // extern "C"
 
+// ── Fatal faults ──────────────────────────────────────────────────────────────
+[[gnu::noinit]] bornier::fault_log bornier::last_fault;
+
+namespace
+{
+
+/// An assertion that failed, until the trap it ends in reaches on_fault().
+const char* assert_file = nullptr;
+uint32_t assert_line = 0;
+
+/**
+ * @brief The end of every fatal fault (fault_log.hpp): safe outputs, record, reset.
+ *
+ *        Interrupts are masked first: nothing else runs. The outputs go safe before anything
+ *        is written, then the record; then the MCU resets, or, when a debugger asked for it
+ *        (fault_log::hold), stays here feeding the external watchdog.
+ */
+[[noreturn]] void fatal(bornier::fault_log::cause what, uint32_t detail, const char* file,
+                        const opsy::fault_status* status, const opsy::exception_frame* frame,
+                        uint32_t exc_return)
+{
+    asm volatile("cpsid i" ::: "memory");
+    STM32H523::board::safe_outputs();
+
+    auto& log = bornier::last_fault;
+    log.key = bornier::fault_log::record_key;
+    ++log.faults;
+    log.start_of_fault = log.starts;
+    log.what = what;
+    log.detail = detail;
+    log.file = file;
+    log.cfsr = status != nullptr ? status->cfsr : 0;
+    log.hfsr = status != nullptr ? status->hfsr : 0;
+    log.mmfar = status != nullptr ? status->mmfar : 0;
+    log.bfar = status != nullptr ? status->bfar : 0;
+    log.frame = frame != nullptr ? *frame : opsy::exception_frame{};
+    log.exc_return = exc_return;
+    log.stack.fill(0);
+    if (frame != nullptr)
+    {
+        // The words above the frame, within the RAM.
+        const auto* const from = reinterpret_cast<const uint32_t*>(frame + 1);
+        const auto words = std::min<std::size_t>(log.stack.size(),
+                                                 static_cast<std::size_t>(&_estack - from));
+        std::copy_n(from, words, log.stack.begin());
+    }
+    asm volatile("dsb" ::: "memory");
+
+    if (log.hold == bornier::fault_log::hold_key)
+        while (true)
+            STM32H523::ext_watchdog::feed();
+    opsy::cortex_m::reset();
+}
+
+} // namespace
+
+void STM32H523::on_fault(const opsy::fault_status& status, opsy::exception_frame& frame, uint32_t exc_return)
+{
+    if (assert_file != nullptr)
+        fatal(bornier::fault_log::cause::assertion, assert_line, assert_file, &status, &frame, exc_return);
+    fatal(bornier::fault_log::cause::fault, 0, nullptr, &status, &frame, exc_return);
+}
+
 // ── Default_Handler ───────────────────────────────────────────────────────────
 /**
- * @brief Catches any unhandled exception or unexpected interrupt.
- *
- *        Triggers a breakpoint so a connected debugger halts immediately.
- *        The infinite loop prevents spurious execution if no debugger is attached.
+ * @brief Catches any interrupt nobody handles: a fatal fault, recorded with its exception
+ *        number (fault_log.hpp). Straight to fatal(), with no trap: an NMI cannot escalate.
  */
 extern "C" [[noreturn]] void Default_Handler()
 {
-    asm volatile("bkpt 0");
-    while (true) {}
+    uint32_t ipsr;
+    asm volatile("mrs %0, ipsr" : "=r"(ipsr));
+    fatal(bornier::fault_log::cause::interrupt, ipsr & 0x1FFu, nullptr, nullptr, nullptr, 0);
 }
 
 // ── Reset_Handler ─────────────────────────────────────────────────────────────
@@ -91,6 +157,7 @@ extern "C" [[noreturn]] void Reset_Handler()
     for (auto init = __init_array_start; init != __init_array_end; ++init)
         (*init)();
 
+    bornier::last_fault.count_start();
     application();
 }
 
@@ -124,19 +191,16 @@ void  operator delete[](void*, std::size_t) noexcept {}
  *        @c _vfprintf_r, @c __sfvwrite_r, ...) — about 20 KB of flash for a
  *        message that is never read on a target without stdout.
  *
- *        At the breakpoint, the four arguments are still live in registers
- *        thanks to the @c "r" constraints, so the debugger can inspect:
- *        - r0 / @p file — source file path
- *        - r1 / @p line — line number
- *        - r2 / @p func — enclosing function signature
- *        - r3 / @p expr — failed expression text
- *        @c LR points at the call site, recoverable via a backtrace.
+ *        A fatal fault: the file and line are kept for the record (fault_log.hpp), then
+ *        a trap takes it to on_fault() with the frame of this call, so the record holds
+ *        the call site too.
  */
 extern "C" [[noreturn]] void __assert_func(const char* file, int line,
-                                           const char* func, const char* expr)
+                                           const char*, const char*)
 {
-    asm volatile("bkpt 0" :: "r"(file), "r"(line), "r"(func), "r"(expr));
-    while (true) {}
+    assert_line = static_cast<uint32_t>(line);
+    assert_file = file != nullptr ? file : "?";
+    __builtin_trap();
 }
 
 // ── Syscall stubs ─────────────────────────────────────────────────────────────

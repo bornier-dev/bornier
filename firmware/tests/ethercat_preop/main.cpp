@@ -33,6 +33,9 @@
 //   pdi_max    longest call, in CPU cycles
 //   bus_failure 0 while the bus to the LAN9253 works, else the wait that ran out (esc_bus::failure):
 //              the axes are then stopped for good
+//   starts     starts of the MCU since power-up; faults, the fatal faults among them; fault_*, the
+//              last one (fault_log.hpp): the start it ended, its cause, pc, lr, CFSR, HFSR and
+//              detail (line of an assertion, exception number of an unexpected interrupt)
 
 #include <application.hpp>
 #include <app.hpp>
@@ -47,6 +50,7 @@
 #include <drive_ports.hpp>
 #include <esc_irq.hpp>
 #include <ext_watchdog.hpp>
+#include <fault_log.hpp>
 #include <led.hpp>
 #include <stop_probe.hpp>
 #include <supplies.hpp>
@@ -191,6 +195,19 @@ public:
 				print_hex("pdi_mean", r.pdi_mean);
 				print_hex("pdi_max", r.pdi_max);
 				print_hex("bus_failure", r.bus_failure);
+				const auto& f = bornier::last_fault;
+				print_hex("starts", f.starts);
+				print_hex("faults", f.faults);
+				if (f.faults != 0)
+				{
+					print_hex("fault_start", f.start_of_fault);
+					print_hex("fault_cause", static_cast<uint32_t>(f.what));
+					print_hex("fault_pc", f.frame.pc);
+					print_hex("fault_lr", f.frame.lr);
+					print_hex("fault_cfsr", f.cfsr);
+					print_hex("fault_hfsr", f.hfsr);
+					print_hex("fault_detail", f.detail);
+				}
 			}
 		});
 	}
