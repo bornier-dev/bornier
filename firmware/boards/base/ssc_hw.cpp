@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Thomas Legrand
 //
 // Hardware access layer of the EtherCAT Slave Stack Code on the Bornier base board, see
-// ssc_hw.h. Every access to the EtherCAT core goes through esc_bus in quad mode, split into
-// aligned pieces of 1, 2 or 4 bytes, the sizes its CSR command register takes.
+// ssc_hw.h. Accesses go through esc_bus in quad mode: registers and short accesses through the
+// CSR command register, in aligned pieces of 1, 2 or 4 bytes; blocks of the process RAM (mailbox,
+// process data) through the FIFOs of the LAN9253, by DMA.
 
 #include <ssc_hw.h>
 
@@ -12,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 using namespace STM32H523;
 
@@ -21,7 +23,15 @@ namespace
 constexpr uint16_t al_event_request = 0x0220;
 constexpr uint16_t al_event_mask    = 0x0204;
 
+constexpr uint16_t process_ram = 0x1000;
+
 opsy::time_point timer_origin = opsy::startup;
+
+/// A block of the process RAM, longer than one CSR access: it goes through the FIFOs.
+bool is_block(uint16_t address, uint16_t length)
+{
+	return address >= process_ram && length > 4;
+}
 
 /** @brief Size of the next piece of an access at @p address with @p remaining bytes left. */
 uint32_t piece(uint32_t address, uint32_t remaining)
@@ -80,7 +90,6 @@ void ssc_hw_clear_timer(void)
 
 UINT8 HW_Init(void)
 {
-	esc_bus::init();
 	esc_bus::set_mode(esc_bus::mode::quad);
 	if (esc_bus::read(esc_bus::byte_test) != 0x87654321)
 		return 1;
@@ -112,22 +121,33 @@ UINT16 HW_EepromReload(void)
 
 void HW_EscRead(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
-	read_core(reinterpret_cast<uint8_t*>(pData), Address, Len);
+	auto* const data = reinterpret_cast<uint8_t*>(pData);
+	if (is_block(Address, Len))
+		esc_bus::ram_read(Address, std::span(data, Len));
+	else
+		read_core(data, Address, Len);
 }
 
+// The stack calls the Isr variants from PDI_Isr() and Sync0_Isr(). No ESC interrupt is used yet:
+// they run in the stack's task, like the others. Once the ESC interrupt is used, the stack's
+// interrupt work must run in a task woken by it, since a block access sleeps.
 void HW_EscReadIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
-	read_core(reinterpret_cast<uint8_t*>(pData), Address, Len);
+	HW_EscRead(pData, Address, Len);
 }
 
 void HW_EscWrite(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
-	write_core(reinterpret_cast<const uint8_t*>(pData), Address, Len);
+	const auto* const data = reinterpret_cast<const uint8_t*>(pData);
+	if (is_block(Address, Len))
+		esc_bus::ram_write(Address, std::span(data, Len));
+	else
+		write_core(data, Address, Len);
 }
 
 void HW_EscWriteIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
-	write_core(reinterpret_cast<const uint8_t*>(pData), Address, Len);
+	HW_EscWrite(pData, Address, Len);
 }
 
 } // extern "C"

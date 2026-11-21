@@ -102,8 +102,9 @@ private:
 
 using status_led = mcu_led;
 using console    = trace;
+using esc        = esc_bus;
 
-using app = bornier::app<board, status_led, console, ethercat_preop_test>;
+using app = bornier::app<board, status_led, console, esc, ethercat_preop_test>;
 
 void application()
 {

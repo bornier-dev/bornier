@@ -19,6 +19,8 @@
 //   core_al_event  AL event request; bit 5 is a pending request to the EEPROM emulation.
 //   core_eeprom    EEPROM configuration (low half) and status (high half); in the status,
 //                  bit 5 tells that the EEPROM is emulated and bit 15 that a request waits.
+//   timing         CPU cycles at 250 MHz: register and core reads (both modes), then 64 bytes
+//                  of the process RAM through the FIFOs and through the core (quad mode).
 
 #include <application.hpp>
 #include <app.hpp>
@@ -31,6 +33,7 @@
 #include <led.hpp>
 #include <trace.hpp>
 
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <cstdint>
@@ -48,6 +51,7 @@ constexpr uint16_t core_al_event = 0x0220;
 constexpr uint16_t core_eeprom   = 0x0500;
 constexpr uint16_t core_product  = 0x0E00;
 constexpr uint16_t core_user_ram = 0x0F80;
+constexpr uint16_t core_process_ram = 0x1000;
 
 void print_register(std::string_view name, uint32_t value)
 {
@@ -123,6 +127,34 @@ void print_timing()
 	trace::write("\r\n");
 }
 
+// Prints the duration, in CPU cycles, of moving 64 bytes of the process RAM: through the FIFOs
+// by DMA (ram_read, ram_write), and through the CSR command register (16 reads of 4 bytes).
+// Elapsed time: during the DMA bursts, the task sleeps and the CPU is free. Quad mode only.
+void print_block_timing()
+{
+	static std::array<uint8_t, 64> block{};
+	auto print = [](std::string_view name, uint32_t cycles) {
+		char digits[10];
+		const auto end = std::to_chars(digits, digits + sizeof(digits), cycles).ptr;
+		trace::write(name);
+		trace::write(std::string_view(digits, end));
+		trace::write("\r\n");
+	};
+
+	uint32_t start = opsy::cortex_m::cycle_count();
+	esc_bus::ram_read(core_process_ram, block);
+	print("timing fifo_read_64_cycles ", opsy::cortex_m::cycle_count() - start);
+
+	start = opsy::cortex_m::cycle_count();
+	for (uint16_t offset = 0; offset < block.size(); offset += 4)
+		(void)esc_bus::core_read(static_cast<uint16_t>(core_process_ram + offset), 4);
+	print("timing csr_read_64_cycles ", opsy::cortex_m::cycle_count() - start);
+
+	start = opsy::cortex_m::cycle_count();
+	esc_bus::ram_write(core_process_ram, block);
+	print("timing fifo_write_64_cycles ", opsy::cortex_m::cycle_count() - start);
+}
+
 } // namespace
 
 /** @brief The test, as a module: one task that runs the checks and reports on SWO. */
@@ -145,7 +177,10 @@ public:
 				trace::write("mode quad\r\n");
 				const bool quad = bus_works();
 				if (quad)
+				{
 					print_timing();
+					print_block_timing();
+				}
 				trace::write(quad ? "quad PASS\r\n" : "quad FAIL\r\n");
 
 				const bool pass = single && quad;
