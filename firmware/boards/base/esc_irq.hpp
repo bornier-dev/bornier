@@ -18,6 +18,8 @@
  *          sleep. Since the pin stays low as long as a request is pending, the task checks
  *          it again after serving (pending()), a falling edge coming only once.
  *
+ *          SYNC0 wakes the same task (wake(), from sync_latch): one wait for every request.
+ *
  *          The LAN9253 side (IRQ_CFG, INT_EN) is set up by whoever drives it, after any
  *          reset of the chip: see esc_bus.
  *
@@ -26,6 +28,8 @@
  */
 
 #pragma once
+
+#include <atomic>
 
 #include <opsy.hpp>
 #include <cortex_m.hpp>
@@ -67,13 +71,26 @@ public:
 	}
 
 	/**
-	 * @brief Sleeps until a falling edge of ESC_IRQ, or @p deadline.
+	 * @brief Sleeps until a falling edge of ESC_IRQ, a wake(), or @p deadline.
 	 *
-	 * @return @c true on an edge.
+	 * @return @c true on an edge or a wake().
 	 */
 	static bool wait_until(opsy::time_point deadline)
 	{
-		return edge_.try_acquire_until(deadline);
+		if (!edge_.try_acquire_until(deadline))
+			return false;
+		// After the acquire: a wake in between finds the flag still set and releases nothing,
+		// but the task looks for requests only from here on, so it sees that one too.
+		woken_.store(false, std::memory_order_release);
+		return true;
+	}
+
+	/** @brief Wakes the task in wait_until(). From an interrupt handler too. */
+	static void wake()
+	{
+		// At most one release before the task takes it: the semaphore is binary.
+		if (!woken_.exchange(true, std::memory_order_acq_rel))
+			edge_.release();
 	}
 
 	/** @brief Whether ESC_IRQ is low: a request is pending. */
@@ -89,10 +106,11 @@ private:
 	static void isr()
 	{
 		exti.fpr1 = exti_p::fpr1_r::fpif5_f();
-		edge_.release();
+		wake();
 	}
 
 	static inline opsy::binary_semaphore edge_{0};
+	static inline std::atomic<bool> woken_{false};
 
 public:
 

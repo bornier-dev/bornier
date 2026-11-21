@@ -22,15 +22,28 @@
  *          TIM5 also counts, at the timer clock, the time since the last SYNC0: the step
  *          generator uses its compares (step_generator), the probe capture will too.
  *
+ *          Each pulse also counts one SYNC0 (sync0_count()) and wakes the stack's task
+ *          (Listener::wake()), which then serves it: the stack sees every SYNC0, even served
+ *          late. SYNC0 is a pulse of fixed width, not acknowledged by the software: a task
+ *          held up never removes an edge, so never a LATCH nor a cycle of the step generator.
+ *          The configuration the SII gives the LAN9253 sets this: a SYNC0 pulse of 1 us
+ *          (0x0982), and SYNC0 not mapped to the AL event (0x0151 = 0x44): the stack learns of
+ *          SYNC0 from here only.
+ *
  *          No HAL. No dynamic allocation.
  ******************************************************************************
  */
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
+#include <opsy.hpp>
+#include <cortex_m.hpp>
+
 #include <STM32H523/gpio.hpp>
+#include <STM32H523/interrupts.hpp>
 #include <STM32H523/rcc.hpp>
 #include <STM32H523/tim.hpp>
 
@@ -42,8 +55,12 @@ using mmio::atomic;
 /**
  * @brief SYNC0 to LATCH, as a module.
  *
- *        All methods are static — no instance needed. init() is used by bornier::app.
+ *        All methods are static — no instance needed. init() and isrs are used by
+ *        bornier::app.
+ *
+ * @tparam Listener Woken on each SYNC0, from an interrupt handler: a static wake().
  */
+template<typename Listener>
 class sync_latch
 {
 public:
@@ -73,7 +90,10 @@ public:
 		tim15.ccer = tim15_p::ccer_r::cc1e_f();
 		tim15.bdtr = tim15_p::bdtr_r::moe_f();
 		tim15.smcr = tim15_p::smcr_r::sms_f(slave_trigger) | tim15_p::smcr_r::ts_1_f(1);
+		tim15.dier = tim15_p::dier_r::cc1ie_f();
 		tim15.cr1 = tim15_p::cr1_r::opm_f();
+		opsy::cortex_m::set_priority(TIM15_IRQn, opsy::scheduler::os_callable_priority);
+		opsy::cortex_m::enable_interrupt(TIM15_IRQn);
 
 		gpioa.afrl <<= gpio_p::afrl_r::afsel4_f(2) || atomic;  // PA4 TIM5_ETR
 		gpioe.afrl <<= gpio_p::afrl_r::afsel5_f(4) || atomic;  // PE5 TIM15_CH1
@@ -85,7 +105,20 @@ public:
 	/** @brief Timer clocks since the last SYNC0. */
 	static uint32_t since_sync0() { return tim5.cnt.load().value(); }
 
+	/** @brief SYNC0 pulses since init(), wrapping. */
+	static uint32_t sync0_count() { return count_.load(std::memory_order_acquire); }
+
 private:
+
+	/// Start of the LATCH pulse: one SYNC0.
+	static void isr()
+	{
+		tim15.sr = ~tim15_p::sr_r(tim15_p::sr_r::cc1if_f());
+		count_.fetch_add(1, std::memory_order_release);
+		Listener::wake();
+	}
+
+	static inline std::atomic<uint32_t> count_{0};
 
 	static constexpr uint32_t timer_hz = 250'000'000;
 	static constexpr uint32_t pulse_ticks = timer_hz / 100'000; ///< LATCH high 10 us
@@ -96,6 +129,14 @@ private:
 	static constexpr uint8_t pwm_mode_2 = 0b111;
 	/// SYNC0 polarity, from the configuration the SII gives the LAN9253: active low.
 	static constexpr bool sync0_falling = true;
+
+public:
+
+	/** @brief The handler of the module: the start of a LATCH pulse, one SYNC0. */
+	static constexpr auto isrs = []<typename Table>(const Table& table) -> Table
+	{
+		return table.template with<TIM15_IRQn, isr>();
+	};
 };
 
 } // namespace STM32H523

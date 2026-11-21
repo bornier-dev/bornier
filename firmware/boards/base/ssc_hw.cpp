@@ -145,7 +145,8 @@ void HW_EscRead(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 }
 
 // The stack calls the Isr variants from PDI_Isr() and Sync0_Isr(), which run in the stack's task,
-// woken by ESC_IRQ (see esc_irq): an access may sleep on DMA, so never from an interrupt handler.
+// woken by ESC_IRQ or SYNC0 (see esc_irq, sync_latch): an access may sleep on DMA, so never from
+// an interrupt handler.
 void HW_EscReadIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 {
 	HW_EscRead(pData, Address, Len);
