@@ -19,6 +19,9 @@
 // milliseconds, more than a cycle.
 //   al_status  AL status register (0x0130): 1 INIT, 2 PREOP, 4 SAFEOP, 8 OP, bit 4 error
 //   al_code    AL status code (0x0134), 0 when no error
+//   al_errors  error codes the stack wrote to 0x0134 since start; al_error_last and al_error_ms,
+//              the last one and when (ms since start): the master clears an error within
+//              milliseconds, before a report can see it
 //   eeprom     EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
 //   pdi_calls  calls to PDI_Isr() since start, on requests of the LAN9253
 //   sync0      SYNC0 pulses since start, each served by a call to Sync0_Isr()
@@ -31,6 +34,10 @@
 // (sync_latch); pin 1, CS0, low while the task serves the LAN9253; ground on pin 25.
 //   pdi_mean   mean duration of a call, in CPU cycles at 250 MHz (elapsed: DMA waits included)
 //   pdi_max    longest call, in CPU cycles
+//   sync0_backlog_max  most SYNC0 served in one go, and when (ms since start): more than one, the
+//              task was held longer than a cycle and the stack sees them late
+//   main_max   longest pass of the stack's main loop (MainLoop() and its timer), in CPU cycles, and
+//              when (ms since start)
 //   bus_failure 0 while the bus to the LAN9253 works, else the wait that ran out (esc_bus::failure):
 //              the axes are then stopped for good
 //   starts     starts of the MCU since power-up; faults, the fatal faults among them; fault_*, the
@@ -129,21 +136,34 @@ public:
 				}
 
 				// Every SYNC0 counted, in turn: the stack's counters see each one.
+				uint32_t backlog = 0;
 				while (sync0_served_ != sync_latch<esc_irq>::sync0_count())
 				{
 					marker(true);
 					++sync0_served_;
+					++backlog;
 					Sync0_Isr();
 					marker(false);
 				}
+				if (backlog > sync0_backlog_max_)
+				{
+					sync0_backlog_max_ = backlog;
+					sync0_backlog_ms_ = uptime_ms();
+				}
 
 				const auto now = opsy::scheduler::now();
+				const uint32_t main_start = opsy::cortex_m::cycle_count();
 				if (now >= next_tick)
 				{
 					ECAT_CheckTimer();
 					next_tick += 1ms;
 				}
 				MainLoop();
+				if (const uint32_t cycles = opsy::cortex_m::cycle_count() - main_start; cycles > main_max_)
+				{
+					main_max_ = cycles;
+					main_max_ms_ = uptime_ms();
+				}
 				ext_watchdog::feed();
 				if (now >= next_report)
 				{
@@ -151,6 +171,7 @@ public:
 					auto& r = report_;
 					r.al_status = esc_bus<axes>::core_read(0x0130, 2);
 					r.al_code = esc_bus<axes>::core_read(0x0134, 2);
+					r.al_errors = ssc_hw_al_errors();
 					r.eeprom = esc_bus<axes>::core_read(0x0502, 2);
 					r.pdi_calls = pdi_calls_;
 					r.sync0 = sync0_served_;
@@ -158,6 +179,10 @@ public:
 					r.gen = step_generator::statistics();
 					r.pdi_mean = pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_);
 					r.pdi_max = pdi_max_;
+					r.sync0_backlog_max = sync0_backlog_max_;
+					r.sync0_backlog_ms = sync0_backlog_ms_;
+					r.main_max = main_max_;
+					r.main_max_ms = main_max_ms_;
 					r.bus_failure = static_cast<uint32_t>(esc_bus<axes>::failed());
 					if ((r.al_status & 0x0F) >= 2)
 						mcu_led::on();
@@ -179,6 +204,12 @@ public:
 				const auto r = report_;
 				print_hex("al_status", r.al_status);
 				print_hex("al_code", r.al_code);
+				print_hex("al_errors", r.al_errors.count);
+				if (r.al_errors.count != 0)
+				{
+					print_hex("al_error_last", r.al_errors.last);
+					print_hex("al_error_ms", r.al_errors.last_ms);
+				}
 				print_hex("eeprom", r.eeprom);
 				print_hex("pdi_calls", r.pdi_calls);
 				print_hex("sync0", r.sync0);
@@ -194,6 +225,10 @@ public:
 				print_hex("gen_reversals0", r.gen.axes[0].reversals);
 				print_hex("pdi_mean", r.pdi_mean);
 				print_hex("pdi_max", r.pdi_max);
+				print_hex("sync0_backlog_max", r.sync0_backlog_max);
+				print_hex("sync0_backlog_ms", r.sync0_backlog_ms);
+				print_hex("main_max", r.main_max);
+				print_hex("main_max_ms", r.main_max_ms);
 				print_hex("bus_failure", r.bus_failure);
 				const auto& f = bornier::last_fault;
 				print_hex("starts", f.starts);
@@ -237,6 +272,12 @@ private:
 	static inline uint64_t pdi_cycles_ = 0;
 	static inline uint32_t pdi_max_ = 0;
 	static inline uint32_t sync0_served_ = 0;
+	static inline uint32_t sync0_backlog_max_ = 0;
+	static inline uint32_t sync0_backlog_ms_ = 0;
+	static inline uint32_t main_max_ = 0;
+	static inline uint32_t main_max_ms_ = 0;
+
+	static uint32_t uptime_ms() { return static_cast<uint32_t>((opsy::scheduler::now() - opsy::startup).count()); }
 	static inline opsy::task<2048> task_;
 
 	/// What the report prints, taken by the stack's task once per second.
@@ -244,6 +285,7 @@ private:
 	{
 		uint32_t al_status;
 		uint32_t al_code;
+		ssc_hw_al_errors_t al_errors;
 		uint32_t eeprom;
 		uint32_t pdi_calls;
 		uint32_t sync0;
@@ -251,6 +293,10 @@ private:
 		step_generator::stats gen;
 		uint32_t pdi_mean;
 		uint32_t pdi_max;
+		uint32_t sync0_backlog_max;
+		uint32_t sync0_backlog_ms;
+		uint32_t main_max;
+		uint32_t main_max_ms;
 		uint32_t bus_failure;
 	};
 	static inline report report_{};

@@ -44,6 +44,16 @@ BOOL ssc_hw_event_pending(void);
 UINT32 ssc_hw_timer(void);
 void ssc_hw_clear_timer(void);
 
+/* Diagnostics: the error codes the stack wrote to the AL status code register (0x0134) since
+   start, the master clearing an error before a report could read the register. */
+typedef struct
+{
+	UINT32 count;   /* codes other than 0 written */
+	UINT16 last;    /* the last of them */
+	UINT32 last_ms; /* when, in milliseconds since start */
+} ssc_hw_al_errors_t;
+ssc_hw_al_errors_t ssc_hw_al_errors(void);
+
 #define HW_GetTimer()   ssc_hw_timer()
 #define HW_ClearTimer() ssc_hw_clear_timer()
 

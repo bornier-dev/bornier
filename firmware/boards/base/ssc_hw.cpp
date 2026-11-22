@@ -40,6 +40,9 @@ opsy::time_point timer_origin = opsy::startup;
 /// The AL event mask as the stack last wrote it: the events that pull ESC_IRQ low.
 uint16_t event_mask = 0;
 
+constexpr uint16_t al_status_code = 0x0134;
+ssc_hw_al_errors_t al_errors{};
+
 /** @brief Size of the next piece of an access at @p address with @p remaining bytes left. */
 uint32_t piece(uint32_t address, uint32_t remaining)
 {
@@ -170,6 +173,22 @@ void HW_EscWrite(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
 	// The stack writes the AL event mask whole (SetALEventMask(), ResetALEventMask()).
 	if (Address == al_event_mask && Len >= 2)
 		event_mask = static_cast<uint16_t>(data[0] | (data[1] << 8));
+
+	if (Address == al_status_code && Len >= 2)
+	{
+		const auto code = static_cast<uint16_t>(data[0] | (data[1] << 8));
+		if (code != 0)
+		{
+			++al_errors.count;
+			al_errors.last = code;
+			al_errors.last_ms = static_cast<UINT32>((opsy::scheduler::now() - opsy::startup).count());
+		}
+	}
+}
+
+ssc_hw_al_errors_t ssc_hw_al_errors(void)
+{
+	return al_errors;
 }
 
 void HW_EscWriteIsr(MEM_ADDR* pData, UINT16 Address, UINT16 Len)
