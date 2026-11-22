@@ -34,6 +34,8 @@
 // (sync_latch); pin 1, CS0, low while the task serves the LAN9253; ground on pin 25.
 //   pdi_mean   mean duration of a call, in CPU cycles at 250 MHz (elapsed: DMA waits included)
 //   pdi_max    longest call, in CPU cycles
+//   cycle_overruns process data that came in while the stack's interrupt routine ran: acknowledged,
+//              not taken, the outputs of that cycle lost
 //   sync0_backlog_max  most SYNC0 served in one go, and when (ms since start): more than one, the
 //              task was held longer than a cycle and the stack sees them late
 //   main_max   longest pass of the stack's main loop (MainLoop() and its timer), in CPU cycles, and
@@ -114,9 +116,13 @@ public:
 			auto next_report = opsy::scheduler::now() + 1s;
 			while (true)
 			{
-				// Asleep until the LAN9253 requests the stack, or the next millisecond. A request that
-				// came while another was being served gives no new edge: the pin is checked too.
-				if (esc_irq::wait_until(next_tick) || esc_irq::pending())
+				// Asleep until the LAN9253 requests the stack, a SYNC0, or the next millisecond. The
+				// stack's interrupt routine runs only on a request, the pin low: process data that
+				// comes in while it runs counts as a cycle overrun, acknowledged but not taken, so a
+				// call on another wake-up would lose the outputs of a frame landing then. A request
+				// that came while another was being served gives no new edge: the pin tells.
+				(void)esc_irq::wait_until(next_tick);
+				if (esc_irq::pending())
 				{
 					marker(true);
 					// Served again while an asked-for AL event is pending: the AL event request
@@ -179,6 +185,7 @@ public:
 					r.gen = step_generator::statistics();
 					r.pdi_mean = pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_);
 					r.pdi_max = pdi_max_;
+					r.cycle_overruns = sSyncManOutPar.u16CycleExceededCounter;
 					r.sync0_backlog_max = sync0_backlog_max_;
 					r.sync0_backlog_ms = sync0_backlog_ms_;
 					r.main_max = main_max_;
@@ -225,6 +232,7 @@ public:
 				print_hex("gen_reversals0", r.gen.axes[0].reversals);
 				print_hex("pdi_mean", r.pdi_mean);
 				print_hex("pdi_max", r.pdi_max);
+				print_hex("cycle_overruns", r.cycle_overruns);
 				print_hex("sync0_backlog_max", r.sync0_backlog_max);
 				print_hex("sync0_backlog_ms", r.sync0_backlog_ms);
 				print_hex("main_max", r.main_max);
@@ -293,6 +301,7 @@ private:
 		step_generator::stats gen;
 		uint32_t pdi_mean;
 		uint32_t pdi_max;
+		uint32_t cycle_overruns;
 		uint32_t sync0_backlog_max;
 		uint32_t sync0_backlog_ms;
 		uint32_t main_max;
