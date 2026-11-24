@@ -9,8 +9,10 @@ set(CMAKE_C_EXTENSIONS ON)
 
 set(CMAKE_C_FLAGS_DEBUG     "-Og -g3")
 set(CMAKE_CXX_FLAGS_DEBUG   "-Og -g3")
-set(CMAKE_C_FLAGS_RELEASE   "-Os -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
+# Debug information in both: it stays in the ELF, the code is the same, and kymo reads the
+# events of the trace from it.
+set(CMAKE_C_FLAGS_RELEASE   "-Os -g3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-Os -g3 -DNDEBUG")
 
 # ── Cortex-M33 with single-precision FPU (STM32H5) ────────────────────────────
 add_library(cortex_m33 INTERFACE)
@@ -47,10 +49,14 @@ target_compile_options(project_warnings INTERFACE
 # Linker warnings too: -Werror does not reach them.
 target_link_options(project_warnings INTERFACE -Wl,--fatal-warnings)
 
+# ── Trace (Kymo) ──────────────────────────────────────────────────────────────
+add_subdirectory(trace)
+
 # ── OpSy RTOS ─────────────────────────────────────────────────────────────────
+# Traced: its hooks are trace/opsy_hooks.hpp, in the scheduler as in every image.
 add_library(opsy STATIC third_party/opsy/scheduler.cpp)
 target_include_directories(opsy PUBLIC third_party/opsy)
-target_link_libraries(opsy PUBLIC cortex_m33 PRIVATE project_warnings)
+target_link_libraries(opsy PUBLIC cortex_m33 bornier_trace PRIVATE project_warnings)
 
 # ── Composition of images from modules ────────────────────────────────────────
 add_library(bornier_core INTERFACE)

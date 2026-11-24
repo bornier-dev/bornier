@@ -1,3 +1,6 @@
 [submodule "firmware/third_party/opsy"]
 	path = firmware/third_party/opsy
 	url = https://github.com/Otatiaro/OpSy.git
+[submodule "firmware/third_party/kymo"]
+	path = firmware/third_party/kymo
+	url = https://github.com/Otatiaro/Kymo.git

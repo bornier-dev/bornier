@@ -3,70 +3,71 @@
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
 """Hardware-in-the-loop check for the `esc_probe` test on the Bornier base board.
 
-Listens to SWO through a J-Link and checks the report of the board: the identification registers
-of the LAN9253 and a write and read back in its EtherCAT core, through the OCTOSPI, in single
-then in quad bus mode. Run it against both the debug and the release image.
+Records the trace of the board and checks its report: the identification registers of the
+LAN9253 and a write and read back in its EtherCAT core, through the OCTOSPI, in single then in
+quad bus mode. Run it against both the debug and the release image.
 
-The board must already be flashed and running. The script needs the SEGGER J-Link software:
-it runs J-Link SWO Viewer, found on the PATH or given with --viewer.
+The board must already be flashed with the image of --preset (or --elf) and running.
 
-    python tools/hil/esc_probe.py
+    python tools/hil/esc_probe.py --preset release
 """
 
 import argparse
-import re
 import sys
 
-from blink_swo import find_viewer, listen
-
-REGISTER = re.compile(r"^(byte_test|id_rev) 0x([0-9a-f]{8})$")
+import kymo_trace
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--viewer", help="path of J-Link SWO Viewer (command line version)")
-    parser.add_argument("--device", default="STM32H523VE")
-    parser.add_argument("--cpu-hz", type=int, default=250_000_000, help="core clock of the image")
-    parser.add_argument("--swo-hz", type=int, default=2_000_000, help="bit rate asked on the SWO pin")
-    parser.add_argument("--seconds", type=float, default=7.0, help="listening time")
+    kymo_trace.add_arguments(parser, seconds=5.0)
     args = parser.parse_args()
 
-    viewer = find_viewer(args.viewer)
-    if viewer is None:
-        print("J-Link SWO Viewer not found: install the SEGGER J-Link software, or give --viewer", file=sys.stderr)
+    recording = kymo_trace.record(args, kymo_trace.image(args, "tests/esc_probe/esc_probe"))
+    if not kymo_trace.report(recording):
         return 1
-
-    lines = [text for _, text in listen(viewer, args.device, args.cpu_hz, args.swo_hz, args.seconds)]
-    values: dict[str, set[int]] = {"byte_test": set(), "id_rev": set()}
-    for text in lines:
-        if match := REGISTER.match(text):
-            values[match.group(1)].add(int(match.group(2), 16))
-    verdicts = [text for text in lines if text.startswith("verdict ")]
+    registers = recording.named("registers")
+    byte_tests = {event.number("byte_test") for event in registers}
+    id_revs = {event.number("id_rev") for event in registers}
+    results = recording.named("mode_result")
+    modes = {mode: (sum(1 for event in results if event.fields["mode"] == mode and event.flag("pass")),
+                    sum(1 for event in results if event.fields["mode"] == mode and not event.flag("pass")))
+             for mode in ("single", "quad")}
+    verdicts = recording.named("verdict")
+    passed = sum(1 for event in verdicts if event.flag("pass"))
+    failures = {event.fields["bus_failure"] for event in verdicts} - {"none"}
+    timings = recording.named("timing")
 
     def show(found: set[int]) -> str:
         return ", ".join(f"0x{value:08x}" for value in sorted(found)) or "nothing"
 
-    byte_test_ok = values["byte_test"] == {0x87654321}
-    id_ok = bool(values["id_rev"]) and all(value >> 16 == 0x9253 for value in values["id_rev"])
-    verdict_ok = len(verdicts) >= 2 and all(text == "verdict PASS" for text in verdicts)
-    modes = {name: (lines.count(f"{name} PASS"), lines.count(f"{name} FAIL")) for name in ("single", "quad")}
-    modes_ok = all(passed >= 2 and failed == 0 for passed, failed in modes.values())
+    byte_test_ok = byte_tests == {0x87654321}
+    id_ok = bool(id_revs) and all(value >> 16 == 0x9253 for value in id_revs)
+    modes_ok = all(good >= 2 and bad == 0 for good, bad in modes.values())
+    verdict_ok = len(verdicts) >= 2 and passed == len(verdicts) and not failures
+    reset_ok = not recording.named("reset_failed")
 
-    print(f"{'PASS' if byte_test_ok else 'FAIL'}  BYTE_TEST reads {show(values['byte_test'])}, 0x87654321 expected")
-    print(f"{'PASS' if id_ok else 'FAIL'}  ID_REV reads {show(values['id_rev'])}, 0x9253 expected in the upper half")
-    for name, (passed, failed) in modes.items():
-        print(f"{'PASS' if passed >= 2 and failed == 0 else 'FAIL'}  {name} mode: {passed} PASS, {failed} FAIL from the board")
-    print(f"{'PASS' if verdict_ok else 'FAIL'}  {len(verdicts)} verdicts from the board, "
-          f"{verdicts.count('verdict PASS')} PASS")
+    print(f"{'PASS' if byte_test_ok else 'FAIL'}  BYTE_TEST reads {show(byte_tests)}, 0x87654321 expected")
+    print(f"{'PASS' if id_ok else 'FAIL'}  ID_REV reads {show(id_revs)}, 0x9253 expected in the upper half")
+    for mode, (good, bad) in modes.items():
+        print(f"{'PASS' if good >= 2 and bad == 0 else 'FAIL'}  {mode} mode: {good} passed, {bad} failed")
+    print(f"{'PASS' if verdict_ok else 'FAIL'}  {len(verdicts)} verdicts, {passed} passed, bus failures: "
+          f"{sorted(failures) or 'none'}")
+    print(f"{'PASS' if reset_ok else 'FAIL'}  the LAN9253 came out of its reset")
+    if timings:
+        last = timings[-1]
+        print(f"info  register read {last.number('read_cycles')} cycles, "
+              f"core read {last.number('core_read_cycles')} cycles")
 
-    if byte_test_ok and id_ok and verdict_ok and modes_ok:
+    if byte_test_ok and id_ok and modes_ok and verdict_ok and reset_ok:
         return 0
-    if not lines:
-        print("hint: nothing received; the image prints only once its first read has ended: check "
-              "that esc_probe is flashed and running, then the OCTOSPI clock and pins", file=sys.stderr)
+    if not registers:
+        print("hint: no register traced; the image reports only once its first read has ended: "
+              "check that esc_probe is flashed and running, then the OCTOSPI clock and pins",
+              file=sys.stderr)
     elif modes["single"][1] == 0 and modes["quad"][1] > 0:
         print("hint: single mode works and quad mode fails; check SIO2 and SIO3", file=sys.stderr)
-    elif values["byte_test"] <= {0x00000000, 0xFFFFFFFF}:
+    elif byte_tests <= {0x00000000, 0xFFFFFFFF}:
         print("hint: the LAN9253 does not answer; check its supply, its 25 MHz clock and that its "
               "reset line is high", file=sys.stderr)
     else:

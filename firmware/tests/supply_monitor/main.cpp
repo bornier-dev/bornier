@@ -6,50 +6,53 @@
 // that scale. The board must be supplied through its terminal block (12 or 24 V): on USB alone,
 // +VIN is absent and the test fails.
 //
-// Report on SWO, once per second:
+// Report in the trace (bornier/trace.hpp), once per second, a supply_monitor::measured event:
 //   vrefint_cal  factory reading of VREFINT at 3.3 V, 12 bits
 //   vrefint      reading of VREFINT now, 12 bits
 //   vin_raw      reading of VIN_SENSE, 12 bits
 //   vdda_mv      VDDA in millivolts
 //   vin_mv       +VIN in millivolts
-//   verdict      PASS when VDDA is within 3.3 V +-5 % and +VIN within 10.8 to 30 V
+//   pass         VDDA within 3.3 V +-5 % and +VIN within 10.8 to 30 V
+// or a supply_monitor::no_reading event when the ADC has nothing yet, or is stuck.
 
 #include <application.hpp>
 #include <app.hpp>
 #include <board.hpp>
+#include <bornier/trace.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
 #include <clock.hpp>
 #include <led.hpp>
 #include <supplies.hpp>
-#include <trace.hpp>
 
-#include <charconv>
 #include <chrono>
 #include <cstdint>
-#include <string_view>
 
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-
-namespace
+/// The events of the test, as `kymo record` prints them: supply_monitor::<name>.
+namespace supply_monitor
 {
 
-void print_number(std::string_view name, uint32_t value)
+/** @brief One reading of the supplies, and its verdict. */
+struct measured
 {
-	char digits[10];
-	const auto end = std::to_chars(digits, digits + sizeof(digits), value).ptr;
-	trace::write(name);
-	trace::write(" ");
-	trace::write(std::string_view(digits, end));
-	trace::write("\r\n");
-}
+	uint32_t vrefint_cal;
+	uint32_t vrefint;
+	uint32_t vin_raw;
+	uint32_t vdda_mv;
+	uint32_t vin_mv;
+	bool     pass;
+};
 
-} // namespace
+/** @brief No measurement yet, or the ADC is stuck. */
+struct no_reading {};
 
-/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+} // namespace supply_monitor
+
+/** @brief The test, as a module: one task that runs the checks and reports in the trace. */
 class supply_monitor_test
 {
 public:
@@ -60,22 +63,18 @@ public:
 			{
 				opsy::sleep_for(1s);
 
-				const auto measured = supplies::read();
-				if (!measured)
+				const auto reading = supplies::read();
+				if (!reading)
 				{
-					trace::write("verdict FAIL\r\n"); // no measurement yet, or the ADC is stuck
+					bornier::trace::emit(supply_monitor::no_reading{});
+					mcu_led::off();
 					continue;
 				}
-				const auto& r = *measured;
-				print_number("vrefint_cal", r.vrefint_cal);
-				print_number("vrefint", r.vrefint_raw);
-				print_number("vin_raw", r.vin_raw);
-				print_number("vdda_mv", r.vdda_mv);
-				print_number("vin_mv", r.vin_mv);
-
+				const auto& r = *reading;
 				const bool pass = r.vdda_mv >= 3135 && r.vdda_mv <= 3465
 				               && r.vin_mv >= 10800 && r.vin_mv <= 30000;
-				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
+				bornier::trace::emit(supply_monitor::measured{
+					r.vrefint_cal, r.vrefint_raw, r.vin_raw, r.vdda_mv, r.vin_mv, pass});
 
 				if (pass)
 					mcu_led::on();
@@ -90,10 +89,9 @@ private:
 };
 
 using status_led = mcu_led;
-using console    = trace;
 using rails      = supplies;
 
-using app = bornier::app<board, status_led, console, rails, supply_monitor_test>;
+using app = bornier::app<board, status_led, rails, supply_monitor_test>;
 
 void application()
 {

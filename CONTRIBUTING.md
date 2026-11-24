@@ -60,7 +60,7 @@ lcec to OP, the axes walked through their CiA402 states.
 
 ## Firmware rules
 
-- **C++23 on the OpSy RTOS** ([`firmware/third_party/opsy`](firmware/third_party/opsy)), no HAL or CMSIS: peripherals are reached
+- **C++26 on the OpSy RTOS** ([`firmware/third_party/opsy`](firmware/third_party/opsy)), no HAL or CMSIS: peripherals are reached
   through the generated register headers.
 - **Warnings are errors.** The warning set in [`firmware/CMakeLists.txt`](firmware/CMakeLists.txt)
   applies to all code, OpSy included, and linker warnings are fatal too. Fix a warning at its
@@ -101,13 +101,6 @@ J-Link> g
 J-Link> exit
 ```
 
-The base board prints its text on SWO, pin 6 of the debug connector. J-Link SWO Viewer shows it;
-`-cpufreq` is the core clock of the image, from which the viewer derives the bit rate:
-
-```sh
-JLinkSWOViewerCLExe -device STM32H523VE -cpufreq 250000000 -swofreq 2000000 -itmport 0
-```
-
 On Linux, install [`tools/udev/60-debug-probes.rules`](tools/udev/60-debug-probes.rules) so the
 probe is usable without root:
 
@@ -132,6 +125,27 @@ arm-none-eabi-gdb build/debug/firmware/examples/blink/blink.elf \
   the session.
 - The GDB server holds the probe until it exits: stop it before flashing with
   `probe-rs download`, which otherwise fails with a USB error.
+
+## Tracing
+
+Images report through a trace, not through text: each event is a plain struct written with
+`bornier::trace::emit()` ([`firmware/trace/bornier/trace.hpp`](firmware/trace/bornier/trace.hpp))
+into a ring in RAM, with the cycle counter. OpSy adds its own events (task switches, interrupts,
+faults). [Kymo](firmware/third_party/kymo) reads the ring through the debug port (SWD) while the
+program runs and decodes each event with the ELF, which must be the one flashed. Both presets
+keep debug information in the ELF for that; it does not change the code.
+
+Build the host programs with Rust (cargo), then record:
+
+```sh
+cargo build --release --manifest-path firmware/third_party/kymo/host/Cargo.toml
+kymo record --probe jlink --chip STM32H523VE --clock 250000000 --duration 5 \
+    --elf build/debug/firmware/examples/blink/blink.elf
+```
+
+`--clock` is the core clock of the image, which times the events; `--probe probe-rs` drives
+any probe probe-rs supports, but not the ST-Link library on an STM32H5, which halts the core.
+`kymo-ui` (`host/ui`) shows a recording as a timeline.
 
 ## On-target tests
 

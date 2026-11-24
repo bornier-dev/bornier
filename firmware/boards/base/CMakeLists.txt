@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # SPDX-FileCopyrightText: 2026 Thomas Legrand
 
-# Bornier base board (hardware/base): clock tree, MCU LED, text output on SWO, bus of the
+# Bornier base board (hardware/base): clock tree, MCU LED, bus of the
 # EtherCAT slave controller, isolated RS-485 port, supply voltages, startup and vector table.
 # The startup file is an interface source so the vector table lands in every firmware image.
 add_library(board_base INTERFACE)

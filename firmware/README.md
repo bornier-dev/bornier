@@ -1,6 +1,6 @@
 # Firmware
 
-C++23 firmware on the OpSy RTOS (`third_party/opsy`), built with CMake and the GNU
+C++26 firmware on the OpSy RTOS (`third_party/opsy`), built with CMake and the GNU
 Arm toolchain. Build, flashing and coding rules are in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 The firmware is made of **modules**, each developed and tested on its own, and **images**
@@ -95,18 +95,17 @@ and defines its entry point, `application()` (see
 #include <application.hpp>
 #include <app.hpp>
 #include <board.hpp>
+#include <bornier/trace.hpp>
 #include <led.hpp>
-#include <trace.hpp>
 
 #include "blinker.hpp"
 
 using namespace STM32H523;
 
 using status_led = mcu_led;
-using console    = trace;
-using heartbeat  = example::blinker<status_led, console>;
+using heartbeat  = example::blinker<status_led, bornier::trace>;
 
-using app = bornier::app<board, status_led, console, heartbeat>;
+using app = bornier::app<board, status_led, heartbeat>;
 
 void application()
 {
@@ -114,7 +113,10 @@ void application()
 }
 ```
 
-Each module gets an alias named by its role in the image (`status_led`, `console`, `heartbeat`):
+The trace is not a module: the board starts it, and a module that reports takes it as a
+parameter, as `blinker` does, so a test can give it another sink.
+
+Each module gets an alias named by its role in the image (`status_led`, `heartbeat`):
 the list of the app then reads as a list of modules, and swapping a driver, or a test double,
 changes one line. An alias is the same type: it costs nothing and the debugger shows the module.
 
@@ -126,7 +128,7 @@ image's `CMakeLists.txt` is a plain `add_executable` linking the board target, a
 ### Testing a module
 
 A module comes with a test: an image that composes it with what it needs, and a script in
-[`tools/hil/`](../tools/hil) that checks the report the image prints on SWO. Test images and
+[`tools/hil/`](../tools/hil) that checks the events the image writes in its trace. Test images and
 scripts follow [`tools/hil/README.md`](../tools/hil/README.md). A combined test composes several
 modules in one image, to check that they work together.
 

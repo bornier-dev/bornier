@@ -31,6 +31,7 @@
 #include <STM32H523/rcc.hpp>
 #include <STM32H523/vectors.hpp>
 
+#include <bornier/trace.hpp>
 #include <clock.hpp>
 #include <drive_ports.hpp>
 #include <step_generator.hpp>
@@ -58,8 +59,12 @@ public:
 	    .with(opsy::scheduler::isrs)
 	    .with(opsy::fault_isrs<on_fault>);
 
-	/** @brief Brings the system clock to 250 MHz. */
-	static void init() { clock::init(); }
+	/** @brief Brings the system clock to 250 MHz, and starts the time stamps of the trace. */
+	static void init()
+	{
+		clock::init();
+		bornier::trace::init();
+	}
 
 	/**
 	 * @brief The outputs of the board in their safe state, from their registers only: every

@@ -5,7 +5,7 @@
  ******************************************************************************
  * @file    blinker.hpp
  * @author  Thomas Legrand
- * @brief   Example module: blinks a LED at 1 Hz and prints one numbered line per blink
+ * @brief   Example module: blinks a LED at 1 Hz and traces one numbered event per blink
  *
  *          The template to copy when writing a module (firmware/README.md, "Writing a
  *          module"). It shows:
@@ -13,24 +13,29 @@
  *          - dependencies taken as template parameters, constrained by concepts that the
  *            module itself declares: it says what it needs, not which driver gives it;
  *          - a task started by start(), the member bornier::app calls for modules with tasks;
- *          - a report on the text output, one line per event, that a test script can parse.
+ *          - a report in the trace, one event per blink, that a test script can check: an
+ *            event is a plain struct, named for what happened.
  *
- *          It has no init() (it owns no hardware: its LED and its output are set up by their
+ *          It has no init() (it owns no hardware: its LED and its trace are set up by their
  *          own modules) and no isrs (no interrupt).
  ******************************************************************************
  */
 
 #pragma once
 
-#include <charconv>
 #include <chrono>
 #include <cstdint>
-#include <string_view>
 
 #include <opsy.hpp>
 
 namespace example
 {
+
+/** @brief The event of one blink: its number, from 0. */
+struct blink
+{
+	std::uint32_t count;
+};
 
 /** @brief Something that can be switched on and off: a LED, an output. */
 template<typename T>
@@ -40,22 +45,22 @@ concept switchable = requires
 	T::off();
 };
 
-/** @brief Somewhere to write text: the SWO console, a UART. */
+/** @brief Somewhere to emit events: the trace (bornier::trace). */
 template<typename T>
-concept text_output = requires(std::string_view text)
+concept event_sink = requires(blink event)
 {
-	T::write(text);
+	T::emit(event);
 };
 
 /**
- * @brief Blinks @p Led at 1 Hz and writes "Bornier base blink <n>" on @p Output at each blink.
+ * @brief Blinks @p Led at 1 Hz and emits a numbered @ref blink on @p Trace at each blink.
  *
  *        A steady 1 Hz proves the oscillator, the PLL and the scheduler tick.
  *
- * @tparam Led    What blinks.
- * @tparam Output Where the lines go.
+ * @tparam Led   What blinks.
+ * @tparam Trace Where the events go.
  */
-template<switchable Led, text_output Output>
+template<switchable Led, event_sink Trace>
 class blinker
 {
 public:
@@ -70,11 +75,7 @@ private:
 		using namespace std::chrono_literals;
 		for (std::uint32_t count = 0; ; ++count)
 		{
-			char digits[10];
-			const auto end = std::to_chars(digits, digits + sizeof(digits), count).ptr;
-			Output::write("Bornier base blink ");
-			Output::write(std::string_view(digits, end));
-			Output::write("\r\n");
+			Trace::emit(blink{count});
 
 			Led::on();
 			opsy::sleep_for(500ms);

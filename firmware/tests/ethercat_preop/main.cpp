@@ -15,36 +15,37 @@
 // under CiA402 in cyclic synchronous position (axes, step_generator), stop chain, probe, supply
 // voltage.
 //
-// Report on SWO, once per second, from a task of its own below the stack's: printing takes a few
-// milliseconds, more than a cycle.
-//   al_status  AL status register (0x0130): 1 INIT, 2 PREOP, 4 SAFEOP, 8 OP, bit 4 error
-//   al_code    AL status code (0x0134), 0 when no error
-//   al_errors  error codes the stack wrote to 0x0134 since start; al_error_last and al_error_ms,
-//              the last one and when (ms since start): the master clears an error within
-//              milliseconds, before a report can see it
-//   eeprom     EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
-//   pdi_calls  calls to PDI_Isr() since start, on requests of the LAN9253
-//   sync0      SYNC0 pulses since start, each served by a call to Sync0_Isr()
-//   sync0_idle level of ESC_SYNC0 (PA4) when sampled, mostly its idle level
-//   gen_*      step generator: cycles filled, fills without SYNC0, phase resyncs, DMA errors,
-//              longest fill (CPU cycles), latest end of fill (TIM5 ticks after SYNC0), and for
-//              axis 0 the steps scheduled, the cycles that deferred steps and the reversals
+// Report in the trace (bornier/trace.hpp), once per second, from the stack's task: a snapshot of
+// a few microseconds, as events of the namespace ethercat_preop.
+//
+//   status     the state of the slave:
+//     al_status   AL status register (0x0130): 1 INIT, 2 PREOP, 4 SAFEOP, 8 OP, bit 4 error
+//     al_code     AL status code (0x0134), 0 when no error
+//     al_errors   error codes the stack wrote to 0x0134 since start, the last one and when (ms
+//                 since start): the master clears an error within milliseconds, before a
+//                 report can see it
+//     eeprom      EEPROM control/status (0x0502); bit 12 set while the configuration is not loaded
+//     bus_failure none while the bus to the LAN9253 works, else the wait that ran out
+//                 (esc_bus::failure): the axes are then stopped for good
+//   timing     how the stack's task keeps up:
+//     pdi_calls   calls to PDI_Isr() since start, on requests of the LAN9253
+//     sync0       SYNC0 pulses since start, each served by a call to Sync0_Isr()
+//     sync0_idle  level of ESC_SYNC0 (PA4) when sampled, mostly its idle level
+//     pdi_mean    mean duration of a call, in CPU cycles at 250 MHz (elapsed: DMA waits included)
+//     pdi_max     longest call, in CPU cycles
+//     cycle_overruns  process data that came in while the stack's interrupt routine ran:
+//                 acknowledged, not taken, the outputs of that cycle lost
+//     sync0_backlog_max  most SYNC0 served in one go, and when (ms since start): more than one,
+//                 the task was held longer than a cycle and the stack sees them late
+//     main_max    longest pass of the stack's main loop (MainLoop() and its timer), in CPU
+//                 cycles, and when (ms since start)
+//   generator  the statistics of the step generator (step_generator::stats)
+//   starts     starts of the MCU since power-up, and the fatal faults among them; when there is
+//              one, last_fault follows with its record (fault_log.hpp)
+//   hw_init_failed  HW_Init() failed: the stack does not run
 //
 // For a logic analyser on the HE10 of the local bus: pin 26, LATCH, a 10 us pulse on each SYNC0
 // (sync_latch); pin 1, CS0, low while the task serves the LAN9253; ground on pin 25.
-//   pdi_mean   mean duration of a call, in CPU cycles at 250 MHz (elapsed: DMA waits included)
-//   pdi_max    longest call, in CPU cycles
-//   cycle_overruns process data that came in while the stack's interrupt routine ran: acknowledged,
-//              not taken, the outputs of that cycle lost
-//   sync0_backlog_max  most SYNC0 served in one go, and when (ms since start): more than one, the
-//              task was held longer than a cycle and the stack sees them late
-//   main_max   longest pass of the stack's main loop (MainLoop() and its timer), in CPU cycles, and
-//              when (ms since start)
-//   bus_failure 0 while the bus to the LAN9253 works, else the wait that ran out (esc_bus::failure):
-//              the axes are then stopped for good
-//   starts     starts of the MCU since power-up; faults, the fatal faults among them; fault_*, the
-//              last one (fault_log.hpp): the start it ended, its cause, pc, lr, CFSR, HFSR and
-//              detail (line of an assertion, exception number of an unexpected interrupt)
 
 #include <application.hpp>
 #include <app.hpp>
@@ -64,7 +65,7 @@
 #include <stop_probe.hpp>
 #include <supplies.hpp>
 #include <sync_latch.hpp>
-#include <trace.hpp>
+#include <bornier/trace.hpp>
 
 extern "C" {
 #include <applInterface.h>
@@ -72,31 +73,52 @@ extern "C" {
 }
 
 #include <algorithm>
-#include <charconv>
 #include <chrono>
 #include <cstdint>
-#include <string_view>
 
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-
-namespace
+/// The events of the test, as `kymo record` prints them: ethercat_preop::<name>.
+namespace ethercat_preop
 {
 
-void print_hex(std::string_view name, uint32_t value)
+using esc = esc_bus<axes>; // the bus of the stack (ssc_hw.cpp): a failure stops the axes for good
+
+struct status
 {
-	char digits[8];
-	const auto end = std::to_chars(digits, digits + sizeof(digits), value, 16).ptr;
-	trace::write(name);
-	trace::write(" 0x");
-	trace::write(std::string_view(digits, end));
-	trace::write("\r\n");
-}
+	uint32_t           al_status;
+	uint32_t           al_code;
+	ssc_hw_al_errors_t al_errors;
+	uint32_t           eeprom;
+	esc::failure       bus_failure;
+};
 
-} // namespace
+struct timing
+{
+	uint32_t pdi_calls;
+	uint32_t sync0;
+	bool     sync0_idle;
+	uint32_t pdi_mean;
+	uint32_t pdi_max;
+	uint32_t cycle_overruns;
+	uint32_t sync0_backlog_max;
+	uint32_t sync0_backlog_ms;
+	uint32_t main_max;
+	uint32_t main_max_ms;
+};
 
-/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+struct generator { step_generator::stats stats; };
+
+struct starts { uint32_t starts; uint32_t faults; };
+
+struct last_fault { bornier::fault_log record; };
+
+struct hw_init_failed {};
+
+} // namespace ethercat_preop
+
+/** @brief The test, as a module: one task that runs the stack and reports in the trace. */
 class ethercat_preop_test
 {
 public:
@@ -105,10 +127,9 @@ public:
 		const bool started = task_.start([]{
 			if (HW_Init() != 0)
 			{
-				trace::write("verdict FAIL hw_init\r\n");
+				bornier::trace::emit(ethercat_preop::hw_init_failed{});
 				return;
 			}
-			(void)opsy::cortex_m::enable_cycle_count();
 			(void)MainInit();
 			bRunApplication = TRUE;
 
@@ -173,86 +194,16 @@ public:
 				ext_watchdog::feed();
 				if (now >= next_report)
 				{
-					// A snapshot only, a few microseconds: the report task prints it.
-					auto& r = report_;
-					r.al_status = esc_bus<axes>::core_read(0x0130, 2);
-					r.al_code = esc_bus<axes>::core_read(0x0134, 2);
-					r.al_errors = ssc_hw_al_errors();
-					r.eeprom = esc_bus<axes>::core_read(0x0502, 2);
-					r.pdi_calls = pdi_calls_;
-					r.sync0 = sync0_served_;
-					r.sync0_idle = gpioa.idr.load().id4() ? 1u : 0u;
-					r.gen = step_generator::statistics();
-					r.pdi_mean = pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_);
-					r.pdi_max = pdi_max_;
-					r.cycle_overruns = sSyncManOutPar.u16CycleExceededCounter;
-					r.sync0_backlog_max = sync0_backlog_max_;
-					r.sync0_backlog_ms = sync0_backlog_ms_;
-					r.main_max = main_max_;
-					r.main_max_ms = main_max_ms_;
-					r.bus_failure = static_cast<uint32_t>(esc_bus<axes>::failed());
-					if ((r.al_status & 0x0F) >= 2)
-						mcu_led::on();
-					else
-						mcu_led::off();
-					report_ready_.release();
+					report();
 					next_report += 1s;
 				}
 			}
 		});
 		if (!started)
 			return false;
-		// Above the report: its prints on SWO take milliseconds, longer than a cycle.
-		task_.priority(opsy::task_priority::high);
-		return report_task_.start([]{
-			while (true)
-			{
-				report_ready_.acquire();
-				const auto r = report_;
-				print_hex("al_status", r.al_status);
-				print_hex("al_code", r.al_code);
-				print_hex("al_errors", r.al_errors.count);
-				if (r.al_errors.count != 0)
-				{
-					print_hex("al_error_last", r.al_errors.last);
-					print_hex("al_error_ms", r.al_errors.last_ms);
-				}
-				print_hex("eeprom", r.eeprom);
-				print_hex("pdi_calls", r.pdi_calls);
-				print_hex("sync0", r.sync0);
-				print_hex("sync0_idle", r.sync0_idle);
-				print_hex("gen_cycles", r.gen.cycles);
-				print_hex("gen_unsynced", r.gen.unsynced);
-				print_hex("gen_resyncs", r.gen.resyncs);
-				print_hex("gen_dma_errors", r.gen.dma_errors);
-				print_hex("gen_fill_max", r.gen.fill_cycles_max);
-				print_hex("gen_fill_end", r.gen.fill_end_max);
-				print_hex("gen_pulses0", r.gen.axes[0].pulses);
-				print_hex("gen_deferred0", r.gen.axes[0].deferred);
-				print_hex("gen_reversals0", r.gen.axes[0].reversals);
-				print_hex("pdi_mean", r.pdi_mean);
-				print_hex("pdi_max", r.pdi_max);
-				print_hex("cycle_overruns", r.cycle_overruns);
-				print_hex("sync0_backlog_max", r.sync0_backlog_max);
-				print_hex("sync0_backlog_ms", r.sync0_backlog_ms);
-				print_hex("main_max", r.main_max);
-				print_hex("main_max_ms", r.main_max_ms);
-				print_hex("bus_failure", r.bus_failure);
-				const auto& f = bornier::last_fault;
-				print_hex("starts", f.starts);
-				print_hex("faults", f.faults);
-				if (f.faults != 0)
-				{
-					print_hex("fault_start", f.start_of_fault);
-					print_hex("fault_cause", static_cast<uint32_t>(f.what));
-					print_hex("fault_pc", f.frame.pc);
-					print_hex("fault_lr", f.frame.lr);
-					print_hex("fault_cfsr", f.cfsr);
-					print_hex("fault_hfsr", f.hfsr);
-					print_hex("fault_detail", f.detail);
-				}
-			}
-		});
+		// Above the other tasks of the image: the stack serves the cycle.
+		task_.base_priority(opsy::task_priority::high);
+		return true;
 	}
 
 	/// CS0 of the local bus (PD0, pin 1 of the HE10), unused without modules: a marker for the
@@ -265,6 +216,42 @@ public:
 	}
 
 private:
+	/// The report, a snapshot of a few microseconds: a copy of each event into the trace ring.
+	static void report()
+	{
+		using ethercat_preop::esc;
+		const ethercat_preop::status status{
+			.al_status   = esc::core_read(0x0130, 2),
+			.al_code     = esc::core_read(0x0134, 2),
+			.al_errors   = ssc_hw_al_errors(),
+			.eeprom      = esc::core_read(0x0502, 2),
+			.bus_failure = esc::failed(),
+		};
+		bornier::trace::emit(status);
+		bornier::trace::emit(ethercat_preop::timing{
+			.pdi_calls         = pdi_calls_,
+			.sync0             = sync0_served_,
+			.sync0_idle        = gpioa.idr.load().id4(),
+			.pdi_mean          = pdi_calls_ == 0 ? 0 : static_cast<uint32_t>(pdi_cycles_ / pdi_calls_),
+			.pdi_max           = pdi_max_,
+			.cycle_overruns    = sSyncManOutPar.u16CycleExceededCounter,
+			.sync0_backlog_max = sync0_backlog_max_,
+			.sync0_backlog_ms  = sync0_backlog_ms_,
+			.main_max          = main_max_,
+			.main_max_ms       = main_max_ms_,
+		});
+		bornier::trace::emit(ethercat_preop::generator{step_generator::statistics()});
+		const auto& fault = bornier::last_fault;
+		bornier::trace::emit(ethercat_preop::starts{fault.starts, fault.faults});
+		if (fault.faults != 0)
+			bornier::trace::emit(ethercat_preop::last_fault{fault});
+
+		if ((status.al_status & 0x0F) >= 2)
+			mcu_led::on();
+		else
+			mcu_led::off();
+	}
+
 	static void marker(bool serving)
 	{
 		if (serving)
@@ -287,35 +274,10 @@ private:
 
 	static uint32_t uptime_ms() { return static_cast<uint32_t>((opsy::scheduler::now() - opsy::startup).count()); }
 	static inline opsy::task<2048> task_;
-
-	/// What the report prints, taken by the stack's task once per second.
-	struct report
-	{
-		uint32_t al_status;
-		uint32_t al_code;
-		ssc_hw_al_errors_t al_errors;
-		uint32_t eeprom;
-		uint32_t pdi_calls;
-		uint32_t sync0;
-		uint32_t sync0_idle;
-		step_generator::stats gen;
-		uint32_t pdi_mean;
-		uint32_t pdi_max;
-		uint32_t cycle_overruns;
-		uint32_t sync0_backlog_max;
-		uint32_t sync0_backlog_ms;
-		uint32_t main_max;
-		uint32_t main_max_ms;
-		uint32_t bus_failure;
-	};
-	static inline report report_{};
-	static inline opsy::binary_semaphore report_ready_{0};
-	static inline opsy::task<1024> report_task_;
 };
 
 using status_led = mcu_led;
-using console    = trace;
-using esc        = esc_bus<axes>;   // the bus of the stack (ssc_hw.cpp): a failure stops the axes for good
+using esc        = ethercat_preop::esc;
 using esc_events = esc_irq;
 using drives     = drive_ports;
 using machine    = stop_probe;
@@ -324,7 +286,7 @@ using watchdog   = ext_watchdog;
 using latch      = sync_latch<esc_events>;
 using motion     = axes;
 
-using app = bornier::app<board, status_led, console, esc, esc_events, drives, machine, rails, watchdog, latch, motion,
+using app = bornier::app<board, status_led, esc, esc_events, drives, machine, rails, watchdog, latch, motion,
                          ethercat_preop_test>;
 
 void application()

@@ -4,51 +4,37 @@
 // On-target test for the Bornier base board: isolated RS-485 port, with nothing wired to the
 // MODBUS terminal block. The receiver of the transceiver is always on, so every byte sent comes
 // back: the test sends the 256 byte values as one frame, by DMA, and checks the echo, received by
-// DMA too. That path goes through the
-// isolated supply of the transceiver, its driver, the biased and terminated line and its
-// receiver.
+// DMA too. That path goes through the isolated supply of the transceiver, its driver, the biased
+// and terminated line and its receiver.
 //
-// Report on SWO, once per second:
-//   idle     1 when the receiver sees the line idle before the test (line bias works)
+// Report in the trace (bornier/trace.hpp), one rs485_echo::run event per second:
+//   idle     the receiver saw the line idle before the test (line bias works)
 //   echoed   number of bytes that came back right, out of 256
 //   missing  number of bytes that did not come back
-//   errors   framing, noise and overrun errors seen (1 each), as three digits
-//   failed   1 once a sending missed its deadline: the port is down until the next reset
-//   verdict  PASS when idle, 256 echoed, none missing, no error and the port not failed
+//   errors   framing, noise and overrun errors seen
+//   failed   a sending missed its deadline: the port is down until the next reset
+//   pass     idle, 256 echoed, none missing, no error and the port not failed
 
 #include <application.hpp>
 #include <app.hpp>
 #include <board.hpp>
+#include <bornier/trace.hpp>
 #include <opsy.hpp>
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
 #include <clock.hpp>
 #include <led.hpp>
 #include <rs485.hpp>
-#include <trace.hpp>
 
 #include <array>
-#include <charconv>
 #include <chrono>
 #include <cstdint>
-#include <string_view>
 
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
-
 namespace
 {
-
-void print_number(std::string_view name, uint32_t value)
-{
-	char digits[10];
-	const auto end = std::to_chars(digits, digits + sizeof(digits), value).ptr;
-	trace::write(name);
-	trace::write(" ");
-	trace::write(std::string_view(digits, end));
-	trace::write("\r\n");
-}
 
 /// Nothing to put in a safe state in this test: a failure of the port shows in its verdict.
 struct no_outputs
@@ -59,7 +45,24 @@ using port = rs485<no_outputs>;
 
 } // namespace
 
-/** @brief The test, as a module: one task that runs the checks and reports on SWO. */
+/// The event of the test, as `kymo record` prints it: rs485_echo::run.
+namespace rs485_echo
+{
+
+/** @brief One run of the test: 256 bytes sent, their echo checked. */
+struct run
+{
+	bool          idle;
+	uint32_t      echoed;
+	uint32_t      missing;
+	port::errors  errors;
+	bool          failed;
+	bool          pass;
+};
+
+} // namespace rs485_echo
+
+/** @brief The test, as a module: one task that runs the checks and reports in the trace. */
 class rs485_echo_test
 {
 public:
@@ -88,20 +91,10 @@ public:
 						++echoed;
 				const uint32_t missing = static_cast<uint32_t>(sent_.size() - count);
 				const auto errors = port::take_errors();
-
-				print_number("idle", idle ? 1 : 0);
-				print_number("echoed", echoed);
-				print_number("missing", missing);
-				trace::write("errors ");
-				trace::write(errors.framing ? "1" : "0");
-				trace::write(errors.noise ? "1" : "0");
-				trace::write(errors.overrun ? "1" : "0");
-				trace::write("\r\n");
-
-				print_number("failed", port::failed() ? 1 : 0);
-				const bool pass = idle && echoed == 256 && missing == 0 && !port::failed()
+				const bool failed = port::failed();
+				const bool pass = idle && echoed == 256 && missing == 0 && !failed
 				               && !errors.framing && !errors.noise && !errors.overrun;
-				trace::write(pass ? "verdict PASS\r\n" : "verdict FAIL\r\n");
+				bornier::trace::emit(rs485_echo::run{idle, echoed, missing, errors, failed, pass});
 
 				if (pass)
 					mcu_led::on();
@@ -118,10 +111,9 @@ private:
 };
 
 using status_led = mcu_led;
-using console    = trace;
 using fieldbus   = port;
 
-using app = bornier::app<board, status_led, console, fieldbus, rs485_echo_test>;
+using app = bornier::app<board, status_led, fieldbus, rs485_echo_test>;
 
 void application()
 {

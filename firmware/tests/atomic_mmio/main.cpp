@@ -22,7 +22,9 @@
 // The plain (non-atomic) operator must lose updates, which proves the detector works; the
 // atomic ones must not.
 //
-// The test runs once at boot. Its report is printed on SWO every two seconds.
+// The test runs once at boot. Its report is traced every two seconds (bornier/trace.hpp): one
+// atomic_mmio::probe event per register and probe, one atomic_mmio::stress per register and
+// operator, then an atomic_mmio::verdict.
 // Host side: tools/hil/atomic_mmio.py.
 
 #include <application.hpp>
@@ -32,29 +34,68 @@
 #include <cortex_m.hpp>
 #include <scheduler.hpp>
 #include <clock.hpp>
-#include <trace.hpp>
+#include <bornier/trace.hpp>
 #include <STM32H523/gpdma.hpp>
 #include <STM32H523/gpio.hpp>
 #include <STM32H523/interrupts.hpp>
 #include <STM32H523/rcc.hpp>
 #include <STM32H523/tim.hpp>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
-#include <cinttypes>
 #include <cstdint>
 #include <chrono>
-#include <cstdio>
-#include <iterator>
-#include <string_view>
 
 using namespace std::chrono_literals;
 using namespace STM32H523;
 
 using mmio::atomic;
 
+/// The events of the test, as `kymo record` prints them: atomic_mmio::<name>.
+namespace atomic_mmio
+{
+
+/** @brief The registers under test. */
+enum class register_name : std::uint8_t { sram, tim2_ccr1, gpioe_odr, rcc_ahb2enr };
+
+/** @brief What interferes during a probe: nothing, an interrupt, a DMA write. */
+enum class probe_kind : std::uint8_t { quiet, isr, dma };
+
+/** @brief The operator stressed. */
+enum class update : std::uint8_t { plain, fetch_xor, compare_exchange };
+
+/** @brief The result of one probe on one register, over @c iterations exclusive pairs. */
+struct probe
+{
+	register_name target;
+	probe_kind    kind;
+	std::uint32_t iterations;
+	std::uint32_t stored;    ///< STREX succeeded
+	std::uint32_t failed;    ///< STREX failed
+	std::uint32_t lost;      ///< STREX succeeded and erased the interfering write
+	std::uint32_t anomalies; ///< STREX status contradicts the register content
+	std::uint32_t timeouts;  ///< DMA did not complete (error or timeout)
+};
+
+/** @brief The result of the stress of one operator on one register. */
+struct stress
+{
+	register_name target;
+	update        mode;
+	std::uint32_t iterations;
+	std::uint32_t interrupts; ///< ISR runs during the loop
+	std::uint32_t lost;       ///< Updates of the ISR's bit erased by the code under test
+};
+
+/** @brief The verdict of the whole test, after its probes and stresses. */
+struct verdict { bool pass; };
+
+} // namespace atomic_mmio
+
 namespace {
+
+using atomic_mmio::probe_kind;
+using atomic_mmio::update;
 
 // ── Test targets ──────────────────────────────────────────────────────────────
 
@@ -63,7 +104,7 @@ std::uint32_t sram_word;
 
 struct target
 {
-	const char* name;
+	atomic_mmio::register_name name;
 	std::uint32_t address;
 	std::uint32_t a; ///< Bit toggled by the code under test
 	std::uint32_t b; ///< Bit toggled by the interfering writer
@@ -73,10 +114,10 @@ struct target
 std::array<target, 4> make_targets()
 {
 	return {{
-		{ "sram",        reinterpret_cast<std::uint32_t>(&sram_word),          1u << 0, 1u << 1 },
-		{ "tim2_ccr1",   reinterpret_cast<std::uint32_t>(&tim2.ccr1),     1u << 0, 1u << 1 }, // APB1
-		{ "gpioe_odr",   reinterpret_cast<std::uint32_t>(&gpioe.odr),     1u << 2, 1u << 3 }, // AHB2, pins left in analog mode; bit 1 does not exist on this device
-		{ "rcc_ahb2enr", reinterpret_cast<std::uint32_t>(&rcc.ahb2enr),    1u << 5, 1u << 6 }, // AHB3, GPIOF/GPIOG clocks: ports without pins on the LQFP100 package
+		{ atomic_mmio::register_name::sram,        reinterpret_cast<std::uint32_t>(&sram_word),   1u << 0, 1u << 1 },
+		{ atomic_mmio::register_name::tim2_ccr1,   reinterpret_cast<std::uint32_t>(&tim2.ccr1),   1u << 0, 1u << 1 }, // APB1
+		{ atomic_mmio::register_name::gpioe_odr,   reinterpret_cast<std::uint32_t>(&gpioe.odr),   1u << 2, 1u << 3 }, // AHB2, pins left in analog mode; bit 1 does not exist on this device
+		{ atomic_mmio::register_name::rcc_ahb2enr, reinterpret_cast<std::uint32_t>(&rcc.ahb2enr), 1u << 5, 1u << 6 }, // AHB3, GPIOF/GPIOG clocks: ports without pins on the LQFP100 package
 	}};
 }
 
@@ -267,8 +308,6 @@ std::uint32_t probe_dma(std::uint32_t address, std::uint32_t a, std::uint32_t b,
 	return status;
 }
 
-enum class probe_kind { quiet, isr, dma };
-
 struct probe_result
 {
 	std::uint32_t stored = 0;    ///< STREX succeeded
@@ -326,8 +365,6 @@ probe_result run_probe(target const& t, probe_kind kind)
 
 // ── Phase 2: stress of the OpSy operators ─────────────────────────────────────
 
-enum class update { plain, fetch_xor, compare_exchange };
-
 struct stress_result
 {
 	std::uint32_t lost = 0;       ///< Updates of the ISR's bit erased by the code under test
@@ -368,11 +405,11 @@ stress_result run_stress(mmio::memory<TInt, TReg>& reg, target const& t, update 
 
 // ── Results ───────────────────────────────────────────────────────────────────
 
-constexpr std::array probe_names{ "quiet", "isr", "dma" };
-constexpr std::array update_names{ "plain", "fetch_xor", "compare_exchange" };
+constexpr std::array probe_kinds{ probe_kind::quiet, probe_kind::isr, probe_kind::dma };
+constexpr std::array updates{ update::plain, update::fetch_xor, update::compare_exchange };
 
-std::array<std::array<probe_result, probe_names.size()>, 4> probes;
-std::array<std::array<stress_result, update_names.size()>, 4> stresses;
+std::array<std::array<probe_result, probe_kinds.size()>, 4> probes;
+std::array<std::array<stress_result, updates.size()>, 4> stresses;
 std::array<target, 4> targets;
 
 void run_all()
@@ -386,12 +423,11 @@ void run_all()
 	}
 
 	// sram (index 0) is not an OpSy register: no stress phase for it
-	constexpr std::array modes{ update::plain, update::fetch_xor, update::compare_exchange };
-	for (std::size_t m = 0; m < modes.size(); ++m)
+	for (std::size_t m = 0; m < updates.size(); ++m)
 	{
-		stresses[1][m] = run_stress(tim2.ccr1, targets[1], modes[m]);
-		stresses[2][m] = run_stress(gpioe.odr, targets[2], modes[m]);
-		stresses[3][m] = run_stress(rcc.ahb2enr, targets[3], modes[m]);
+		stresses[1][m] = run_stress(tim2.ccr1, targets[1], updates[m]);
+		stresses[2][m] = run_stress(gpioe.odr, targets[2], updates[m]);
+		stresses[3][m] = run_stress(rcc.ahb2enr, targets[3], updates[m]);
 	}
 }
 
@@ -412,37 +448,25 @@ bool verdict()
 	return pass;
 }
 
-std::array<char, 128> line;
-
-void print(int length)
-{
-	if (length > 0)
-		trace::write(std::string_view(line.data(), std::min(static_cast<std::size_t>(length), line.size() - 1)));
-}
-
 void report()
 {
 	for (std::size_t t = 0; t < targets.size(); ++t)
-		for (std::size_t k = 0; k < probe_names.size(); ++k)
+		for (std::size_t k = 0; k < probe_kinds.size(); ++k)
 		{
 			auto const& r = probes[t][k];
-			print(std::snprintf(line.data(), line.size(),
-				"probe  %-11s %-5s n=%" PRIu32 " stored=%" PRIu32 " failed=%" PRIu32
-				" lost=%" PRIu32 " anomalies=%" PRIu32 " timeouts=%" PRIu32 "\r\n",
-				targets[t].name, probe_names[k], probe_iterations,
-				r.stored, r.failed, r.lost, r.anomalies, r.timeouts));
+			bornier::trace::emit(atomic_mmio::probe{targets[t].name, probe_kinds[k], probe_iterations,
+				r.stored, r.failed, r.lost, r.anomalies, r.timeouts});
 		}
 
 	for (std::size_t t = 1; t < targets.size(); ++t)
-		for (std::size_t m = 0; m < update_names.size(); ++m)
+		for (std::size_t m = 0; m < updates.size(); ++m)
 		{
 			auto const& r = stresses[t][m];
-			print(std::snprintf(line.data(), line.size(),
-				"stress %-11s %-16s n=%" PRIu32 " interrupts=%" PRIu32 " lost=%" PRIu32 "\r\n",
-				targets[t].name, update_names[m], stress_iterations, r.interrupts, r.lost));
+			bornier::trace::emit(atomic_mmio::stress{targets[t].name, updates[m], stress_iterations,
+				r.interrupts, r.lost});
 		}
 
-	print(std::snprintf(line.data(), line.size(), "verdict %s\r\nend\r\n", verdict() ? "PASS" : "FAIL"));
+	bornier::trace::emit(atomic_mmio::verdict{verdict()});
 }
 
 } // namespace
@@ -484,9 +508,7 @@ private:
 	static inline opsy::task<1024> task_;
 };
 
-using console = trace;
-
-using app = bornier::app<board, console, atomic_mmio_test>;
+using app = bornier::app<board, atomic_mmio_test>;
 
 void application()
 {
