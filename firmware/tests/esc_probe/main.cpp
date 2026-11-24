@@ -3,7 +3,7 @@
 //
 // On-target test for the Bornier base board: talks to the LAN9253 through the OCTOSPI and reports
 // in the trace (bornier/trace.hpp), once per second. The same checks run in both bus modes,
-// single then quad:
+// single (spi) then quad (sqi):
 //
 //   byte_test   must read 0x87654321: the bus works and the byte order is right.
 //   id_rev      must read 0x9253 in its upper half: the chip is a LAN9253.
@@ -55,7 +55,7 @@ using bus = esc_bus<no_outputs>;
 namespace esc_probe
 {
 
-enum class bus_mode : uint8_t { single, quad };
+enum class bus_mode : uint8_t { spi, sqi }; // not 'quad': newlib defines it as a macro (sys/types.h)
 
 /** @brief A new round of checks starts in @p mode. */
 struct mode_start { bus_mode mode; };
@@ -181,9 +181,9 @@ public:
 				trace::emit(esc_probe::reset_failed{});
 			while (true)
 			{
-				const bool single = check(bus::mode::single, esc_probe::bus_mode::single);
-				const bool quad   = check(bus::mode::quad, esc_probe::bus_mode::quad);
-				const bool pass   = single && quad;
+				const bool spi  = check(bus::mode::spi, esc_probe::bus_mode::spi);
+				const bool sqi  = check(bus::mode::sqi, esc_probe::bus_mode::sqi);
+				const bool pass = spi && sqi;
 				trace::emit(esc_probe::verdict{pass, bus::failed()});
 
 				if (pass)

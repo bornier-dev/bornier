@@ -104,7 +104,7 @@ UINT8 HW_Init(void)
 	// the one of the SII (see esc_bus::expect_pdi_change()).
 	if (!bus::reset())
 		return 1;
-	bus::set_mode(bus::mode::quad);
+	bus::set_mode(bus::mode::sqi);
 	if (bus::read(bus::byte_test) != 0x87654321)
 		return 1;
 

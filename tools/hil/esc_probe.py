@@ -32,7 +32,7 @@ def main() -> int:
     results = recording.named("mode_result")
     modes = {mode: (sum(1 for event in results if event.fields["mode"] == mode and event.flag("pass")),
                     sum(1 for event in results if event.fields["mode"] == mode and not event.flag("pass")))
-             for mode in ("single", "quad")}
+             for mode in ("spi", "sqi")}
     verdicts = recording.named("verdict")
     passed = sum(1 for event in verdicts if event.flag("pass"))
     failures = {event.fields["bus_failure"] for event in verdicts} - {"none"}
@@ -50,7 +50,7 @@ def main() -> int:
     print(f"{'PASS' if byte_test_ok else 'FAIL'}  BYTE_TEST reads {show(byte_tests)}, 0x87654321 expected")
     print(f"{'PASS' if id_ok else 'FAIL'}  ID_REV reads {show(id_revs)}, 0x9253 expected in the upper half")
     for mode, (good, bad) in modes.items():
-        print(f"{'PASS' if good >= 2 and bad == 0 else 'FAIL'}  {mode} mode: {good} passed, {bad} failed")
+        print(f"{'PASS' if good >= 2 and bad == 0 else 'FAIL'}  {mode.upper()} mode: {good} passed, {bad} failed")
     print(f"{'PASS' if verdict_ok else 'FAIL'}  {len(verdicts)} verdicts, {passed} passed, bus failures: "
           f"{sorted(failures) or 'none'}")
     print(f"{'PASS' if reset_ok else 'FAIL'}  the LAN9253 came out of its reset")
@@ -65,8 +65,8 @@ def main() -> int:
         print("hint: no register traced; the image reports only once its first read has ended: "
               "check that esc_probe is flashed and running, then the OCTOSPI clock and pins",
               file=sys.stderr)
-    elif modes["single"][1] == 0 and modes["quad"][1] > 0:
-        print("hint: single mode works and quad mode fails; check SIO2 and SIO3", file=sys.stderr)
+    elif modes["spi"][1] == 0 and modes["sqi"][1] > 0:
+        print("hint: SPI (single) mode works and SQI (quad) mode fails; check SIO2 and SIO3", file=sys.stderr)
     elif byte_tests <= {0x00000000, 0xFFFFFFFF}:
         print("hint: the LAN9253 does not answer; check its supply, its 25 MHz clock and that its "
               "reset line is high", file=sys.stderr)

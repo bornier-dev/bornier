@@ -117,8 +117,8 @@ public:
 	/** @brief Bus mode, see the table at the top of this file. */
 	enum class mode
 	{
-		single,
-		quad,
+		spi, ///< single mode: one data line
+		sqi, ///< quad mode: four data lines
 	};
 
 	/**
@@ -192,17 +192,17 @@ public:
 	 */
 	static void set_mode(mode wanted)
 	{
-		const bool quad = wanted == mode::quad;
-		if (quad == quad_ || down())
+		const bool sqi = wanted == mode::sqi;
+		if (sqi == quad_ || down())
 			return;
 
 		// The command goes out in the mode the chip is still in; the clock changes once the
 		// OCTOSPI is idle.
-		if (quad)
+		if (sqi)
 			command(lines_single, enable_quad);
 		else
 			command(lines_quad, reset_quad);
-		quad_ = quad;
+		quad_ = sqi;
 		idle();
 		octospi.dcr2 = octospi_p::dcr2_r::prescaler_f(prescaler());
 	}
